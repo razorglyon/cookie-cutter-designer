@@ -25,6 +25,7 @@ This project uses multiple layers of security protection:
 ### Code Review Process
 
 All code changes go through:
+
 1. Automated security scans (CodeQL)
 2. Build verification
 3. Manual code review by maintainers
@@ -34,12 +35,14 @@ All code changes go through:
 
 If you discover a security vulnerability, please follow responsible disclosure:
 
-### Do NOT:
+### Do NOT
+
 - Open a public GitHub issue
 - Discuss the vulnerability publicly
 - Exploit the vulnerability
 
-### DO:
+### DO
+
 1. **Email the maintainer** privately at the email listed in the GitHub profile
 2. **Include details**:
    - Description of the vulnerability
@@ -59,18 +62,21 @@ If you discover a security vulnerability, please follow responsible disclosure:
 When using Cookie Cutter Designer:
 
 ### File Upload Safety
+
 - Only upload files from trusted sources
 - The app processes SVG/PNG/JPG files in the browser
 - No files are uploaded to external servers
 - All processing happens client-side
 
 ### 3D Printing Safety
+
 - Always inspect generated STL files before printing
 - Use food-safe filament (PLA or PETG) for cookie cutters
 - Follow 3D printing best practices
 - Hand wash only - do not use dishwasher
 
 ### Browser Security
+
 - Use a modern, updated browser
 - Keep JavaScript enabled (required for the app)
 - The app runs entirely in your browser - no server-side processing
@@ -87,6 +93,7 @@ We actively monitor and update dependencies:
 ## Third-Party Services
 
 This project uses:
+
 - **GitHub Pages**: Static hosting (read-only)
 - **GitHub Actions**: CI/CD pipeline (isolated builds)
 - **No external APIs or tracking**
@@ -94,7 +101,8 @@ This project uses:
 ## Security Headers
 
 When self-hosting, ensure your web server includes:
-```
+
+```http
 Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'
 X-Frame-Options: DENY
 X-Content-Type-Options: nosniff
@@ -104,6 +112,7 @@ Referrer-Policy: no-referrer
 ## Audit Trail
 
 Security-related changes are tracked:
+
 - All commits are signed and attributed
 - Pull requests include security scan results
 - Release notes highlight security fixes
@@ -111,6 +120,7 @@ Security-related changes are tracked:
 ## Contact
 
 For security concerns, contact:
+
 - **GitHub Issues**: For general bugs (non-security)
 - **Private Email**: For security vulnerabilities (check GitHub profile)
 - **GitHub Security Advisories**: For disclosed vulnerabilities
@@ -118,6 +128,7 @@ For security concerns, contact:
 ## Acknowledgments
 
 We appreciate security researchers who responsibly disclose vulnerabilities. Contributors will be credited in:
+
 - Release notes
 - SECURITY.md (this file)
 - Project acknowledgments
