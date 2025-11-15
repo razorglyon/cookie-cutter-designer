@@ -1,0 +1,31 @@
+{
+  "name": "cookie-cutter-designer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@tsconfig/svelte": "^5.0.5",
+    "@types/node": "^24.10.0",
+    "@types/three": "^0.181.0",
+    "svelte": "^5.43.5",
+    "svelte-check": "^4.3.3",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.2"
+  },
+  "dependencies": {
+    "@jscad/modeling": "^2.12.6",
+    "imagetracer": "^0.2.2",
+    "js-angusj-clipper": "^1.3.1",
+    "makerjs": "^0.18.1",
+    "paper": "^0.12.18",
+    "tess2": "^1.0.0",
+    "three": "^0.181.1"
+  }
+}
