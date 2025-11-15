@@ -1,6 +1,13 @@
 # Cookie Cutter Designer
 
+[![Deploy to GitHub Pages](https://github.com/razorglyon/cookie-cutter-designer/actions/workflows/deploy.yml/badge.svg)](https://github.com/razorglyon/cookie-cutter-designer/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Made with Svelte](https://img.shields.io/badge/Made%20with-Svelte-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
 A web application for designing custom 3D-printable cookie cutters from vector images or raster graphics.
+
+**🔗 [Live Demo](https://razorglyon.github.io/cookie-cutter-designer/)**
 
 ## Features
 
