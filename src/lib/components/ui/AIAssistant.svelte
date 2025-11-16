@@ -5,9 +5,9 @@
     suggestDesignImprovements,
     optimizeSVGWithAI,
     generateDesignVariations,
-  } from '$lib/utils/geminiAPI';
-  import { pathData } from '$lib/stores/cookieCutterStore';
-  import type { CookieCutterParams } from '$lib/types/CookieCutter';
+  } from '../../utils/geminiAPI';
+  import { pathData } from '../../stores/cookieCutterStore';
+  import type { CookieCutterParams } from '../../types/CookieCutter';
 
   interface Props {
     params: CookieCutterParams;

@@ -16,6 +16,8 @@
   import CollisionDetector from './lib/components/ui/CollisionDetector.svelte';
   import AIImageProcessor from './lib/components/ui/AIImageProcessor.svelte';
   import BooleanOperations from './lib/components/ui/BooleanOperations.svelte';
+  import GeminiAPIConfig from './lib/components/ui/GeminiAPIConfig.svelte';
+  import AIAssistant from './lib/components/ui/AIAssistant.svelte';
 
   import { uploadedFile, model, isProcessing, error, params } from './lib/stores/cookieCutterStore';
   import { historyStore } from './lib/stores/historyStore';
@@ -32,7 +34,7 @@
   let fileName: string = '';
   let svgCache: string | null = null;
   let isRestoringHistory = false; // Flag to prevent circular history updates
-  let activeCategory: 'upload' | 'params' | 'shapes' | 'advanced' | 'gallery' | 'materials' | 'preview' | 'batch' | 'export' = 'upload';
+  let activeCategory: 'upload' | 'params' | 'shapes' | 'advanced' | 'ai' | 'gallery' | 'materials' | 'preview' | 'batch' | 'export' = 'upload';
   let darkMode = false;
 
   function toggleDarkMode() {
@@ -427,6 +429,19 @@
         </button>
 
         <button
+          class="category-btn ai-btn"
+          class:active={activeCategory === 'ai'}
+          on:click={() => activeCategory = 'ai'}
+          title="AI Tools (Gemini)"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
+            <circle cx="9" cy="16" r="1"/>
+            <circle cx="15" cy="16" r="1"/>
+          </svg>
+        </button>
+
+        <button
           class="category-btn"
           class:active={activeCategory === 'gallery'}
           on:click={() => activeCategory = 'gallery'}
@@ -531,6 +546,10 @@
           <PatternGenerator on:patternCreated={(e) => handleShapeSelect(e.detail)} />
           <BooleanOperations on:shapeCreated={(e) => handleShapeSelect(e.detail)} />
 
+        {:else if activeCategory === 'ai'}
+          <GeminiAPIConfig />
+          <AIAssistant params={$params} svgContent={svgCache} on:optimizedSVG={(e) => handleShapeSelect(e.detail)} />
+
         {:else if activeCategory === 'gallery'}
           <CloudGallery currentSvg={svgCache} currentParams={$params} on:loadDesign={handleLoadFromGallery} />
 
@@ -589,12 +608,14 @@
      ============================================ */
   :global(html) {
     height: 100%;
+    width: 100%;
     margin: 0;
     padding: 0;
   }
 
   :global(body) {
     height: 100%;
+    width: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -772,6 +793,21 @@
   .category-btn.active {
     background: rgba(59, 130, 246, 0.15);
     color: var(--color-primary-400);
+  }
+
+  /* AI Button Special Styling */
+  .category-btn.ai-btn:hover {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+    color: #a78bfa;
+  }
+
+  .category-btn.ai-btn.active {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%);
+    color: #a78bfa;
+  }
+
+  .category-btn.ai-btn.active::before {
+    background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
   }
 
   .category-btn.active::before {

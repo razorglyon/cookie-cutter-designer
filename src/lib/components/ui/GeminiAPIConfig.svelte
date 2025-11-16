@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getAPIKey, saveAPIKey, clearAPIKey, validateAPIKey } from '$lib/utils/geminiAPI';
+  import { getAPIKey, saveAPIKey, clearAPIKey, validateAPIKey } from '../../utils/geminiAPI';
 
   let apiKey = $state('');
   let savedKey = $state<string | null>(null);
