@@ -11,6 +11,8 @@ A web application for designing custom 3D-printable cookie cutters from vector i
 
 ## Features
 
+### Core Features
+
 - **File Support**: Upload SVG, PNG, or JPG files
 - **Auto-Vectorization**: Automatically converts raster images to vector paths
 - **3D Preview**: Real-time 3D visualization with Three.js
@@ -24,6 +26,17 @@ A web application for designing custom 3D-printable cookie cutters from vector i
 - **Embossing/Stamping**: Optional raised or indented designs
 - **STL Export**: Download 3D-printable STL files (binary format)
 - **Printability Validation**: Real-time warnings and recommendations
+
+### 🤖 AI-Powered Features (Optional)
+
+Powered by **Gemini 2.5 Flash** with your free API key:
+
+- **Smart Suggestions**: AI-powered design improvement recommendations
+- **SVG Optimization**: Automatically simplify complex paths while maintaining accuracy
+- **Design Variations**: Generate creative alternatives from descriptions
+- **Parameter Recommendations**: Intelligent suggestions for optimal 3D printing
+
+**[📖 How to set up AI features](GEMINI_API_SETUP.md)**
 
 ## Technology Stack
 
