@@ -62,8 +62,13 @@
   }
 
   async function getSuggestions() {
-    if (!apiKey || !$pathData) {
-      error = 'API key or design required';
+    if (!apiKey) {
+      error = 'API key required';
+      return;
+    }
+
+    if (!svgContent && !$pathData) {
+      error = 'Please upload a design first';
       return;
     }
 
@@ -72,7 +77,8 @@
     suggestions = [];
 
     try {
-      suggestions = await suggestDesignImprovements($pathData, params, apiKey);
+      const dataToUse = svgContent || $pathData || '';
+      suggestions = await suggestDesignImprovements(dataToUse, params, apiKey);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to get suggestions';
     } finally {
@@ -169,10 +175,17 @@
           {#if activeTab === 'suggestions'}
             <div class="tab-pane">
               <p>Get AI-powered suggestions to improve your design for 3D printing.</p>
+
+              {#if !svgContent && !$pathData}
+                <div class="info-message">
+                  <p>⚠️ Please upload a design first to get AI suggestions.</p>
+                </div>
+              {/if}
+
               <button
                 class="btn-primary"
                 onclick={getSuggestions}
-                disabled={isProcessing || !$pathData}
+                disabled={isProcessing || (!svgContent && !$pathData)}
               >
                 {isProcessing ? 'Analyzing...' : 'Get Suggestions'}
               </button>
@@ -388,6 +401,20 @@
     font-size: 0.875rem;
     color: #999;
     font-style: italic;
+  }
+
+  .info-message {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-radius: 6px;
+    color: #92400e;
+  }
+
+  .info-message p {
+    margin: 0;
+    font-size: 0.875rem;
   }
 
   .results {
