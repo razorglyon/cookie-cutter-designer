@@ -736,11 +736,13 @@
      ============================================ */
   .app-layout {
     display: grid;
-    grid-template-columns: 60px 360px 1fr;
+    grid-template-columns: 60px 420px 1fr;
     flex: 1;
     overflow: hidden;
     background: var(--color-gray-100);
     gap: 0;
+    width: 100%;
+    min-width: 0;
   }
 
   /* ============================================
@@ -831,6 +833,7 @@
     flex-direction: column;
     overflow: hidden;
     border-right: 1px solid var(--color-gray-200);
+    min-width: 0;
   }
 
   .panel-content {
@@ -929,6 +932,8 @@
     justify-content: center;
     position: relative;
     overflow: hidden;
+    width: 100%;
+    min-width: 0;
   }
 
   /* ============================================

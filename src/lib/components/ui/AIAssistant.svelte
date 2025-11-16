@@ -29,9 +29,37 @@
   let error = $state('');
   let apiKey = $state<string | null>(null);
 
+  // Check for API key on mount
   $effect(() => {
     apiKey = getAPIKey();
+
+    // Listen for API key changes
+    function handleAPIKeyChange() {
+      apiKey = getAPIKey();
+      if (showPanel && !apiKey) {
+        error = 'Please configure your Gemini API key first';
+      } else if (apiKey) {
+        error = '';
+      }
+    }
+
+    window.addEventListener('gemini-api-key-changed', handleAPIKeyChange);
+
+    return () => {
+      window.removeEventListener('gemini-api-key-changed', handleAPIKeyChange);
+    };
   });
+
+  // Refresh API key when panel opens
+  function togglePanel() {
+    showPanel = !showPanel;
+    if (showPanel) {
+      apiKey = getAPIKey();
+      if (!apiKey) {
+        error = 'Please configure your Gemini API key first';
+      }
+    }
+  }
 
   async function getSuggestions() {
     if (!apiKey || !$pathData) {
@@ -93,12 +121,6 @@
     }
   }
 
-  function togglePanel() {
-    showPanel = !showPanel;
-    if (showPanel && !apiKey) {
-      error = 'Please configure your Gemini API key first';
-    }
-  }
 </script>
 
 <div class="ai-assistant">

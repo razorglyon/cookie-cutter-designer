@@ -219,6 +219,9 @@ export function saveAPIKey(apiKey: string): void {
     throw new Error('API key cannot be empty');
   }
   localStorage.setItem('gemini_api_key', apiKey.trim());
+
+  // Dispatch custom event to notify components
+  window.dispatchEvent(new CustomEvent('gemini-api-key-changed'));
 }
 
 /**
@@ -233,6 +236,9 @@ export function getAPIKey(): string | null {
  */
 export function clearAPIKey(): void {
   localStorage.removeItem('gemini_api_key');
+
+  // Dispatch custom event to notify components
+  window.dispatchEvent(new CustomEvent('gemini-api-key-changed'));
 }
 
 /**
