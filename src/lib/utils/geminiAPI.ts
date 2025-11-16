@@ -384,6 +384,106 @@ Examples of good variations:
 }
 
 /**
+ * Generate an image using Gemini 2.5 Flash Image model
+ */
+export async function generateImageWithGemini(
+  prompt: string,
+  apiKey: string
+): Promise<Blob> {
+  const systemInstruction = `You are an expert at generating simple, clean silhouette images perfect for cookie cutters.
+Your images should have:
+- Clear, bold outlines
+- High contrast (black shapes on white background)
+- Simple, recognizable shapes
+- No complex gradients or textures
+- Suitable for conversion to SVG paths`;
+
+  const imagePrompt = `Create a simple, bold silhouette image for a cookie cutter design.
+
+**Requirements:**
+- Black silhouette on white background
+- Clean, simple outline (no complex details)
+- Centered in frame
+- High contrast for easy vectorization
+- Suitable for 3D printing as cookie cutter
+
+**User Request:** ${prompt}
+
+**Style:** Flat design, icon-like, minimalist silhouette`;
+
+  // Use Gemini 2.5 Flash Image model for image generation
+  const IMAGEN_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
+
+  try {
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            {
+              text: imagePrompt,
+            },
+          ],
+        },
+      ],
+      systemInstruction: {
+        parts: [{ text: systemInstruction }],
+      },
+      generationConfig: {
+        temperature: 0.4, // Lower for more consistent results
+        responseModalities: ['image'], // Request image output
+      },
+    };
+
+    const response = await fetch(`${IMAGEN_ENDPOINT}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.error?.message || `Image generation failed: ${response.status}`
+      );
+    }
+
+    const data = await response.json();
+
+    // Extract image data from response
+    if (!data.candidates || data.candidates.length === 0) {
+      throw new Error('No image generated from Gemini');
+    }
+
+    const imagePart = data.candidates[0]?.content?.parts?.find(
+      (part: any) => part.inlineData
+    );
+
+    if (!imagePart || !imagePart.inlineData) {
+      throw new Error('No image data in response');
+    }
+
+    // Convert base64 to Blob
+    const base64Data = imagePart.inlineData.data;
+    const mimeType = imagePart.inlineData.mimeType || 'image/png';
+
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    return new Blob([bytes], { type: mimeType });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Image generation error: ${error.message}`);
+    }
+    throw new Error('Unknown error during image generation');
+  }
+}
+
+/**
  * Validate and store API key in localStorage
  */
 export function saveAPIKey(apiKey: string): void {

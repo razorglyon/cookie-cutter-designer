@@ -8,6 +8,7 @@
   } from '../../utils/geminiAPI';
   import { pathData } from '../../stores/cookieCutterStore';
   import type { CookieCutterParams } from '../../types/CookieCutter';
+  import AIImageGenerator from './AIImageGenerator.svelte';
 
   interface Props {
     params: CookieCutterParams;
@@ -22,7 +23,7 @@
   }>();
 
   let showPanel = $state(false);
-  let activeTab = $state<'suggestions' | 'optimize' | 'variations'>('suggestions');
+  let activeTab = $state<'generate' | 'suggestions' | 'optimize' | 'variations'>('generate');
   let isProcessing = $state(false);
   let suggestions = $state<string[]>([]);
   let variations = $state<string[]>([]);
@@ -157,6 +158,13 @@
         <div class="tabs">
           <button
             class="tab"
+            class:active={activeTab === 'generate'}
+            onclick={() => (activeTab = 'generate')}
+          >
+            ✨ Generate
+          </button>
+          <button
+            class="tab"
             class:active={activeTab === 'suggestions'}
             onclick={() => (activeTab = 'suggestions')}
           >
@@ -167,7 +175,7 @@
             class:active={activeTab === 'optimize'}
             onclick={() => (activeTab = 'optimize')}
           >
-            ⚡ Optimize
+            ⚡ Analyze
           </button>
           <button
             class="tab"
@@ -179,7 +187,11 @@
         </div>
 
         <div class="tab-content">
-          {#if activeTab === 'suggestions'}
+          {#if activeTab === 'generate'}
+            <div class="tab-pane">
+              <AIImageGenerator on:imageGenerated={(e) => dispatch('optimizedSVG', e.detail)} />
+            </div>
+          {:else if activeTab === 'suggestions'}
             <div class="tab-pane">
               <p>Get AI-powered suggestions to improve your design for 3D printing.</p>
 
