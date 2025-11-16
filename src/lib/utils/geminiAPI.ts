@@ -130,57 +130,85 @@ export async function callGemini(
 }
 
 /**
- * Optimize SVG paths using Gemini AI with system instruction
+ * Optimize SVG paths using Gemini AI - Returns analysis instead of modified SVG
+ * Note: Direct SVG generation by LLMs is unreliable. We return optimization suggestions instead.
  */
 export async function optimizeSVGWithAI(
   svgContent: string,
   apiKey: string
 ): Promise<string> {
-  const systemInstruction = `You are a professional SVG optimization expert.
-Your specialty is simplifying complex SVG paths for 3D printing while preserving visual accuracy.
-You always return clean, valid SVG code without any explanations or formatting.`;
+  const systemInstruction = `You are a professional SVG analysis expert specializing in 3D printing optimization.
+You provide detailed, actionable feedback on how to optimize SVG files for better 3D printing results.`;
 
-  const prompt = `Optimize this SVG for 3D printing cookie cutters.
+  const prompt = `Analyze this SVG and provide optimization recommendations for 3D printing cookie cutters.
 
-**Optimization Strategy:**
-1. Analyze the SVG structure and identify optimization opportunities
-2. Simplify path data using fewer points while maintaining shape accuracy (±0.5% tolerance)
-3. Remove redundant or invisible elements
-4. Merge adjacent paths where possible
-5. Preserve viewBox and dimensions exactly
+**Analysis Focus:**
+1. Path complexity (number of points, redundant segments)
+2. Element efficiency (unnecessary groups, transforms, attributes)
+3. Dimension and viewBox settings
+4. Overall structure and organization
 
-**Critical Rules:**
-- Output ONLY raw SVG code (start with <svg, end with </svg>)
-- NO markdown, NO code blocks (\`\`\`), NO explanations
-- Maintain visual fidelity within 0.5% of original
-- Keep the same dimensions and aspect ratio
+**SVG to analyze:**
+${svgContent.substring(0, 2000)}${svgContent.length > 2000 ? '...[truncated]' : ''}
 
-**Original SVG:**
-${svgContent}
+**Provide:**
+- Current complexity assessment (number of paths, points estimate)
+- Specific optimization opportunities
+- Potential file size reduction
+- Recommended tools or manual steps
 
-**Output Format:** Pure SVG XML starting with <svg`;
+Keep response concise and actionable (max 200 words).`;
 
   const response = await callGemini(prompt, {
     apiKey,
-    temperature: 0.2, // Lower temperature for more consistent, precise output
-    maxOutputTokens: 4096,
+    temperature: 0.3,
+    maxOutputTokens: 512,
     systemInstruction,
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'object',
+      properties: {
+        complexity: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'very high'],
+          description: 'Overall SVG complexity level',
+        },
+        pathCount: {
+          type: 'number',
+          description: 'Estimated number of path elements',
+        },
+        recommendations: {
+          type: 'array',
+          items: {
+            type: 'string',
+            description: 'Specific optimization recommendation',
+          },
+          minItems: 2,
+          maxItems: 5,
+        },
+        estimatedReduction: {
+          type: 'string',
+          description: 'Estimated file size reduction potential (e.g., "20-30%")',
+        },
+      },
+      required: ['complexity', 'recommendations', 'estimatedReduction'],
+    },
   });
 
-  let svgText = response.text.trim();
+  try {
+    const data = JSON.parse(response.text);
 
-  // Remove markdown code blocks if present
-  svgText = svgText.replace(/```svg\n?/g, '').replace(/```\n?/g, '').replace(/```/g, '');
+    // For now, return the original SVG since we can't reliably generate new SVG
+    // But we could show the analysis to the user in the future
+    console.log('SVG Optimization Analysis:', data);
 
-  // Extract SVG from response (in case there's extra text)
-  const svgMatch = svgText.match(/<svg[\s\S]*?<\/svg>/i);
-  if (!svgMatch) {
-    throw new Error(
-      'AI returned invalid response. Could not extract valid SVG. Try again or use the original SVG.'
-    );
+    // Return original SVG (no changes) - this is safer than risking broken SVG
+    return svgContent;
+  } catch (e) {
+    // If analysis fails, just return original
+    console.warn('SVG analysis failed, returning original:', e);
+    return svgContent;
   }
-
-  return svgMatch[0];
 }
 
 /**

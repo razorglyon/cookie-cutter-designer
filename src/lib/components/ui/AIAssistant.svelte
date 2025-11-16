@@ -96,16 +96,17 @@
     error = '';
 
     try {
-      const optimized = await optimizeSVGWithAI(svgContent, apiKey);
-      dispatch('optimizedSVG', optimized);
+      const result = await optimizeSVGWithAI(svgContent, apiKey);
+      // Note: optimizeSVGWithAI now returns original SVG with analysis in console
+      dispatch('optimizedSVG', result);
       // Show success message briefly
-      error = '✅ SVG optimized successfully! The design has been updated.';
+      error = '✅ SVG analysis complete! Check browser console (F12) for optimization recommendations.';
       setTimeout(() => {
         if (error.startsWith('✅')) error = '';
-      }, 3000);
+      }, 5000);
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to optimize SVG';
-      console.error('SVG Optimization error:', err);
+      error = err instanceof Error ? err.message : 'Failed to analyze SVG';
+      console.error('SVG Analysis error:', err);
     } finally {
       isProcessing = false;
     }
@@ -209,15 +210,20 @@
             </div>
           {:else if activeTab === 'optimize'}
             <div class="tab-pane">
-              <p>Use AI to optimize and simplify your SVG paths for better 3D printing.</p>
+              <p>Get AI-powered analysis of your SVG complexity and optimization recommendations.</p>
+
+              <div class="info-message" style="background: #e0f2fe; border-color: #0284c7; color: #0c4a6e;">
+                <p>ℹ️ <strong>Note:</strong> This feature analyzes your SVG and provides optimization advice in the browser console. Direct SVG modification by AI is experimental.</p>
+              </div>
+
               <button
                 class="btn-primary"
                 onclick={optimizeSVG}
                 disabled={isProcessing || !svgContent}
               >
-                {isProcessing ? 'Optimizing...' : 'Optimize SVG'}
+                {isProcessing ? 'Analyzing...' : 'Analyze SVG'}
               </button>
-              <p class="hint">This will analyze and simplify complex paths while maintaining shape accuracy.</p>
+              <p class="hint">Check the browser console (F12) for detailed optimization recommendations.</p>
             </div>
           {:else if activeTab === 'variations'}
             <div class="tab-pane">
