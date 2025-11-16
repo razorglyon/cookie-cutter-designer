@@ -31,12 +31,15 @@ A web application for designing custom 3D-printable cookie cutters from vector i
 
 Powered by **Gemini 2.5 Flash** with your free API key:
 
+- **Image Generation**: Create cookie cutter designs from text descriptions (NEW!)
 - **Smart Suggestions**: AI-powered design improvement recommendations
-- **SVG Optimization**: Automatically simplify complex paths while maintaining accuracy
+- **SVG Analysis**: Get optimization recommendations for complex paths
 - **Design Variations**: Generate creative alternatives from descriptions
-- **Parameter Recommendations**: Intelligent suggestions for optimal 3D printing
 
 **[📖 How to set up AI features](GEMINI_API_SETUP.md)**
+**[🔧 Technical Documentation](GEMINI_API_TECHNICAL.md)** (for developers)
+
+⚠️ **Security Note:** This app uses client-side API calls for simplicity. For production use, implement a backend proxy to protect your API key. See [technical docs](GEMINI_API_TECHNICAL.md#security-considerations) for details.
 
 ## Technology Stack
 
