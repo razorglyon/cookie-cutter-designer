@@ -109,31 +109,41 @@ export async function optimizeSVGWithAI(
   svgContent: string,
   apiKey: string
 ): Promise<string> {
-  const prompt = `You are an SVG optimization expert. Analyze this SVG and provide an optimized version that:
-1. Simplifies complex paths while maintaining visual accuracy
-2. Removes unnecessary elements and attributes
-3. Combines paths where possible
-4. Maintains the original dimensions and aspect ratio
-5. Ensures the result is valid SVG that can be used for 3D printing cookie cutters
+  const prompt = `You are an SVG optimization expert. Analyze this SVG and provide an optimized version.
+
+CRITICAL INSTRUCTIONS:
+- Return ONLY the SVG code starting with <svg> and ending with </svg>
+- NO explanations, NO markdown, NO code blocks (no \`\`\`), NO extra text
+- Just the raw SVG XML code
+- Simplify paths while maintaining visual accuracy
+- Remove unnecessary elements
+- Maintain original dimensions
 
 Original SVG:
 ${svgContent}
 
-Return ONLY the optimized SVG code, without any explanation or markdown formatting.`;
+REMEMBER: Output must start with <svg and end with </svg>`;
 
   const response = await callGemini(prompt, {
     apiKey,
-    temperature: 0.3, // Lower temperature for more consistent output
+    temperature: 0.3,
     maxOutputTokens: 4096,
   });
 
+  let svgText = response.text.trim();
+
+  // Remove markdown code blocks if present
+  svgText = svgText.replace(/```svg\n?/g, '').replace(/```\n?/g, '');
+
   // Extract SVG from response (in case there's extra text)
-  const svgMatch = response.text.match(/<svg[\s\S]*<\/svg>/i);
-  if (svgMatch) {
-    return svgMatch[0];
+  const svgMatch = svgText.match(/<svg[\s\S]*?<\/svg>/i);
+  if (!svgMatch) {
+    throw new Error(
+      'AI returned invalid response. Could not extract valid SVG. Try again or use the original SVG.'
+    );
   }
 
-  return response.text.trim();
+  return svgMatch[0];
 }
 
 /**

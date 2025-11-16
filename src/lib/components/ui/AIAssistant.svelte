@@ -98,8 +98,14 @@
     try {
       const optimized = await optimizeSVGWithAI(svgContent, apiKey);
       dispatch('optimizedSVG', optimized);
+      // Show success message briefly
+      error = '✅ SVG optimized successfully! The design has been updated.';
+      setTimeout(() => {
+        if (error.startsWith('✅')) error = '';
+      }, 3000);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to optimize SVG';
+      console.error('SVG Optimization error:', err);
     } finally {
       isProcessing = false;
     }
@@ -234,8 +240,8 @@
           {/if}
 
           {#if error}
-            <div class="error-box">
-              <p>❌ {error}</p>
+            <div class="error-box" class:success={error.startsWith('✅')}>
+              <p>{error}</p>
             </div>
           {/if}
         </div>
@@ -447,9 +453,18 @@
     border-radius: 6px;
   }
 
+  .error-box.success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+  }
+
   .error-box p {
     margin: 0;
     color: #842029;
+  }
+
+  .error-box.success p {
+    color: #155724;
   }
 
   .powered-by {
