@@ -1,281 +1,208 @@
 import {
+  ClipType,
+  EndType,
+  JoinType,
+  NativeClipperLibRequestedFormat,
+  PolyFillType,
   loadNativeClipperLibInstanceAsync,
-  NativeClipperLibRequestedFormat
+  type ClipperLibWrapper,
+  type Path,
+  type ReadonlyPath,
+  type ReadonlyPaths
 } from 'js-angusj-clipper';
 
-let clipperLib: any = null;
+type Point2D = { x: number; y: number };
+type JoinStyle = 'miter' | 'round' | 'square';
+type FillRule = 'evenodd' | 'nonzero' | 'positive' | 'negative';
+
+const CLIPPER_SCALE = 1000;
+
+const JOIN_TYPES: Record<JoinStyle, JoinType> = {
+  miter: JoinType.Miter,
+  round: JoinType.Round,
+  square: JoinType.Square
+};
+
+const FILL_TYPES: Record<FillRule, PolyFillType> = {
+  evenodd: PolyFillType.EvenOdd,
+  nonzero: PolyFillType.NonZero,
+  positive: PolyFillType.Positive,
+  negative: PolyFillType.Negative
+};
+
+let clipperLibPromise: Promise<ClipperLibWrapper> | null = null;
 
 /**
- * Initialize Clipper library (async)
+ * Initialize and share one Clipper wrapper instance.
  */
-async function initClipper() {
-  if (!clipperLib) {
-    clipperLib = await loadNativeClipperLibInstanceAsync(
+function initClipper(): Promise<ClipperLibWrapper> {
+  if (!clipperLibPromise) {
+    clipperLibPromise = loadNativeClipperLibInstanceAsync(
       NativeClipperLibRequestedFormat.WasmWithAsmJsFallback
     );
   }
-  return clipperLib;
+
+  return clipperLibPromise;
 }
 
 /**
- * Convert SVG path points to Clipper path format
+ * Convert SVG points to Clipper's scaled integer path format.
  */
-function svgToClipperPath(points: { x: number; y: number }[], scale: number = 100): any[] {
-  return points.map(p => ({
-    X: Math.round(p.x * scale),
-    Y: Math.round(p.y * scale)
+function svgToClipperPath(points: readonly Point2D[]): Path {
+  return points.map(({ x, y }) => ({
+    x: Math.round(x * CLIPPER_SCALE),
+    y: Math.round(y * CLIPPER_SCALE)
   }));
 }
 
 /**
- * Convert Clipper path to SVG points
+ * Convert a scaled Clipper path back to SVG points.
  */
-function clipperToSvgPath(clipperPath: any[], scale: number = 100): { x: number; y: number }[] {
-  return clipperPath.map(p => ({
-    x: p.X / scale,
-    y: p.Y / scale
+function clipperToSvgPath(path: ReadonlyPath): Point2D[] {
+  return path.map(({ x, y }) => ({
+    x: x / CLIPPER_SCALE,
+    y: y / CLIPPER_SCALE
   }));
 }
 
+function svgToClipperPaths(paths: readonly Point2D[][]): Path[] {
+  return paths.map(svgToClipperPath);
+}
+
+function clipperToSvgPaths(paths: ReadonlyPaths): Point2D[][] {
+  return paths.map(clipperToSvgPath);
+}
+
 /**
- * Create offset paths (for wall thickness)
- * Positive delta = outward offset, negative = inward offset
+ * Create offset paths for wall thickness.
+ * Positive delta expands a polygon; negative delta shrinks it.
  */
 export async function offsetPath(
-  points: { x: number; y: number }[],
+  points: Point2D[],
   offsetDistance: number,
-  joinType: 'miter' | 'round' | 'square' = 'round'
-): Promise<{ x: number; y: number }[][]> {
+  joinType: JoinStyle = 'round'
+): Promise<Point2D[][]> {
   const clipper = await initClipper();
-  const scale = 1000; // Higher scale for precision
-
-  // Convert to Clipper format
-  const clipperPath = svgToClipperPath(points, scale);
-
-  // Create ClipperOffset instance
-  const co = new clipper.ClipperOffset();
-
-  // JoinType mapping
-  const joinTypeMap = {
-    miter: clipper.JoinType.Miter,
-    round: clipper.JoinType.Round,
-    square: clipper.JoinType.Square
-  };
-
-  // Add path
-  co.addPath(
-    clipperPath,
-    joinTypeMap[joinType],
-    clipper.EndType.ClosedPolygon
-  );
-
-  // Execute offset (distance is scaled)
-  const offsetted = new clipper.Paths();
-  co.execute(offsetted, offsetDistance * scale);
-
-  // Convert back to SVG format
-  const result: { x: number; y: number }[][] = [];
-  for (let i = 0; i < offsetted.size(); i++) {
-    const path = offsetted.get(i);
-    result.push(clipperToSvgPath(path, scale));
-  }
-
-  // Cleanup
-  co.delete();
-  offsetted.delete();
-
-  return result;
-}
-
-/**
- * Boolean union of multiple paths
- */
-export async function unionPaths(
-  pathsArray: { x: number; y: number }[][]
-): Promise<{ x: number; y: number }[][]> {
-  const clipper = await initClipper();
-  const scale = 1000;
-
-  const clipperPaths = new clipper.Paths();
-  pathsArray.forEach(points => {
-    clipperPaths.push(svgToClipperPath(points, scale));
+  const result = clipper.offsetToPaths({
+    delta: offsetDistance * CLIPPER_SCALE,
+    offsetInputs: [
+      {
+        data: svgToClipperPath(points),
+        joinType: JOIN_TYPES[joinType],
+        endType: EndType.ClosedPolygon
+      }
+    ]
   });
 
-  const solution = new clipper.Paths();
-  const c = new clipper.Clipper();
-
-  c.addPaths(clipperPaths, clipper.PolyType.Subject, true);
-  c.execute(
-    clipper.ClipType.Union,
-    solution,
-    clipper.PolyFillType.NonZero,
-    clipper.PolyFillType.NonZero
-  );
-
-  // Convert result
-  const result: { x: number; y: number }[][] = [];
-  for (let i = 0; i < solution.size(); i++) {
-    const path = solution.get(i);
-    result.push(clipperToSvgPath(path, scale));
-  }
-
-  // Cleanup
-  c.delete();
-  clipperPaths.delete();
-  solution.delete();
-
-  return result;
+  return result ? clipperToSvgPaths(result) : [];
 }
 
 /**
- * Boolean difference (subtract second from first)
+ * Compute the boolean union of closed paths.
+ */
+export async function unionPaths(paths: Point2D[][]): Promise<Point2D[][]> {
+  if (paths.length === 0) return [];
+
+  const clipper = await initClipper();
+  const result = clipper.clipToPaths({
+    clipType: ClipType.Union,
+    subjectFillType: PolyFillType.NonZero,
+    subjectInputs: [
+      {
+        data: svgToClipperPaths(paths),
+        closed: true
+      }
+    ]
+  });
+
+  return clipperToSvgPaths(result);
+}
+
+/**
+ * Subtract closed clip paths from closed subject paths.
  */
 export async function differencePaths(
-  subjectPaths: { x: number; y: number }[][],
-  clipPaths: { x: number; y: number }[][]
-): Promise<{ x: number; y: number }[][]> {
+  subjectPaths: Point2D[][],
+  clipPaths: Point2D[][]
+): Promise<Point2D[][]> {
+  if (subjectPaths.length === 0) return [];
+  if (clipPaths.length === 0) return subjectPaths.map(path => [...path]);
+
   const clipper = await initClipper();
-  const scale = 1000;
-
-  const clipperSubject = new clipper.Paths();
-  subjectPaths.forEach(points => {
-    clipperSubject.push(svgToClipperPath(points, scale));
+  const result = clipper.clipToPaths({
+    clipType: ClipType.Difference,
+    subjectFillType: PolyFillType.NonZero,
+    clipFillType: PolyFillType.NonZero,
+    subjectInputs: [
+      {
+        data: svgToClipperPaths(subjectPaths),
+        closed: true
+      }
+    ],
+    clipInputs: [
+      {
+        data: svgToClipperPaths(clipPaths)
+      }
+    ]
   });
 
-  const clipperClip = new clipper.Paths();
-  clipPaths.forEach(points => {
-    clipperClip.push(svgToClipperPath(points, scale));
-  });
-
-  const solution = new clipper.Paths();
-  const c = new clipper.Clipper();
-
-  c.addPaths(clipperSubject, clipper.PolyType.Subject, true);
-  c.addPaths(clipperClip, clipper.PolyType.Clip, true);
-
-  c.execute(
-    clipper.ClipType.Difference,
-    solution,
-    clipper.PolyFillType.NonZero,
-    clipper.PolyFillType.NonZero
-  );
-
-  // Convert result
-  const result: { x: number; y: number }[][] = [];
-  for (let i = 0; i < solution.size(); i++) {
-    const path = solution.get(i);
-    result.push(clipperToSvgPath(path, scale));
-  }
-
-  // Cleanup
-  c.delete();
-  clipperSubject.delete();
-  clipperClip.delete();
-  solution.delete();
-
-  return result;
+  return clipperToSvgPaths(result);
 }
 
 /**
- * Boolean intersection of paths
+ * Compute the intersection of two sets of closed paths.
  */
 export async function intersectPaths(
-  pathsA: { x: number; y: number }[][],
-  pathsB: { x: number; y: number }[][]
-): Promise<{ x: number; y: number }[][]> {
+  pathsA: Point2D[][],
+  pathsB: Point2D[][]
+): Promise<Point2D[][]> {
+  if (pathsA.length === 0 || pathsB.length === 0) return [];
+
   const clipper = await initClipper();
-  const scale = 1000;
-
-  const clipperA = new clipper.Paths();
-  pathsA.forEach(points => {
-    clipperA.push(svgToClipperPath(points, scale));
+  const result = clipper.clipToPaths({
+    clipType: ClipType.Intersection,
+    subjectFillType: PolyFillType.NonZero,
+    clipFillType: PolyFillType.NonZero,
+    subjectInputs: [
+      {
+        data: svgToClipperPaths(pathsA),
+        closed: true
+      }
+    ],
+    clipInputs: [
+      {
+        data: svgToClipperPaths(pathsB)
+      }
+    ]
   });
 
-  const clipperB = new clipper.Paths();
-  pathsB.forEach(points => {
-    clipperB.push(svgToClipperPath(points, scale));
-  });
-
-  const solution = new clipper.Paths();
-  const c = new clipper.Clipper();
-
-  c.addPaths(clipperA, clipper.PolyType.Subject, true);
-  c.addPaths(clipperB, clipper.PolyType.Clip, true);
-
-  c.execute(
-    clipper.ClipType.Intersection,
-    solution,
-    clipper.PolyFillType.NonZero,
-    clipper.PolyFillType.NonZero
-  );
-
-  // Convert result
-  const result: { x: number; y: number }[][] = [];
-  for (let i = 0; i < solution.size(); i++) {
-    const path = solution.get(i);
-    result.push(clipperToSvgPath(path, scale));
-  }
-
-  // Cleanup
-  c.delete();
-  clipperA.delete();
-  clipperB.delete();
-  solution.delete();
-
-  return result;
+  return clipperToSvgPaths(result);
 }
 
 /**
- * Simplify path (remove redundant points)
+ * Remove self-intersections and redundant polygon sections.
  */
 export async function simplifyPath(
-  points: { x: number; y: number }[],
-  fillType: 'evenodd' | 'nonzero' | 'positive' | 'negative' = 'nonzero'
-): Promise<{ x: number; y: number }[][]> {
+  points: Point2D[],
+  fillType: FillRule = 'nonzero'
+): Promise<Point2D[][]> {
   const clipper = await initClipper();
-  const scale = 1000;
+  const result = clipper.simplifyPolygon(
+    svgToClipperPath(points),
+    FILL_TYPES[fillType]
+  );
 
-  const clipperPath = svgToClipperPath(points, scale);
-  const paths = new clipper.Paths();
-  paths.push(clipperPath);
-
-  const fillTypeMap = {
-    evenodd: clipper.PolyFillType.EvenOdd,
-    nonzero: clipper.PolyFillType.NonZero,
-    positive: clipper.PolyFillType.Positive,
-    negative: clipper.PolyFillType.Negative
-  };
-
-  const simplified = clipper.simplifyPaths(paths, fillTypeMap[fillType]);
-
-  const result: { x: number; y: number }[][] = [];
-  for (let i = 0; i < simplified.size(); i++) {
-    const path = simplified.get(i);
-    result.push(clipperToSvgPath(path, scale));
-  }
-
-  // Cleanup
-  paths.delete();
-  simplified.delete();
-
-  return result;
+  return clipperToSvgPaths(result);
 }
 
 /**
- * Create cookie cutter walls using offset
- * Creates inner and outer paths for proper wall thickness
+ * Create inner and outer paths for a cookie-cutter wall.
  */
 export async function createCutterWalls(
-  points: { x: number; y: number }[],
+  points: Point2D[],
   wallThickness: number
-): Promise<{
-  outer: { x: number; y: number }[];
-  inner: { x: number; y: number }[];
-}> {
-  // Create outer wall (offset outward by half thickness)
+): Promise<{ outer: Point2D[]; inner: Point2D[] }> {
   const outerPaths = await offsetPath(points, wallThickness / 2, 'round');
-
-  // Create inner wall (offset inward by half thickness)
   const innerPaths = await offsetPath(points, -wallThickness / 2, 'round');
 
   return {
