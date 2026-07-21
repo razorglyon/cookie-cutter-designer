@@ -18,7 +18,7 @@
   <div class="param-group">
     <h3>Mode</h3>
     <div class="param-control">
-      <label>Design Type</label>
+      <span class="control-label">Design Type</span>
       <div class="mode-selector">
         <button
           class="mode-btn"
@@ -315,7 +315,8 @@
     margin: 0;
   }
 
-  label {
+  label,
+  .control-label {
     display: block;
     margin-bottom: 0.5rem;
     font-weight: 500;
@@ -333,6 +334,7 @@
     border-radius: 3px;
     background: #e2e8f0;
     outline: none;
+    appearance: none;
     -webkit-appearance: none;
   }
 

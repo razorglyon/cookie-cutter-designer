@@ -129,6 +129,11 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && showSaveDialog) {
+      showSaveDialog = false;
+      return;
+    }
+
     if (activeTab !== 'myDesigns') return;
 
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -252,9 +257,9 @@
         <div class="designs-grid">
           {#each communityDesigns as design}
             <div class="design-card">
-              <div class="card-preview" on:click={() => handleLoad(design)}>
+              <button type="button" class="card-preview" on:click={() => handleLoad(design)}>
                 {@html design.svgData}
-              </div>
+              </button>
               <div class="card-info">
                 <h4 class="design-name">{design.metadata.name}</h4>
                 <p class="design-description">{design.metadata.description}</p>
@@ -295,18 +300,23 @@
             <div
               class="design-card"
               class:selected={selectedDesigns.has(design.metadata.id)}
-              on:click={(e) => handleDesignClick(design, index, e)}
             >
-              <div class="selection-indicator">
+              <button
+                type="button"
+                class="selection-indicator"
+                aria-label={`Select ${design.metadata.name}`}
+                aria-pressed={selectedDesigns.has(design.metadata.id)}
+                on:click={(e) => handleDesignClick(design, index, e)}
+              >
                 {#if selectedDesigns.has(design.metadata.id)}
                   <div class="checkbox checked">✓</div>
                 {:else}
                   <div class="checkbox"></div>
                 {/if}
-              </div>
-              <div class="card-preview" on:click|stopPropagation={() => handleLoad(design)}>
+              </button>
+              <button type="button" class="card-preview" on:click={() => handleLoad(design)}>
                 {@html design.svgData}
-              </div>
+              </button>
               <div class="card-info">
                 <h4 class="design-name">{design.metadata.name}</h4>
                 <p class="design-description">{design.metadata.description}</p>
@@ -342,9 +352,9 @@
 
 <!-- Save Dialog -->
 {#if showSaveDialog}
-  <div class="modal-overlay" on:click={() => showSaveDialog = false}>
-    <div class="modal-content" on:click|stopPropagation>
-      <h3>Save Design</h3>
+  <div class="modal-overlay">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="save-dialog-title">
+      <h3 id="save-dialog-title">Save Design</h3>
 
       <div class="form-group">
         <label for="designName">Design Name *</label>
@@ -596,6 +606,9 @@
     justify-content: center;
     padding: 1rem;
     cursor: pointer;
+    width: 100%;
+    border: 0;
+    color: inherit;
   }
 
   .card-preview :global(svg) {
@@ -622,6 +635,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
+    line-clamp: 2;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
   }
@@ -840,6 +854,9 @@
     top: 0.5rem;
     right: 0.5rem;
     z-index: 10;
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
 
   .checkbox {
