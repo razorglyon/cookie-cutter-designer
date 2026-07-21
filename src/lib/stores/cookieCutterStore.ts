@@ -202,8 +202,10 @@ export function updateParams(patch: Partial<CookieCutterParams>): boolean {
 export function setParams(value: unknown) {
   const validated = validateCookieCutterParams(value);
   paramsStore.set(validated);
+  parameterError.set(null);
 }
 
 export function resetParams() {
   paramsStore.set(createDefaultParams());
+  parameterError.set(null);
 }

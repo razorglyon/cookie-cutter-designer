@@ -21,7 +21,7 @@
   $: filamentUsage = estimateFilamentUsage($params);
 
   function applyAutoFix() {
-    const fixed = autoFixIssues($params, report.issues);
+    const fixed = autoFixIssues(report.issues);
     dispatch('applyFix', fixed);
   }
 

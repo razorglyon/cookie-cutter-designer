@@ -139,20 +139,18 @@ export function analyzeParameters(params: CookieCutterParams): OptimizationRepor
 /**
  * Auto-fix all issues
  */
-export function autoFixIssues(
-  params: CookieCutterParams,
-  issues: OptimizationIssue[]
-): CookieCutterParams {
-  let fixed = { ...params };
+export function autoFixIssues(issues: OptimizationIssue[]): Partial<CookieCutterParams> {
+  let patch: Partial<CookieCutterParams> = {};
 
-  // Apply all auto-fixes
+  // Return only the fields that need changing. The store applies this patch
+  // transactionally and can then maintain dependent values such as totalHeight.
   issues.forEach(issue => {
     if (issue.autoFix) {
-      fixed = { ...fixed, ...issue.autoFix };
+      patch = { ...patch, ...issue.autoFix };
     }
   });
 
-  return fixed;
+  return patch;
 }
 
 /**

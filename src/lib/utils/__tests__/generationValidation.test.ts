@@ -17,6 +17,7 @@ import {
   GENERATION_LIMITS,
   validateCookieCutterParams
 } from '../generationValidation';
+import { analyzeParameters, autoFixIssues } from '../printOptimizer';
 
 function validParams(): CookieCutterParams {
   return { ...DEFAULT_PARAMS };
@@ -433,6 +434,26 @@ describe('cookieCutterStore parameter safety', () => {
     expect(get(parameterError)).toBeNull();
   });
 
+  it('applies the real optimizer payload and adjusts dependent total height', () => {
+    const initial = {
+      ...validParams(),
+      cuttingHeight: 7,
+      handleHeight: 2,
+      totalHeight: 9
+    };
+    setParams(initial);
+    const report = analyzeParameters(initial);
+    const optimizerPatch = autoFixIssues(report.issues);
+
+    expect(optimizerPatch).toEqual({ cuttingHeight: 12 });
+    expect(updateParams(optimizerPatch)).toBe(true);
+    expect(get(params)).toMatchObject({
+      cuttingHeight: 12,
+      handleHeight: 2,
+      totalHeight: 14
+    });
+  });
+
   it('rejects an invalid optimizer patch atomically and preserves snapshot identity', () => {
     const before = get(params);
 
@@ -454,6 +475,7 @@ describe('cookieCutterStore parameter safety', () => {
 
   it('resets to a fresh default snapshot without sharing DEFAULT_PARAMS', () => {
     setParams({ ...validParams(), scale: 2 });
+    parameterError.set('Previous parameter error');
 
     resetParams();
     const firstReset = get(params);
@@ -465,6 +487,15 @@ describe('cookieCutterStore parameter safety', () => {
     expect(secondReset).not.toBe(firstReset);
     expect(Object.isFrozen(firstReset)).toBe(true);
     expect(Object.isFrozen(secondReset)).toBe(true);
+    expect(get(parameterError)).toBeNull();
+  });
+
+  it('clears a stale parameter error after setParams succeeds', () => {
+    parameterError.set('Previous parameter error');
+
+    setParams(validParams());
+
+    expect(get(parameterError)).toBeNull();
   });
 
   it('reports a non-finite snapshot through the pure printability check', () => {
