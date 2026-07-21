@@ -6,6 +6,21 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      svelte-vite-compatible:
+        patterns:
+          - "svelte"
+          - "svelte-check"
+          - "@sveltejs/*"
+          - "vite"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Major upgrades are validated manually on dedicated branches.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
     reviewers:
       - "razorglyon"
     labels:
@@ -21,6 +36,18 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      github-actions-compatible:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Major action upgrades require changelog and runner compatibility review.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
     reviewers:
       - "razorglyon"
     labels:
