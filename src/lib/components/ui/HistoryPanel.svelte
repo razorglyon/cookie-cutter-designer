@@ -2,6 +2,8 @@
   import { createEventDispatcher } from 'svelte';
   import { historyStore, canUndo, canRedo } from '../../stores/historyStore';
 
+  const currentIndex = historyStore.currentIndex;
+
   const dispatch = createEventDispatcher<{
     undo: void;
     redo: void;
@@ -95,10 +97,10 @@
         {#each $historyStore as state, index}
           <div
             class="history-item"
-            class:current={index === $historyStore.currentIndex}
+            class:current={index === $currentIndex}
           >
             <div class="item-icon">
-              {#if index === $historyStore.currentIndex}
+              {#if index === $currentIndex}
                 →
               {:else}
                 ·

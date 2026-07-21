@@ -1,4 +1,7 @@
-import { loadNativeClipperLibInstanceAsync } from 'js-angusj-clipper';
+import {
+  loadNativeClipperLibInstanceAsync,
+  NativeClipperLibRequestedFormat
+} from 'js-angusj-clipper';
 
 let clipperLib: any = null;
 
@@ -7,7 +10,9 @@ let clipperLib: any = null;
  */
 async function initClipper() {
   if (!clipperLib) {
-    clipperLib = await loadNativeClipperLibInstanceAsync();
+    clipperLib = await loadNativeClipperLibInstanceAsync(
+      NativeClipperLibRequestedFormat.WasmWithAsmJsFallback
+    );
   }
   return clipperLib;
 }

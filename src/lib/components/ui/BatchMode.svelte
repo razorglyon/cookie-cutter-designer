@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import type { Group } from 'three';
   import type { CookieCutterParams } from '../../types/CookieCutter';
   import {
     createBatch,
@@ -16,7 +17,7 @@
   export let buildPlateSize: number;
 
   const dispatch = createEventDispatcher<{
-    batchCreated: THREE.Group;
+    batchCreated: Group;
   }>();
 
   let showPanel = false;

@@ -9,16 +9,14 @@ import type { ExportOptions } from '../types/CookieCutter';
 export function exportToSTL(object: Mesh | Group, filename: string = 'cookie-cutter.stl', options: ExportOptions = { binary: true, includeMetadata: false }): void {
   const exporter = new STLExporter();
 
-  // Generate STL data
-  const result = exporter.parse(object, { binary: options.binary });
-
   // Create blob
-  let blob: Blob;
-  if (options.binary) {
-    blob = new Blob([result as ArrayBuffer], { type: 'application/octet-stream' });
-  } else {
-    blob = new Blob([result as string], { type: 'text/plain' });
-  }
+  const blob = options.binary
+    ? new Blob([exporter.parse(object, { binary: true })], {
+        type: 'application/octet-stream'
+      })
+    : new Blob([exporter.parse(object, { binary: false })], {
+        type: 'text/plain'
+      });
 
   // Trigger download
   downloadBlob(blob, filename);
