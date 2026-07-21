@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { get } from 'svelte/store';
 import {
+  error,
   params,
   printability,
   resetParams,
@@ -135,6 +136,14 @@ describe('validateCookieCutterParams', () => {
     }
   );
 
+  it('rejects a zero cutting height', () => {
+    expectInvalidParams({ ...validParams(), cuttingHeight: 0 }, 'cuttingHeight');
+  });
+
+  it('rejects a zero total height', () => {
+    expectInvalidParams({ ...validParams(), totalHeight: 0 }, 'totalHeight');
+  });
+
   it.each([-1, 0, 0.39, 10.01])('rejects unsafe wall thickness %s', (wallThickness) => {
     expectInvalidParams({ ...validParams(), wallThickness }, 'wallThickness');
   });
@@ -218,6 +227,7 @@ describe('validateCookieCutterParams', () => {
 describe('cookieCutterStore parameter safety', () => {
   beforeEach(() => {
     resetParams();
+    error.set(null);
   });
 
   it('stores validated copies without retaining the caller object', () => {
@@ -242,16 +252,86 @@ describe('cookieCutterStore parameter safety', () => {
     expect(get(params)).toBe(before);
   });
 
-  it('validates a complete update and preserves the old snapshot on failure', () => {
-    updateParam('scale', 2);
-    expect(get(params).scale).toBe(2);
-
+  it('returns false without throwing and preserves the snapshot for an invalid update', () => {
     const before = get(params);
-    expect(() => updateParam('scale', 0)).toThrow(CutterGenerationError);
-    expect(get(params)).toBe(before);
+    let result: boolean | undefined;
 
-    expect(() => updateParam('totalHeight', 10)).toThrow(CutterGenerationError);
+    expect(() => {
+      result = updateParam('scale', 0);
+    }).not.toThrow();
+
+    expect(result).toBe(false);
     expect(get(params)).toBe(before);
+    expect(get(error)).toMatch(/scale/i);
+  });
+
+  it('rejects a total height below the active handle minimum without changing the snapshot', () => {
+    const before = get(params);
+
+    expect(updateParam('totalHeight', 19)).toBe(false);
+
+    expect(get(params)).toBe(before);
+    expect(get(error)).toMatch(/totalHeight/i);
+  });
+
+  it('returns true for a valid update and clears the previous error', () => {
+    expect(updateParam('scale', 0)).toBe(false);
+    expect(get(error)).toMatch(/scale/i);
+
+    expect(updateParam('scale', 2)).toBe(true);
+
+    expect(get(params).scale).toBe(2);
+    expect(get(error)).toBeNull();
+  });
+
+  it('atomically raises total height when cutting height needs active handle space', () => {
+    expect(updateParam('cuttingHeight', 15)).toBe(true);
+
+    expect(get(params)).toMatchObject({
+      cuttingHeight: 15,
+      totalHeight: 15 + DEFAULT_PARAMS.handleHeight
+    });
+  });
+
+  it.each([
+    ['a disabled handle', { enableHandle: false, handleStyle: 'round' as const }],
+    ['the none handle style', { enableHandle: true, handleStyle: 'none' as const }]
+  ])('raises total height only to cutting height with %s', (_description, handleConfig) => {
+    setParams({ ...validParams(), ...handleConfig, totalHeight: 12 });
+
+    expect(updateParam('cuttingHeight', 20)).toBe(true);
+
+    expect(get(params)).toMatchObject({ cuttingHeight: 20, totalHeight: 20 });
+  });
+
+  it('rejects a cutting height transition whose active handle would exceed maxTotalHeight', () => {
+    setParams({
+      ...validParams(),
+      cuttingHeight: 90,
+      totalHeight: GENERATION_LIMITS.maxTotalHeight,
+      handleHeight: 60
+    });
+    const before = get(params);
+    let result: boolean | undefined;
+
+    expect(() => {
+      result = updateParam('cuttingHeight', 100);
+    }).not.toThrow();
+
+    expect(result).toBe(false);
+    expect(get(params)).toBe(before);
+    expect(get(error)).toMatch(/totalHeight.*150|150.*totalHeight/i);
+  });
+
+  it('atomically restores the default emboss depth when enabling embossing from zero', () => {
+    setParams({ ...validParams(), enableEmbossing: false, embossDepth: 0 });
+
+    expect(updateParam('enableEmbossing', true)).toBe(true);
+
+    expect(get(params)).toMatchObject({
+      enableEmbossing: true,
+      embossDepth: DEFAULT_PARAMS.embossDepth
+    });
   });
 
   it('resets to a fresh default snapshot without sharing DEFAULT_PARAMS', () => {

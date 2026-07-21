@@ -1,8 +1,9 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import type { CookieCutterParams, CookieCutterModel, PrintabilityCheck } from '../types/CookieCutter';
 import { DEFAULT_PARAMS } from '../types/CookieCutter';
 import {
   CutterGenerationError,
+  GENERATION_LIMITS,
   validateCookieCutterParams
 } from '../utils/generationValidation';
 
@@ -105,14 +106,73 @@ function checkPrintability(value: unknown): PrintabilityCheck {
   };
 }
 
+function minimumTotalHeight(value: CookieCutterParams): number {
+  const activeHandle = value.enableHandle && value.handleStyle !== 'none';
+  return value.cuttingHeight + (activeHandle ? value.handleHeight : 0);
+}
+
+function buildParamUpdate<K extends keyof CookieCutterParams>(
+  current: CookieCutterParams,
+  key: K,
+  value: CookieCutterParams[K]
+): CookieCutterParams {
+  const candidate: CookieCutterParams = { ...current, [key]: value };
+
+  if (
+    key === 'enableEmbossing' &&
+    value === true &&
+    !current.enableEmbossing &&
+    current.embossDepth === 0
+  ) {
+    candidate.embossDepth = DEFAULT_PARAMS.embossDepth;
+  }
+
+  const requiredTotalHeight = minimumTotalHeight(candidate);
+
+  if (key === 'cuttingHeight' && candidate.totalHeight < requiredTotalHeight) {
+    if (requiredTotalHeight > GENERATION_LIMITS.maxTotalHeight) {
+      throw new CutterGenerationError(
+        'INVALID_PARAMS',
+        `The totalHeight required by this cuttingHeight update (${requiredTotalHeight}) exceeds the maximum totalHeight of ${GENERATION_LIMITS.maxTotalHeight}.`,
+        { field: 'totalHeight', value: requiredTotalHeight }
+      );
+    }
+
+    candidate.totalHeight = requiredTotalHeight;
+  }
+
+  if (key === 'totalHeight' && candidate.totalHeight < requiredTotalHeight) {
+    throw new CutterGenerationError(
+      'INVALID_PARAMS',
+      `The totalHeight parameter must be at least ${requiredTotalHeight} for the current cutting height and handle.`,
+      { field: 'totalHeight', value: candidate.totalHeight }
+    );
+  }
+
+  return candidate;
+}
+
 // Helper functions to update params
 export function updateParam<K extends keyof CookieCutterParams>(
   key: K,
   value: CookieCutterParams[K]
-) {
-  params.update((current) =>
-    validateCookieCutterParams({ ...current, [key]: value })
-  );
+): boolean {
+  const current = get(params);
+
+  try {
+    const candidate = buildParamUpdate(current, key, value);
+    const validated = validateCookieCutterParams(candidate);
+    params.set(validated);
+    error.set(null);
+    return true;
+  } catch (validationError) {
+    if (validationError instanceof CutterGenerationError) {
+      error.set(validationError.message);
+      return false;
+    }
+
+    throw validationError;
+  }
 }
 
 export function setParams(value: unknown) {

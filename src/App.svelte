@@ -19,7 +19,7 @@
   import GeminiAPIConfig from './lib/components/ui/GeminiAPIConfig.svelte';
   import AIAssistant from './lib/components/ui/AIAssistant.svelte';
 
-  import { uploadedFile, model, isProcessing, error, params } from './lib/stores/cookieCutterStore';
+  import { uploadedFile, model, isProcessing, error, params, setParams } from './lib/stores/cookieCutterStore';
   import { historyStore } from './lib/stores/historyStore';
   import { vectorizeImage, readFileAsText, cleanSVG } from './lib/utils/imageProcessor';
   import { generateCookieCutter, createTestCookieCutter } from './lib/utils/cookieCutterGenerator';
@@ -268,7 +268,7 @@
 
     try {
       svgCache = cleanSVG(design.svgData);
-      $params = { ...design.params };
+      setParams(design.params);
 
       const mesh = $params.mode === 'stamp'
         ? await generateStamp(svgCache, $params)
