@@ -17,17 +17,17 @@ We recommend always using the latest version from the `main` branch.
 
 This project uses multiple layers of security protection:
 
-- **CodeQL Analysis**: Automated code scanning on every push and pull request
-- **Dependabot Alerts**: Automatic detection of vulnerable dependencies
-- **Dependabot Security Updates**: Automated PRs to fix known vulnerabilities
-- **Branch Protection**: Required reviews and status checks before merging
+- **CodeQL Analysis**: Automated code scanning on pushes, pull requests, and a weekly schedule
+- **Dependency Audit**: `pnpm audit --audit-level=moderate` in the quality workflow
+- **Dependabot Version Updates**: Grouped patch/minor updates; major upgrades are reviewed manually
+- **Protected Integration**: Quality checks run before deployment from `main`
 
 ### Code Review Process
 
 All code changes go through:
 
 1. Automated security scans (CodeQL)
-2. Build verification
+2. Dependency audit, type checking, and build verification
 3. Manual code review by maintainers
 4. Approval before merge
 
@@ -85,8 +85,8 @@ When using Cookie Cutter Designer:
 
 We actively monitor and update dependencies:
 
-- **Automated weekly scans** for vulnerable packages
-- **Dependabot PRs** for security updates
+- **Automated audit** on pushes and pull requests
+- **Weekly Dependabot version checks** for compatible updates
 - **Manual review** of all dependency updates
 - **Lock file** (pnpm-lock.yaml) for reproducible builds
 
@@ -96,7 +96,10 @@ This project uses:
 
 - **GitHub Pages**: Static hosting (read-only)
 - **GitHub Actions**: CI/CD pipeline (isolated builds)
-- **No external APIs or tracking**
+- **Google Gemini API**: Optional image/SVG features send requests directly from the browser when the user configures an API key
+- **No analytics or tracking service configured by default**
+
+Gemini API keys are stored and used client-side. Treat them as exposed browser credentials: restrict their quota and API scope, and never commit them to the repository.
 
 ## Security Headers
 
@@ -113,7 +116,7 @@ Referrer-Policy: no-referrer
 
 Security-related changes are tracked:
 
-- All commits are signed and attributed
+- Commits and pull requests preserve an attributable change history
 - Pull requests include security scan results
 - Release notes highlight security fixes
 

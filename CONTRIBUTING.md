@@ -27,10 +27,10 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 ### Pull Requests
 
 1. **Fork the repository** and create your branch from `main`
-2. **Install dependencies**: `pnpm install`
+2. **Install dependencies**: `pnpm install --frozen-lockfile`
 3. **Make your changes** following the code style guidelines below
 4. **Test your changes**: `pnpm run dev` and verify everything works
-5. **Run type checking**: `pnpm run check`
+5. **Run dependency and type checks**: `pnpm audit --audit-level=moderate` then `pnpm run check`
 6. **Commit your changes** with clear, descriptive commit messages
 7. **Push to your fork** and submit a pull request
 
@@ -73,8 +73,8 @@ src/lib/
 
 ### Prerequisites
 
-- **Node.js 18+**
-- **pnpm** (package manager)
+- **Node.js 22.12+** (see `.nvmrc`)
+- **pnpm 10.33.4** (declared in `package.json`)
 
 ### Installation
 
@@ -84,13 +84,13 @@ git clone https://github.com/YOUR-USERNAME/cookie-cutter-designer.git
 cd cookie-cutter-designer
 
 # Install dependencies
-pnpm install
+pnpm install --frozen-lockfile
 
 # Start development server
 pnpm run dev
 ```
 
-The app will be available at `http://localhost:5173/`
+The app will be available at `http://localhost:5173/cookie-cutter-designer/` by default.
 
 ### Development Commands
 
@@ -100,6 +100,9 @@ pnpm run dev
 
 # Type checking
 pnpm run check
+
+# Dependency security audit
+pnpm audit --audit-level=moderate
 
 # Build for production
 pnpm run build
