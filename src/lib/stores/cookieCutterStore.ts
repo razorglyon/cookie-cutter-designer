@@ -1,9 +1,17 @@
 import { writable, derived } from 'svelte/store';
 import type { CookieCutterParams, CookieCutterModel, PrintabilityCheck } from '../types/CookieCutter';
 import { DEFAULT_PARAMS } from '../types/CookieCutter';
+import {
+  CutterGenerationError,
+  validateCookieCutterParams
+} from '../utils/generationValidation';
+
+function createDefaultParams(): CookieCutterParams {
+  return Object.freeze({ ...DEFAULT_PARAMS });
+}
 
 // Parameters store
-export const params = writable<CookieCutterParams>(DEFAULT_PARAMS);
+export const params = writable<CookieCutterParams>(createDefaultParams());
 
 // Uploaded file store
 export const uploadedFile = writable<File | null>(null);
@@ -27,7 +35,24 @@ export const printability = derived(
 );
 
 // Check if parameters are valid for 3D printing
-function checkPrintability(params: CookieCutterParams): PrintabilityCheck {
+function checkPrintability(value: unknown): PrintabilityCheck {
+  let params: Readonly<CookieCutterParams>;
+
+  try {
+    params = validateCookieCutterParams(value);
+  } catch (validationError) {
+    const message =
+      validationError instanceof CutterGenerationError
+        ? validationError.message
+        : 'The cutter parameters are invalid.';
+
+    return {
+      isValid: false,
+      warnings: [message],
+      recommendations: [],
+    };
+  }
+
   const warnings: string[] = [];
   const recommendations: string[] = [];
   let isValid = true;
@@ -85,9 +110,15 @@ export function updateParam<K extends keyof CookieCutterParams>(
   key: K,
   value: CookieCutterParams[K]
 ) {
-  params.update(p => ({ ...p, [key]: value }));
+  params.update((current) =>
+    validateCookieCutterParams({ ...current, [key]: value })
+  );
+}
+
+export function setParams(value: unknown) {
+  params.set(validateCookieCutterParams(value));
 }
 
 export function resetParams() {
-  params.set(DEFAULT_PARAMS);
+  params.set(createDefaultParams());
 }

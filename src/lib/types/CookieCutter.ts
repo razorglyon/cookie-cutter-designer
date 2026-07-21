@@ -1,3 +1,5 @@
+import type { Object3D } from 'three';
+
 // Cookie Cutter Design Parameters
 export interface CookieCutterParams {
   wallThickness: number; // in mm (0.8-1.2)
@@ -29,7 +31,7 @@ export interface Path2D {
 }
 
 export interface CookieCutterModel {
-  mesh: any; // Three.js Mesh
+  mesh: Object3D;
   paths: Path2D[];
   params: CookieCutterParams;
 }
