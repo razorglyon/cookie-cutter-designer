@@ -1,12 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { get } from 'svelte/store';
+import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
+import { get, type Readable } from 'svelte/store';
 import {
+  checkPrintability,
   error,
+  parameterError,
   params,
   printability,
   resetParams,
   setParams,
-  updateParam
+  updateParam,
+  updateParams
 } from '../../stores/cookieCutterStore';
 import { DEFAULT_PARAMS, type CookieCutterParams } from '../../types/CookieCutter';
 import {
@@ -121,6 +124,7 @@ describe('validateCookieCutterParams', () => {
         totalHeight: 150,
         taperAngle: 30,
         scale: 100,
+        handleStyle: 'none',
         handleHeight: 100,
         buildPlateSize: 1000,
         embossDepth: 20,
@@ -163,6 +167,37 @@ describe('validateCookieCutterParams', () => {
       { ...validParams(), cuttingHeight: 12, totalHeight: 11.99 },
       'totalHeight'
     );
+  });
+
+  it('rejects a total height below the active handle minimum when handleHeight increases', () => {
+    const validationError = expectInvalidParams(
+      { ...validParams(), handleHeight: DEFAULT_PARAMS.handleHeight + 1 },
+      'totalHeight'
+    );
+
+    expect(validationError.message).toMatch(/cuttingHeight.*handleHeight/i);
+  });
+
+  it('does not reserve handle height when the handle style is none', () => {
+    expect(() =>
+      validateCookieCutterParams({
+        ...validParams(),
+        totalHeight: DEFAULT_PARAMS.cuttingHeight,
+        handleStyle: 'none',
+        handleHeight: GENERATION_LIMITS.maxHandleHeight
+      })
+    ).not.toThrow();
+  });
+
+  it('does not reserve handle height when the handle is disabled', () => {
+    expect(() =>
+      validateCookieCutterParams({
+        ...validParams(),
+        totalHeight: DEFAULT_PARAMS.cuttingHeight,
+        enableHandle: false,
+        handleHeight: GENERATION_LIMITS.maxHandleHeight
+      })
+    ).not.toThrow();
   });
 
   it.each([0, 19.99, 1000.01, Number.NaN])(
@@ -228,6 +263,18 @@ describe('cookieCutterStore parameter safety', () => {
   beforeEach(() => {
     resetParams();
     error.set(null);
+    parameterError.set(null);
+  });
+
+  it('exposes params through a read-only store contract', () => {
+    type ParamsHasSet = 'set' extends keyof typeof params ? true : false;
+    type ParamsHasUpdate = 'update' extends keyof typeof params ? true : false;
+
+    expectTypeOf(params).toMatchTypeOf<Readable<Readonly<CookieCutterParams>>>();
+    expectTypeOf<ParamsHasSet>().toEqualTypeOf<false>();
+    expectTypeOf<ParamsHasUpdate>().toEqualTypeOf<false>();
+    expect('set' in params).toBe(false);
+    expect('update' in params).toBe(false);
   });
 
   it('stores validated copies without retaining the caller object', () => {
@@ -252,9 +299,20 @@ describe('cookieCutterStore parameter safety', () => {
     expect(get(params)).toBe(before);
   });
 
+  it('rejects an invalid active-handle object through setParams without publishing it', () => {
+    const before = get(params);
+
+    expect(() =>
+      setParams({ ...validParams(), handleHeight: DEFAULT_PARAMS.handleHeight + 1 })
+    ).toThrow(/totalHeight/i);
+
+    expect(get(params)).toBe(before);
+  });
+
   it('returns false without throwing and preserves the snapshot for an invalid update', () => {
     const before = get(params);
     let result: boolean | undefined;
+    error.set('Generation failed');
 
     expect(() => {
       result = updateParam('scale', 0);
@@ -262,26 +320,29 @@ describe('cookieCutterStore parameter safety', () => {
 
     expect(result).toBe(false);
     expect(get(params)).toBe(before);
-    expect(get(error)).toMatch(/scale/i);
+    expect(get(parameterError)).toMatch(/scale/i);
+    expect(get(error)).toBe('Generation failed');
   });
 
-  it('rejects a total height below the active handle minimum without changing the snapshot', () => {
+  it('rejects an explicitly low total height without changing the snapshot', () => {
     const before = get(params);
 
     expect(updateParam('totalHeight', 19)).toBe(false);
 
     expect(get(params)).toBe(before);
-    expect(get(error)).toMatch(/totalHeight/i);
+    expect(get(parameterError)).toMatch(/totalHeight/i);
   });
 
-  it('returns true for a valid update and clears the previous error', () => {
+  it('clears only parameterError after a valid update', () => {
+    error.set('Generation failed');
     expect(updateParam('scale', 0)).toBe(false);
-    expect(get(error)).toMatch(/scale/i);
+    expect(get(parameterError)).toMatch(/scale/i);
 
     expect(updateParam('scale', 2)).toBe(true);
 
     expect(get(params).scale).toBe(2);
-    expect(get(error)).toBeNull();
+    expect(get(parameterError)).toBeNull();
+    expect(get(error)).toBe('Generation failed');
   });
 
   it('atomically raises total height when cutting height needs active handle space', () => {
@@ -290,6 +351,37 @@ describe('cookieCutterStore parameter safety', () => {
     expect(get(params)).toMatchObject({
       cuttingHeight: 15,
       totalHeight: 15 + DEFAULT_PARAMS.handleHeight
+    });
+  });
+
+  it('atomically raises total height when handle height increases', () => {
+    expect(updateParam('handleHeight', 10)).toBe(true);
+
+    expect(get(params)).toMatchObject({
+      handleHeight: 10,
+      totalHeight: DEFAULT_PARAMS.cuttingHeight + 10
+    });
+  });
+
+  it.each([
+    [
+      'enableHandle',
+      { enableHandle: false, handleStyle: 'round' as const },
+      ['enableHandle', true] as const
+    ],
+    [
+      'handleStyle',
+      { enableHandle: true, handleStyle: 'none' as const },
+      ['handleStyle', 'round'] as const
+    ]
+  ])('raises total height when %s activates the handle', (_description, initial, update) => {
+    setParams({ ...validParams(), ...initial, totalHeight: DEFAULT_PARAMS.cuttingHeight });
+
+    expect(updateParam(update[0], update[1])).toBe(true);
+
+    expect(get(params)).toMatchObject({
+      [update[0]]: update[1],
+      totalHeight: DEFAULT_PARAMS.cuttingHeight + DEFAULT_PARAMS.handleHeight
     });
   });
 
@@ -304,7 +396,7 @@ describe('cookieCutterStore parameter safety', () => {
     expect(get(params)).toMatchObject({ cuttingHeight: 20, totalHeight: 20 });
   });
 
-  it('rejects a cutting height transition whose active handle would exceed maxTotalHeight', () => {
+  it('preserves snapshot identity when the required handle height exceeds maxTotalHeight', () => {
     setParams({
       ...validParams(),
       cuttingHeight: 90,
@@ -312,15 +404,11 @@ describe('cookieCutterStore parameter safety', () => {
       handleHeight: 60
     });
     const before = get(params);
-    let result: boolean | undefined;
 
-    expect(() => {
-      result = updateParam('cuttingHeight', 100);
-    }).not.toThrow();
+    expect(updateParam('handleHeight', 61)).toBe(false);
 
-    expect(result).toBe(false);
     expect(get(params)).toBe(before);
-    expect(get(error)).toMatch(/totalHeight.*150|150.*totalHeight/i);
+    expect(get(parameterError)).toMatch(/totalHeight.*150|150.*totalHeight/i);
   });
 
   it('atomically restores the default emboss depth when enabling embossing from zero', () => {
@@ -332,6 +420,36 @@ describe('cookieCutterStore parameter safety', () => {
       enableEmbossing: true,
       embossDepth: DEFAULT_PARAMS.embossDepth
     });
+  });
+
+  it('applies a valid optimizer patch atomically without fallback values', () => {
+    const before = get(params);
+    parameterError.set('Previous parameter error');
+
+    expect(updateParams({ wallThickness: 1.2, taperAngle: 9 })).toBe(true);
+
+    expect(get(params)).not.toBe(before);
+    expect(get(params)).toMatchObject({ wallThickness: 1.2, taperAngle: 9 });
+    expect(get(parameterError)).toBeNull();
+  });
+
+  it('rejects an invalid optimizer patch atomically and preserves snapshot identity', () => {
+    const before = get(params);
+
+    expect(updateParams({ wallThickness: 1.2, scale: 0 })).toBe(false);
+
+    expect(get(params)).toBe(before);
+    expect(get(params).wallThickness).toBe(DEFAULT_PARAMS.wallThickness);
+    expect(get(parameterError)).toMatch(/scale/i);
+  });
+
+  it('refuses an explicitly low totalHeight in a multi-parameter patch', () => {
+    const before = get(params);
+
+    expect(updateParams({ cuttingHeight: 15, totalHeight: 22 })).toBe(false);
+
+    expect(get(params)).toBe(before);
+    expect(get(parameterError)).toMatch(/totalHeight/i);
   });
 
   it('resets to a fresh default snapshot without sharing DEFAULT_PARAMS', () => {
@@ -349,17 +467,16 @@ describe('cookieCutterStore parameter safety', () => {
     expect(Object.isFrozen(secondReset)).toBe(true);
   });
 
-  it('marks a bypassed non-finite snapshot as invalid with a useful message', () => {
-    params.set({ ...validParams(), totalHeight: Number.NaN });
+  it('reports a non-finite snapshot through the pure printability check', () => {
+    const result = checkPrintability({ ...validParams(), totalHeight: Number.NaN });
 
-    const result = get(printability);
     expect(result.isValid).toBe(false);
     expect(result.warnings.join(' ')).toMatch(/totalHeight/i);
     expect(result.recommendations).toEqual([]);
   });
 
   it('keeps the existing warnings and recommendations for runtime-valid params', () => {
-    params.set({ ...validParams(), wallThickness: 0.5 });
+    setParams({ ...validParams(), wallThickness: 0.5 });
     const thinWall = get(printability);
 
     expect(thinWall.isValid).toBe(false);

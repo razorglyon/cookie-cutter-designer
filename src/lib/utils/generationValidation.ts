@@ -240,6 +240,18 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
     );
   }
 
+  if (
+    enableHandle &&
+    handleStyle !== 'none' &&
+    totalHeight < cuttingHeight + handleHeight
+  ) {
+    invalidParameter(
+      'totalHeight',
+      'The totalHeight parameter must be greater than or equal to cuttingHeight + handleHeight when the handle is active.',
+      totalHeight
+    );
+  }
+
   if (enableHandle && handleHeight <= 0) {
     invalidParameter(
       'handleHeight',

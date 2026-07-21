@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { params, updateParam } from '../../stores/cookieCutterStore';
+  import { parameterError, params, updateParam } from '../../stores/cookieCutterStore';
   import type { HandleStyle } from '../../types/CookieCutter';
 
   const handleStyles: { value: HandleStyle; label: string }[] = [
@@ -13,6 +13,13 @@
 
 <div class="parameter-panel">
   <h2>Cookie Cutter Parameters</h2>
+
+  {#if $parameterError}
+    <div class="parameter-error" role="alert">
+      <strong>Parameter update failed</strong>
+      <span>{$parameterError}</span>
+    </div>
+  {/if}
 
   <!-- Mode Selection -->
   <div class="param-group">
@@ -243,6 +250,20 @@
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .parameter-error {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-left: 4px solid #dc2626;
+    border-radius: 6px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-size: 0.9rem;
+    line-height: 1.4;
   }
 
   .mode-selector {

@@ -19,7 +19,15 @@
   import GeminiAPIConfig from './lib/components/ui/GeminiAPIConfig.svelte';
   import AIAssistant from './lib/components/ui/AIAssistant.svelte';
 
-  import { uploadedFile, model, isProcessing, error, params, setParams } from './lib/stores/cookieCutterStore';
+  import {
+    uploadedFile,
+    model,
+    isProcessing,
+    error,
+    params,
+    setParams,
+    updateParams
+  } from './lib/stores/cookieCutterStore';
   import { historyStore } from './lib/stores/historyStore';
   import { vectorizeImage, readFileAsText, cleanSVG } from './lib/utils/imageProcessor';
   import { generateCookieCutter, createTestCookieCutter } from './lib/utils/cookieCutterGenerator';
@@ -27,6 +35,7 @@
   import { exportToSTL, estimateSTLSize, formatFileSize } from './lib/utils/stlExporter';
   import { applyMaterialToMesh, type MaterialPreset } from './lib/utils/materialManager';
   import type { SavedDesign } from './lib/utils/cloudGallery';
+  import { validateCookieCutterParams } from './lib/utils/generationValidation';
   import type { Mesh, Group } from 'three';
   import * as THREE from 'three';
 
@@ -209,18 +218,23 @@
     if (state) {
       isRestoringHistory = true;
 
-      // Restore parameters
-      $params = { ...state.params };
+      try {
+        // Restore parameters
+        setParams(state.params);
 
-      // Restore SVG if different
-      if (state.svgData && state.svgData !== svgCache) {
-        svgCache = state.svgData;
+        // Restore SVG if different
+        if (state.svgData && state.svgData !== svgCache) {
+          svgCache = state.svgData;
+        }
+
+        // Regenerate model
+        await regenerateModel();
+      } catch (err) {
+        console.error('Error restoring undo state:', err);
+        $error = err instanceof Error ? err.message : 'Failed to restore undo state';
+      } finally {
+        isRestoringHistory = false;
       }
-
-      // Regenerate model
-      await regenerateModel();
-
-      isRestoringHistory = false;
     }
   }
 
@@ -230,18 +244,23 @@
     if (state) {
       isRestoringHistory = true;
 
-      // Restore parameters
-      $params = { ...state.params };
+      try {
+        // Restore parameters
+        setParams(state.params);
 
-      // Restore SVG if different
-      if (state.svgData && state.svgData !== svgCache) {
-        svgCache = state.svgData;
+        // Restore SVG if different
+        if (state.svgData && state.svgData !== svgCache) {
+          svgCache = state.svgData;
+        }
+
+        // Regenerate model
+        await regenerateModel();
+      } catch (err) {
+        console.error('Error restoring redo state:', err);
+        $error = err instanceof Error ? err.message : 'Failed to restore redo state';
+      } finally {
+        isRestoringHistory = false;
       }
-
-      // Regenerate model
-      await regenerateModel();
-
-      isRestoringHistory = false;
     }
   }
 
@@ -262,23 +281,27 @@
   // Handle loading design from gallery
   async function handleLoadFromGallery(event: CustomEvent<SavedDesign>) {
     const design = event.detail;
-    fileName = design.metadata.name + '.svg';
     $error = null;
     $isProcessing = true;
 
     try {
-      svgCache = cleanSVG(design.svgData);
-      setParams(design.params);
+      const nextFileName = design.metadata.name + '.svg';
+      const nextSvg = cleanSVG(design.svgData);
+      const nextParams = validateCookieCutterParams(design.params);
+      const generationParams = { ...nextParams };
 
-      const mesh = $params.mode === 'stamp'
-        ? await generateStamp(svgCache, $params)
-        : await generateCookieCutter(svgCache, $params);
+      const mesh = nextParams.mode === 'stamp'
+        ? await generateStamp(nextSvg, generationParams)
+        : await generateCookieCutter(nextSvg, generationParams);
 
+      setParams(nextParams);
+      fileName = nextFileName;
+      svgCache = nextSvg;
       currentMesh = mesh;
       $model = {
         mesh,
         paths: [],
-        params: $params
+        params: { ...nextParams }
       };
     } catch (err) {
       console.error('Error loading design:', err);
@@ -555,7 +578,7 @@
 
         {:else if activeCategory === 'materials' && $model}
           <MaterialManager on:materialChanged={handleMaterialChange} />
-          <OptimizationPanel on:applyFix={(e) => $params = { ...$params, ...e.detail }} />
+          <OptimizationPanel on:applyFix={(e) => updateParams(e.detail)} />
           <CollisionDetector mesh={currentMesh} buildPlateSize={$params.buildPlateSize} />
 
         {:else if activeCategory === 'preview' && $model}
