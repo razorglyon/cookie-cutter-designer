@@ -14,6 +14,10 @@ import {
   CutterGenerationError,
   validateCookieCutterParams
 } from './generationValidation';
+import {
+  getTriangleWallThicknesses,
+  setTriangleWallThicknesses
+} from './wallThicknessHeatmap';
 
 const MATERIAL_OPTIONS = Object.freeze({
   color: 0xffa726,
@@ -107,6 +111,17 @@ function assertWatertightGeometry(geometry: THREE.BufferGeometry): void {
 function finalizeJoinedGeometry(
   segments: readonly THREE.BufferGeometry[]
 ): THREE.BufferGeometry {
+  const triangleThicknesses = segments.flatMap((segment) => {
+    const values = getTriangleWallThicknesses(segment);
+    if (!values) {
+      throw new CutterGenerationError(
+        'INVALID_GEOMETRY',
+        'A cutter segment is missing wall-thickness metadata.',
+        { field: 'wallThickness' }
+      );
+    }
+    return [...values];
+  });
   const prepared = segments.map((segment) => {
     const clone = segment.clone();
     clone.deleteAttribute('normal');
@@ -128,6 +143,7 @@ function finalizeJoinedGeometry(
     welded.computeVertexNormals();
     welded.computeBoundingBox();
     welded.computeBoundingSphere();
+    setTriangleWallThicknesses(welded, triangleThicknesses);
     assertWatertightGeometry(welded);
     return welded;
   } finally {

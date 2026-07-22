@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { createTaperedWallGeometry } from '../cutterGeometry';
 import { CutterGenerationError } from '../generationValidation';
 import {
+  getTriangleWallThicknesses,
+  measureWallThicknessRange
+} from '../wallThicknessHeatmap';
+import {
   concavePoints,
   duplicatePoints,
   squarePoints,
@@ -71,6 +75,9 @@ function expectValidClosedGeometry(geometry: THREE.BufferGeometry): void {
   expect((indices?.count ?? 0) % 3).toBe(0);
   expect(Array.from(positions.array).every(Number.isFinite)).toBe(true);
   expect(Array.from(normals.array).every(Number.isFinite)).toBe(true);
+  const wallThicknesses = getTriangleWallThicknesses(geometry);
+  expect(wallThicknesses).not.toBeNull();
+  expect(wallThicknesses).toHaveLength((indices?.count ?? 0) / 3);
 
   const edgeCounts = new Map<string, number>();
   for (let item = 0; item < (indices?.count ?? 0); item += 3) {
@@ -180,6 +187,25 @@ describe('createTaperedWallGeometry', () => {
     expectValidClosedGeometry(geometry);
     expect(top.maxX - top.minX).toBeGreaterThan(bottom.maxX - bottom.minX);
     expect(top.maxZ - top.minZ).toBeGreaterThan(bottom.maxZ - bottom.minZ);
+  });
+
+  it('records actual local wall thickness for every triangle', async () => {
+    const straight = await createTaperedWallGeometry(squarePoints, baseOptions);
+    const tapered = await createTaperedWallGeometry(squarePoints, {
+      ...baseOptions,
+      taperAngle: 7
+    });
+    const straightValues = getTriangleWallThicknesses(straight);
+    const taperedValues = getTriangleWallThicknesses(tapered);
+
+    expect(straightValues).not.toBeNull();
+    expect(taperedValues).not.toBeNull();
+    const straightRange = measureWallThicknessRange(straightValues!);
+    const taperedRange = measureWallThicknessRange(taperedValues!);
+
+    expect(straightRange.min).toBeCloseTo(baseOptions.wallThickness, 5);
+    expect(straightRange.max).toBeGreaterThan(straightRange.min);
+    expect(taperedRange.max).toBeGreaterThan(straightRange.max);
   });
 
   it.each([

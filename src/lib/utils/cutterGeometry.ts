@@ -7,6 +7,7 @@ import {
 } from './contourExtraction';
 import { CutterGenerationError } from './generationValidation';
 import { offsetPath, type JoinStyle } from './pathOperations';
+import { setTriangleWallThicknesses } from './wallThicknessHeatmap';
 
 export interface CutterWallGeometryOptions {
   readonly wallThickness: number;
@@ -298,11 +299,13 @@ function addLoopPair(
 
 function addOrientedTriangle(
   indices: number[],
+  triangleThicknesses: number[],
   positions: readonly THREE.Vector3[],
   first: number,
   second: number,
   third: number,
-  desiredNormal: THREE.Vector3
+  desiredNormal: THREE.Vector3,
+  wallThickness: number
 ): void {
   const edgeA = new THREE.Vector3().subVectors(positions[second], positions[first]);
   const edgeB = new THREE.Vector3().subVectors(positions[third], positions[first]);
@@ -321,15 +324,91 @@ function addOrientedTriangle(
   } else {
     indices.push(first, second, third);
   }
+  triangleThicknesses.push(wallThickness);
+}
+
+function distanceToSegment(
+  point: Readonly<Point2D>,
+  start: Readonly<Point2D>,
+  end: Readonly<Point2D>
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= Number.EPSILON) return Math.sqrt(distanceSquared(point, start));
+
+  const projection = THREE.MathUtils.clamp(
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+    0,
+    1
+  );
+  const closest = {
+    x: start.x + projection * dx,
+    y: start.y + projection * dy
+  };
+  return Math.sqrt(distanceSquared(point, closest));
+}
+
+function distanceToContours(
+  point: Readonly<Point2D>,
+  contours: ReadonlyArray<NormalizedContour>
+): number {
+  let distance = Number.POSITIVE_INFINITY;
+
+  for (const contour of contours) {
+    for (let index = 0; index < contour.length; index += 1) {
+      distance = Math.min(
+        distance,
+        distanceToSegment(point, contour[index], contour[(index + 1) % contour.length])
+      );
+    }
+  }
+
+  if (!Number.isFinite(distance) || distance <= 0) {
+    throw generationError(
+      'INVALID_GEOMETRY',
+      'The wall thickness could not be measured from the generated contours.',
+      { field: 'wallThickness', value: distance }
+    );
+  }
+  return distance;
+}
+
+function edgeMidpoint(
+  points: NormalizedContour,
+  index: number
+): Readonly<Point2D> {
+  const current = points[index];
+  const next = points[(index + 1) % points.length];
+  return Object.freeze({
+    x: (current.x + next.x) / 2,
+    y: (current.y + next.y) / 2
+  });
+}
+
+function setLoopThicknesses(
+  thicknessByIndex: Map<number, number>,
+  points: NormalizedContour,
+  indices: readonly number[],
+  oppositeContours: ReadonlyArray<NormalizedContour>
+): void {
+  for (let index = 0; index < indices.length; index += 1) {
+    thicknessByIndex.set(
+      indices[index],
+      distanceToContours(points[index], oppositeContours)
+    );
+  }
 }
 
 function addCap(
   indices: number[],
+  triangleThicknesses: number[],
   positions: readonly THREE.Vector3[],
   outerPoints: NormalizedContour,
   holePoints: ReadonlyArray<NormalizedContour>,
   outerIndices: readonly number[],
   holeIndices: ReadonlyArray<readonly number[]>,
+  thicknessByIndex: ReadonlyMap<number, number>,
   top: boolean
 ): void {
   const outer = outerPoints.map(({ x, y }) => new THREE.Vector2(x, y));
@@ -349,22 +428,44 @@ function addCap(
   }
 
   for (const [first, second, third] of faces) {
-    addOrientedTriangle(
-      indices,
-      positions,
+    const triangle = [
       flattenedIndices[first],
       flattenedIndices[second],
-      flattenedIndices[third],
-      desiredNormal
+      flattenedIndices[third]
+    ] as const;
+    const wallThickness = triangle.reduce((total, vertexIndex) => {
+      const value = thicknessByIndex.get(vertexIndex);
+      if (value === undefined) {
+        throw generationError(
+          'INVALID_GEOMETRY',
+          'The wall cap is missing thickness metadata.',
+          { surface: top ? 'top' : 'bottom', vertexIndex }
+        );
+      }
+      return total + value;
+    }, 0) / triangle.length;
+
+    addOrientedTriangle(
+      indices,
+      triangleThicknesses,
+      positions,
+      triangle[0],
+      triangle[1],
+      triangle[2],
+      desiredNormal,
+      wallThickness
     );
   }
 }
 
 function addLoopSides(
   indices: number[],
+  triangleThicknesses: number[],
   positions: readonly THREE.Vector3[],
   loop: IndexedLoopPair,
-  inner: boolean
+  inner: boolean,
+  oppositeBottom: ReadonlyArray<NormalizedContour>,
+  oppositeTop: ReadonlyArray<NormalizedContour>
 ): void {
   for (let index = 0; index < loop.bottomIndices.length; index += 1) {
     const next = (index + 1) % loop.bottomIndices.length;
@@ -377,22 +478,34 @@ function addLoopSides(
     const desiredNormal = inner
       ? new THREE.Vector3(-edgeZ, 0, edgeX)
       : new THREE.Vector3(edgeZ, 0, -edgeX);
+    const bottomThickness = distanceToContours(
+      edgeMidpoint(loop.bottomPoints, index),
+      oppositeBottom
+    );
+    const topThickness = distanceToContours(
+      edgeMidpoint(loop.topPoints, index),
+      oppositeTop
+    );
 
     addOrientedTriangle(
       indices,
+      triangleThicknesses,
       positions,
       bottomCurrent,
       bottomNext,
       topNext,
-      desiredNormal
+      desiredNormal,
+      (bottomThickness * 2 + topThickness) / 3
     );
     addOrientedTriangle(
       indices,
+      triangleThicknesses,
       positions,
       bottomCurrent,
       topNext,
       topCurrent,
-      desiredNormal
+      desiredNormal,
+      (bottomThickness + topThickness * 2) / 3
     );
   }
 }
@@ -400,6 +513,7 @@ function addLoopSides(
 function addRegionPair(
   positions: THREE.Vector3[],
   indices: number[],
+  triangleThicknesses: number[],
   pair: RegionPair,
   bottomHeight: number,
   topHeight: number,
@@ -420,43 +534,84 @@ function addRegionPair(
   const holeLoops = holePairs.map(([bottom, top]) =>
     addLoopPair(positions, sampleLoopPair(bottom, top), bottomHeight, topHeight)
   );
+  const bottomThicknessByIndex = new Map<number, number>();
+  const topThicknessByIndex = new Map<number, number>();
+  const bottomHoles = holeLoops.map(({ bottomPoints }) => bottomPoints);
+  const topHoles = holeLoops.map(({ topPoints }) => topPoints);
+
+  setLoopThicknesses(
+    bottomThicknessByIndex,
+    outerLoop.bottomPoints,
+    outerLoop.bottomIndices,
+    bottomHoles
+  );
+  setLoopThicknesses(
+    topThicknessByIndex,
+    outerLoop.topPoints,
+    outerLoop.topIndices,
+    topHoles
+  );
+  for (const holeLoop of holeLoops) {
+    setLoopThicknesses(
+      bottomThicknessByIndex,
+      holeLoop.bottomPoints,
+      holeLoop.bottomIndices,
+      [outerLoop.bottomPoints]
+    );
+    setLoopThicknesses(
+      topThicknessByIndex,
+      holeLoop.topPoints,
+      holeLoop.topIndices,
+      [outerLoop.topPoints]
+    );
+  }
 
   if (capBottom) {
     addCap(
       indices,
+      triangleThicknesses,
       positions,
       outerLoop.bottomPoints,
       holeLoops.map(({ bottomPoints }) => bottomPoints),
       outerLoop.bottomIndices,
       holeLoops.map(({ bottomIndices }) => bottomIndices),
+      bottomThicknessByIndex,
       false
     );
   }
   if (capTop) {
     addCap(
       indices,
+      triangleThicknesses,
       positions,
       outerLoop.topPoints,
       holeLoops.map(({ topPoints }) => topPoints),
       outerLoop.topIndices,
       holeLoops.map(({ topIndices }) => topIndices),
+      topThicknessByIndex,
       true
     );
   }
 
   addLoopSides(
     indices,
+    triangleThicknesses,
     positions,
     outerLoop,
-    false
+    false,
+    bottomHoles,
+    topHoles
   );
 
   for (let index = 0; index < holeLoops.length; index += 1) {
     addLoopSides(
       indices,
+      triangleThicknesses,
       positions,
       holeLoops[index],
-      true
+      true,
+      [outerLoop.bottomPoints],
+      [outerLoop.topPoints]
     );
   }
 }
@@ -574,11 +729,13 @@ export async function createTaperedWallGeometry(
   const capTop = options.capTop ?? true;
   const positions: THREE.Vector3[] = [];
   const indices: number[] = [];
+  const triangleThicknesses: number[] = [];
 
   for (const pair of regionPairs) {
     addRegionPair(
       positions,
       indices,
+      triangleThicknesses,
       pair,
       baseHeight,
       baseHeight + options.height,
@@ -594,6 +751,7 @@ export async function createTaperedWallGeometry(
   );
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  setTriangleWallThicknesses(geometry, triangleThicknesses);
   validateGeometry(geometry);
   return geometry;
 }

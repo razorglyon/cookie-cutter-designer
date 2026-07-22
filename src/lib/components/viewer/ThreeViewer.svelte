@@ -2,6 +2,12 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import * as THREE from 'three';
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+  import {
+    createWallThicknessColorAttribute,
+    getTriangleWallThicknesses,
+    measureWallThicknessRange,
+    type WallThicknessRange
+  } from '../../utils/wallThicknessHeatmap';
 
   export let mesh: THREE.Mesh | THREE.Group | null = null;
   export let buildPlateSize = 200;
@@ -26,6 +32,21 @@
   let renderedBuildPlateSize = buildPlateSize;
   let themeObserver: MutationObserver | undefined;
   let resizeObserver: ResizeObserver | undefined;
+  let wallHeatmapEnabled = false;
+  let wallHeatmapAvailable = false;
+  let wallHeatmapRange: WallThicknessRange | null = null;
+  let wallHeatmapTarget: number | null = null;
+  let wallHeatmapTargetPosition = 50;
+
+  interface HeatmapOverride {
+    readonly mesh: THREE.Mesh;
+    readonly sourceGeometry: THREE.BufferGeometry;
+    readonly sourceMaterial: THREE.Material | THREE.Material[];
+    readonly heatmapGeometry: THREE.BufferGeometry;
+    readonly heatmapMaterial: THREE.Material | THREE.Material[];
+  }
+
+  let heatmapOverrides: HeatmapOverride[] = [];
 
   onMount(() => {
     initThree();
@@ -42,6 +63,7 @@
     if (animationId !== undefined) cancelAnimationFrame(animationId);
 
     clearSelection();
+    clearWallThicknessHeatmap();
     if (displayedMesh && scene) scene.remove(displayedMesh);
     displayedMesh = null;
 
@@ -83,6 +105,114 @@
       if (material instanceof THREE.Material || Array.isArray(material)) {
         disposeMaterial(material as THREE.Material | THREE.Material[]);
       }
+    }
+  }
+
+  function targetWallThickness(object: THREE.Object3D | null): number | null {
+    const params = object?.userData.params as { wallThickness?: unknown } | undefined;
+    const value = params?.wallThickness;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  function cloneHeatmapMaterial(
+    material: THREE.Material | THREE.Material[]
+  ): THREE.Material | THREE.Material[] {
+    const clone = (source: THREE.Material): THREE.Material => {
+      const result = source.clone() as THREE.Material & {
+        color?: THREE.Color;
+        vertexColors?: boolean;
+      };
+      if (result.color instanceof THREE.Color) result.color.set(0xffffff);
+      if ('vertexColors' in result) result.vertexColors = true;
+      result.needsUpdate = true;
+      return result;
+    };
+
+    return Array.isArray(material) ? material.map(clone) : clone(material);
+  }
+
+  function clearWallThicknessHeatmap(): void {
+    for (const override of heatmapOverrides) {
+      override.mesh.geometry = override.sourceGeometry;
+      override.mesh.material = override.sourceMaterial;
+      override.heatmapGeometry.dispose();
+      disposeMaterial(override.heatmapMaterial);
+    }
+    heatmapOverrides = [];
+    wallHeatmapRange = null;
+    wallHeatmapTargetPosition = 50;
+  }
+
+  function refreshWallHeatmapAvailability(): void {
+    const target = targetWallThickness(displayedMesh);
+    wallHeatmapTarget = target;
+    let hasMeasurements = false;
+    displayedMesh?.traverse((child) => {
+      if (child instanceof THREE.Mesh && getTriangleWallThicknesses(child.geometry)) {
+        hasMeasurements = true;
+      }
+    });
+    wallHeatmapAvailable = target !== null && hasMeasurements;
+    if (!wallHeatmapAvailable) wallHeatmapEnabled = false;
+  }
+
+  function applyWallThicknessHeatmap(): void {
+    clearWallThicknessHeatmap();
+    const target = targetWallThickness(displayedMesh);
+    if (!displayedMesh || target === null) return;
+
+    const entries: Array<{
+      mesh: THREE.Mesh;
+      measurements: readonly number[];
+    }> = [];
+    const allMeasurements: number[] = [];
+    displayedMesh.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const measurements = getTriangleWallThicknesses(child.geometry);
+      if (!measurements) return;
+      entries.push({ mesh: child, measurements });
+      allMeasurements.push(...measurements);
+    });
+    if (allMeasurements.length === 0) return;
+
+    const range = measureWallThicknessRange(allMeasurements);
+    const maximum = Math.max(range.max, target);
+    const span = range.max - range.min;
+    wallHeatmapTargetPosition = span <= Number.EPSILON
+      ? 50
+      : THREE.MathUtils.clamp(((target - range.min) / span) * 100, 0, 100);
+    for (const { mesh: child, measurements } of entries) {
+      const heatmapGeometry = child.geometry.toNonIndexed();
+      const positions = heatmapGeometry.getAttribute('position');
+      if (positions.count !== measurements.length * 3) {
+        heatmapGeometry.dispose();
+        continue;
+      }
+      heatmapGeometry.setAttribute(
+        'color',
+        createWallThicknessColorAttribute(measurements, target, maximum, positions)
+      );
+      const heatmapMaterial = cloneHeatmapMaterial(child.material);
+      heatmapOverrides.push({
+        mesh: child,
+        sourceGeometry: child.geometry,
+        sourceMaterial: child.material,
+        heatmapGeometry,
+        heatmapMaterial
+      });
+      child.geometry = heatmapGeometry;
+      child.material = heatmapMaterial;
+    }
+
+    if (heatmapOverrides.length > 0) wallHeatmapRange = range;
+  }
+
+  function handleWallHeatmapChange(event: Event): void {
+    wallHeatmapEnabled = (event.currentTarget as HTMLInputElement).checked;
+    if (wallHeatmapEnabled && wallHeatmapAvailable) {
+      applyWallThicknessHeatmap();
+    } else {
+      clearWallThicknessHeatmap();
     }
   }
 
@@ -198,6 +328,10 @@
 
     const objectToDelete = selectedObject;
     clearSelection();
+    if (heatmapOverrides.length > 0) {
+      clearWallThicknessHeatmap();
+      wallHeatmapEnabled = false;
+    }
     dispatch('deleteObject', objectToDelete);
   }
 
@@ -252,13 +386,18 @@
     if (!scene || displayedMesh === next) return;
 
     clearSelection();
-    if (displayedMesh) scene.remove(displayedMesh);
+    if (displayedMesh) {
+      clearWallThicknessHeatmap();
+      scene.remove(displayedMesh);
+    }
     displayedMesh = next;
 
     if (displayedMesh) {
       scene.add(displayedMesh);
       fitCamera(displayedMesh);
     }
+    refreshWallHeatmapAvailability();
+    if (wallHeatmapEnabled) applyWallThicknessHeatmap();
   }
 
   $: if (scene) updateDisplayedMesh(mesh);
@@ -297,6 +436,44 @@
       </svg>
       <span class="control-label">Fit view</span>
     </button>
+
+    <label
+      class="heatmap-toggle"
+      class:active={wallHeatmapEnabled}
+      class:disabled={!wallHeatmapAvailable}
+      title={wallHeatmapAvailable
+        ? 'Color the cutter from thin to thick using measured wall thickness'
+        : 'Wall-thickness heatmap is available for cutters only'}
+    >
+      <input
+        type="checkbox"
+        checked={wallHeatmapEnabled}
+        on:change={handleWallHeatmapChange}
+        disabled={!wallHeatmapAvailable}
+        aria-describedby={wallHeatmapEnabled ? 'wall-heatmap-legend' : undefined}
+      />
+      <span class="heatmap-swatch" aria-hidden="true"></span>
+      <span class="control-label">Wall heatmap</span>
+    </label>
+
+    {#if wallHeatmapEnabled && wallHeatmapRange && wallHeatmapTarget !== null}
+      <div
+        id="wall-heatmap-legend"
+        class="heatmap-legend"
+        aria-label={`Measured wall thickness ranges from ${wallHeatmapRange.min.toFixed(2)} to ${wallHeatmapRange.max.toFixed(2)} millimeters. Target ${wallHeatmapTarget.toFixed(2)} millimeters.`}
+      >
+        <div class="heatmap-target">Target: {wallHeatmapTarget.toFixed(2)} mm</div>
+        <div
+          class="heatmap-scale"
+          style={`--heatmap-target-position: ${wallHeatmapTargetPosition}%`}
+          aria-hidden="true"
+        ></div>
+        <div class="heatmap-values">
+          <span>Min {wallHeatmapRange.min.toFixed(2)} mm</span>
+          <span>Max {wallHeatmapRange.max.toFixed(2)} mm</span>
+        </div>
+      </div>
+    {/if}
 
     {#if selectionMode && selectedObject}
       <button
@@ -353,7 +530,8 @@
     z-index: 10;
   }
 
-  .control-btn {
+  .control-btn,
+  .heatmap-toggle {
     display: flex;
     align-items: center;
     gap: var(--spacing-2);
@@ -372,15 +550,90 @@
     max-width: 100%;
   }
 
-  .control-btn:hover {
+  .heatmap-toggle {
+    user-select: none;
+  }
+
+  .heatmap-toggle input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--color-primary-500);
+    cursor: pointer;
+  }
+
+  .heatmap-swatch {
+    width: 32px;
+    height: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    background: linear-gradient(90deg, #2563eb 0%, #22c55e 50%, #f97316 100%);
+  }
+
+  .control-btn:hover,
+  .heatmap-toggle:hover:not(.disabled) {
     border-color: var(--color-primary-400);
     background: var(--surface-callout);
   }
 
-  .control-btn.active {
+  .control-btn.active,
+  .heatmap-toggle.active {
     border-color: var(--color-primary-500);
     background: var(--surface-callout);
     color: var(--color-primary-600);
+  }
+
+  .heatmap-toggle.disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .heatmap-toggle.disabled input {
+    cursor: not-allowed;
+  }
+
+  .heatmap-legend {
+    width: min(320px, 100%);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .heatmap-scale {
+    height: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    background: linear-gradient(
+      90deg,
+      #2563eb 0%,
+      #22c55e var(--heatmap-target-position),
+      #f97316 100%
+    );
+  }
+
+  .heatmap-target {
+    margin-bottom: var(--spacing-1);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+  }
+
+  .heatmap-values {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-1);
+    margin-top: var(--spacing-1);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.35;
+  }
+
+  .heatmap-values span:last-child {
+    text-align: right;
   }
 
   .control-btn.delete-btn {
@@ -423,6 +676,23 @@
 
     .control-label {
       display: none;
+    }
+
+    .heatmap-toggle {
+      padding: var(--spacing-2);
+      min-height: 44px;
+    }
+
+    .heatmap-toggle .control-label {
+      display: inline;
+    }
+
+    .heatmap-swatch {
+      width: 24px;
+    }
+
+    .heatmap-legend {
+      flex-basis: 100%;
     }
 
     .selection-hint {
