@@ -245,7 +245,7 @@ export function autoFixCollisions(
 ): { fixed: boolean; movedObjects: string[] } {
   const objects: THREE.Object3D[] = [];
   group.traverse((child) => {
-    if (child instanceof THREE.Mesh && child !== group) {
+    if (child instanceof THREE.Mesh) {
       objects.push(child);
     }
   });

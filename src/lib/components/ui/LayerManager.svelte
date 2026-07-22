@@ -34,6 +34,14 @@
     selectedLayerId = id;
   }
 
+  function handleLayerKeyDown(event: KeyboardEvent, id: string) {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      selectLayer(id);
+    }
+  }
+
   function handleLayerUpdate(layer: Layer) {
     dispatch('updateLayer', layer);
   }
@@ -113,6 +121,7 @@
           on:dragover={handleDragOver}
           on:drop={(e) => handleDrop(e, layer.id)}
           on:click={() => selectLayer(layer.id)}
+          on:keydown={(e) => handleLayerKeyDown(e, layer.id)}
           role="button"
           tabindex="0"
         >

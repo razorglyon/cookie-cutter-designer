@@ -138,15 +138,21 @@
 </script>
 
 <div class="ai-assistant">
-  <button class="ai-toggle" onclick={togglePanel} class:active={showPanel}>
-    🤖 AI Assistant {#if !apiKey}<span class="badge">Setup Required</span>{/if}
+  <button
+    class="ai-toggle"
+    onclick={togglePanel}
+    class:active={showPanel}
+    aria-expanded={showPanel}
+    aria-controls="ai-assistant-panel"
+  >
+    🤖 AI Assistant {#if !apiKey}<span class="badge">Not connected</span>{/if}
   </button>
 
   {#if showPanel}
-    <div class="ai-panel">
+    <div class="ai-panel" id="ai-assistant-panel">
       <div class="panel-header">
         <h3>🤖 AI Design Assistant</h3>
-        <button class="close-btn" onclick={() => (showPanel = false)}>×</button>
+        <button class="close-btn" onclick={() => (showPanel = false)} aria-label="Close AI Assistant">×</button>
       </div>
 
       {#if !apiKey}

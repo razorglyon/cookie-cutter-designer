@@ -1,189 +1,149 @@
 import * as THREE from 'three';
-import type { Mesh, Group } from 'three';
+import type { Group, Mesh } from 'three';
 
 export interface SliceLayer {
-  z: number;
+  /** Scene-space Y coordinate in millimetres. */
+  height: number;
+  /** Closed X/Z intersection contours. */
   contours: THREE.Vector2[][];
   geometry: THREE.BufferGeometry;
 }
 
 export interface SlicingOptions {
-  layerHeight: number; // in mm
-  minZ: number;
-  maxZ: number;
+  layerHeight: number;
+  minHeight: number;
+  maxHeight: number;
+}
+
+const INTERSECTION_EPSILON = 1e-6;
+const CONNECTION_EPSILON = 1e-3;
+const MAX_PREVIEW_LAYERS = 2000;
+
+function validateOptions(options: SlicingOptions): void {
+  if (!Number.isFinite(options.layerHeight) || options.layerHeight <= 0) {
+    throw new Error('Preview layer height must be a positive finite number.');
+  }
+  if (
+    !Number.isFinite(options.minHeight) ||
+    !Number.isFinite(options.maxHeight) ||
+    options.maxHeight <= options.minHeight
+  ) {
+    throw new Error('Preview bounds must define a positive finite height range.');
+  }
+  const count = Math.ceil((options.maxHeight - options.minHeight) / options.layerHeight);
+  if (count > MAX_PREVIEW_LAYERS) {
+    throw new Error(`Layer preview is limited to ${MAX_PREVIEW_LAYERS} layers.`);
+  }
 }
 
 /**
- * Slice a 3D mesh into horizontal layers for print preview
+ * Compute geometric triangle/plane intersections. This is a visual section preview,
+ * not a manufacturing slicer: it creates no infill, supports or printer toolpaths.
  */
 export function sliceMesh(
   object: Mesh | Group,
   options: SlicingOptions
 ): SliceLayer[] {
+  validateOptions(options);
+  object.updateMatrixWorld(true);
+  const count = Math.ceil((options.maxHeight - options.minHeight) / options.layerHeight);
   const layers: SliceLayer[] = [];
-  const { layerHeight, minZ, maxZ } = options;
 
-  // Calculate number of layers
-  const numLayers = Math.ceil((maxZ - minZ) / layerHeight);
-
-  for (let i = 0; i < numLayers; i++) {
-    const z = minZ + i * layerHeight;
-    const layer = sliceAtHeight(object, z);
-
-    if (layer.contours.length > 0) {
-      layers.push(layer);
-    }
+  for (let index = 0; index < count; index += 1) {
+    const height = Math.min(
+      options.minHeight + (index + 0.5) * options.layerHeight,
+      options.maxHeight - INTERSECTION_EPSILON
+    );
+    const layer = sliceAtHeight(object, height);
+    if (layer.contours.length > 0) layers.push(layer);
+    else layer.geometry.dispose();
   }
 
   return layers;
 }
 
-/**
- * Slice the mesh at a specific Z height
- */
-function sliceAtHeight(object: Mesh | Group, z: number): SliceLayer {
-  const contours: THREE.Vector2[][] = [];
-  const lineSegments: THREE.Vector3[] = [];
-
-  object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.geometry) {
-      const geometry = child.geometry;
-      const positionAttribute = geometry.getAttribute('position');
-
-      if (!positionAttribute) return;
-
-      const worldMatrix = child.matrixWorld;
-      const index = geometry.index;
-
-      // Get triangles
-      const triangleCount = index
-        ? index.count / 3
-        : positionAttribute.count / 3;
-
-      for (let i = 0; i < triangleCount; i++) {
-        const i0 = index ? index.getX(i * 3) : i * 3;
-        const i1 = index ? index.getX(i * 3 + 1) : i * 3 + 1;
-        const i2 = index ? index.getX(i * 3 + 2) : i * 3 + 2;
-
-        const v0 = new THREE.Vector3(
-          positionAttribute.getX(i0),
-          positionAttribute.getY(i0),
-          positionAttribute.getZ(i0)
-        ).applyMatrix4(worldMatrix);
-
-        const v1 = new THREE.Vector3(
-          positionAttribute.getX(i1),
-          positionAttribute.getY(i1),
-          positionAttribute.getZ(i1)
-        ).applyMatrix4(worldMatrix);
-
-        const v2 = new THREE.Vector3(
-          positionAttribute.getX(i2),
-          positionAttribute.getY(i2),
-          positionAttribute.getZ(i2)
-        ).applyMatrix4(worldMatrix);
-
-        // Check if triangle intersects the Z plane
-        const intersection = intersectTriangleWithPlane(v0, v1, v2, z);
-        if (intersection) {
-          lineSegments.push(...intersection);
-        }
-      }
-    }
-  });
-
-  // Convert line segments to contours
-  const contourPaths = connectLineSegments(lineSegments);
-  contours.push(...contourPaths);
-
-  // Create geometry for this layer
-  const geometry = createLayerGeometry(contours, z);
-
-  return { z, contours, geometry };
+function addUniquePoint(points: THREE.Vector3[], candidate: THREE.Vector3): void {
+  if (!points.some((point) => point.distanceToSquared(candidate) <= INTERSECTION_EPSILON ** 2)) {
+    points.push(candidate);
+  }
 }
 
-/**
- * Find intersection of a triangle with a horizontal plane at height Z
- */
-function intersectTriangleWithPlane(
-  v0: THREE.Vector3,
-  v1: THREE.Vector3,
-  v2: THREE.Vector3,
-  z: number
-): THREE.Vector3[] | null {
-  const vertices = [v0, v1, v2];
+function intersectTriangleAtHeight(
+  first: THREE.Vector3,
+  second: THREE.Vector3,
+  third: THREE.Vector3,
+  height: number
+): readonly [THREE.Vector3, THREE.Vector3] | null {
+  const vertices = [first, second, third];
   const intersections: THREE.Vector3[] = [];
 
-  // Check each edge of the triangle
-  for (let i = 0; i < 3; i++) {
-    const a = vertices[i];
-    const b = vertices[(i + 1) % 3];
+  for (let index = 0; index < 3; index += 1) {
+    const start = vertices[index];
+    const end = vertices[(index + 1) % 3];
+    const startDistance = start.y - height;
+    const endDistance = end.y - height;
 
-    // Check if edge crosses the plane
-    if ((a.z <= z && b.z >= z) || (a.z >= z && b.z <= z)) {
-      if (Math.abs(a.z - b.z) < 0.0001) continue; // Skip if edge is on the plane
-
-      // Linear interpolation to find intersection point
-      const t = (z - a.z) / (b.z - a.z);
-      const intersection = new THREE.Vector3(
-        a.x + t * (b.x - a.x),
-        a.y + t * (b.y - a.y),
-        z
+    if (Math.abs(startDistance) <= INTERSECTION_EPSILON && Math.abs(endDistance) <= INTERSECTION_EPSILON) {
+      continue;
+    }
+    if (Math.abs(startDistance) <= INTERSECTION_EPSILON) {
+      addUniquePoint(intersections, start.clone());
+      continue;
+    }
+    if (Math.abs(endDistance) <= INTERSECTION_EPSILON) {
+      addUniquePoint(intersections, end.clone());
+      continue;
+    }
+    if (startDistance * endDistance < 0) {
+      const ratio = (height - start.y) / (end.y - start.y);
+      addUniquePoint(
+        intersections,
+        new THREE.Vector3().lerpVectors(start, end, ratio)
       );
-      intersections.push(intersection);
     }
   }
 
-  // Should have 0 or 2 intersections
-  return intersections.length === 2 ? intersections : null;
+  return intersections.length === 2
+    ? [intersections[0], intersections[1]]
+    : null;
 }
 
-/**
- * Connect line segments into closed contours
- */
-function connectLineSegments(segments: THREE.Vector3[]): THREE.Vector2[][] {
-  if (segments.length === 0) return [];
+function pointsMatch(first: THREE.Vector2, second: THREE.Vector2): boolean {
+  return first.distanceToSquared(second) <= CONNECTION_EPSILON ** 2;
+}
 
+function connectLineSegments(
+  segments: ReadonlyArray<readonly [THREE.Vector2, THREE.Vector2]>
+): THREE.Vector2[][] {
+  const unused = segments.map(([first, second]) => [first.clone(), second.clone()] as const);
   const contours: THREE.Vector2[][] = [];
-  const used = new Set<number>();
 
-  for (let i = 0; i < segments.length; i += 2) {
-    if (used.has(i)) continue;
-
-    const contour: THREE.Vector2[] = [];
-    contour.push(new THREE.Vector2(segments[i].x, segments[i].y));
-    contour.push(new THREE.Vector2(segments[i + 1].x, segments[i + 1].y));
-    used.add(i);
-
-    // Try to extend the contour
+  while (unused.length > 0) {
+    const seed = unused.pop();
+    if (!seed) break;
+    const contour = [seed[0], seed[1]];
     let extended = true;
-    while (extended) {
+
+    while (extended && unused.length > 0) {
       extended = false;
-      const lastPoint = contour[contour.length - 1];
-
-      for (let j = 0; j < segments.length; j += 2) {
-        if (used.has(j)) continue;
-
-        const p0 = new THREE.Vector2(segments[j].x, segments[j].y);
-        const p1 = new THREE.Vector2(segments[j + 1].x, segments[j + 1].y);
-
-        const threshold = 0.01;
-
-        if (lastPoint.distanceTo(p0) < threshold) {
-          contour.push(p1);
-          used.add(j);
-          extended = true;
-          break;
-        } else if (lastPoint.distanceTo(p1) < threshold) {
-          contour.push(p0);
-          used.add(j);
-          extended = true;
-          break;
+      const tail = contour[contour.length - 1];
+      for (let index = 0; index < unused.length; index += 1) {
+        const [first, second] = unused[index];
+        if (pointsMatch(tail, first)) {
+          contour.push(second);
+        } else if (pointsMatch(tail, second)) {
+          contour.push(first);
+        } else {
+          continue;
         }
+        unused.splice(index, 1);
+        extended = true;
+        break;
       }
     }
 
-    if (contour.length > 2) {
+    if (contour.length >= 4 && pointsMatch(contour[0], contour[contour.length - 1])) {
+      contour.pop();
       contours.push(contour);
     }
   }
@@ -191,66 +151,66 @@ function connectLineSegments(segments: THREE.Vector3[]): THREE.Vector2[][] {
   return contours;
 }
 
-/**
- * Create line geometry for a layer
- */
-function createLayerGeometry(contours: THREE.Vector2[][], z: number): THREE.BufferGeometry {
-  const vertices: number[] = [];
-
+function createLayerGeometry(contours: THREE.Vector2[][], height: number): THREE.BufferGeometry {
+  const positions: number[] = [];
   for (const contour of contours) {
-    for (let i = 0; i < contour.length; i++) {
-      const p0 = contour[i];
-      const p1 = contour[(i + 1) % contour.length];
-
-      vertices.push(p0.x, z, p0.y);
-      vertices.push(p1.x, z, p1.y);
+    for (let index = 0; index < contour.length; index += 1) {
+      const start = contour[index];
+      const end = contour[(index + 1) % contour.length];
+      positions.push(start.x, height, start.y, end.x, height, end.y);
     }
   }
-
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   return geometry;
 }
 
-/**
- * Calculate optimal layer height based on model height
- */
+function sliceAtHeight(object: Mesh | Group, height: number): SliceLayer {
+  const segments: Array<readonly [THREE.Vector2, THREE.Vector2]> = [];
+  const first = new THREE.Vector3();
+  const second = new THREE.Vector3();
+  const third = new THREE.Vector3();
+
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const position = child.geometry.getAttribute('position');
+    if (!position) return;
+    const index = child.geometry.index;
+    const triangleCount = Math.floor((index?.count ?? position.count) / 3);
+
+    for (let triangle = 0; triangle < triangleCount; triangle += 1) {
+      const vertexIndices = [0, 1, 2].map((offset) =>
+        index ? index.getX(triangle * 3 + offset) : triangle * 3 + offset
+      );
+      first.fromBufferAttribute(position, vertexIndices[0]).applyMatrix4(child.matrixWorld);
+      second.fromBufferAttribute(position, vertexIndices[1]).applyMatrix4(child.matrixWorld);
+      third.fromBufferAttribute(position, vertexIndices[2]).applyMatrix4(child.matrixWorld);
+      const intersection = intersectTriangleAtHeight(first, second, third, height);
+      if (!intersection) continue;
+      segments.push([
+        new THREE.Vector2(intersection[0].x, intersection[0].z),
+        new THREE.Vector2(intersection[1].x, intersection[1].z)
+      ]);
+    }
+  });
+
+  const contours = connectLineSegments(segments);
+  return { height, contours, geometry: createLayerGeometry(contours, height) };
+}
+
 export function calculateOptimalLayerHeight(modelHeight: number): number {
-  // Common layer heights: 0.1mm, 0.15mm, 0.2mm, 0.3mm
   if (modelHeight < 10) return 0.1;
   if (modelHeight < 20) return 0.15;
   if (modelHeight < 50) return 0.2;
   return 0.3;
 }
 
-/**
- * Get bounding box of a mesh
- */
-export function getMeshBounds(object: Mesh | Group): { minZ: number; maxZ: number } {
-  const box = new THREE.Box3();
-  box.setFromObject(object);
-
-  return {
-    minZ: box.min.y,
-    maxZ: box.max.y
-  };
+export function getMeshBounds(object: Mesh | Group): { minHeight: number; maxHeight: number } {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  return { minHeight: box.min.y, maxHeight: box.max.y };
 }
 
-/**
- * Estimate print time based on layer count and complexity
- */
-export function estimateLayerPrintTime(layer: SliceLayer, printSpeed: number = 50): number {
-  // Calculate total path length
-  let totalLength = 0;
-  for (const contour of layer.contours) {
-    for (let i = 0; i < contour.length; i++) {
-      const p0 = contour[i];
-      const p1 = contour[(i + 1) % contour.length];
-      totalLength += p0.distanceTo(p1);
-    }
-  }
-
-  // Time = distance / speed (in mm/s) + overhead
-  return (totalLength / printSpeed) + 2; // 2 seconds overhead per layer
+export function disposeSliceLayers(layers: readonly SliceLayer[]): void {
+  for (const layer of layers) layer.geometry.dispose();
 }

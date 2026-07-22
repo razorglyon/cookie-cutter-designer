@@ -1,10 +1,13 @@
+import type { Object3D } from 'three';
+
 // Cookie Cutter Design Parameters
 export interface CookieCutterParams {
   wallThickness: number; // in mm (0.8-1.2)
   cuttingHeight: number; // in mm (10-15)
   totalHeight: number; // in mm (15-25)
   taperAngle: number; // in degrees (5-10)
-  scale: number; // scaling factor
+  targetSize: number; // final selected planar dimension in mm
+  sizeMode: SizeMode;
   handleStyle: HandleStyle;
   handleHeight: number; // in mm (5-10)
   enableHandle: boolean;
@@ -17,6 +20,7 @@ export interface CookieCutterParams {
 }
 
 export type HandleStyle = 'round' | 'chamfered' | 'rectangular' | 'flat' | 'none';
+export type SizeMode = 'longest' | 'width' | 'height';
 
 export interface Point2D {
   x: number;
@@ -29,14 +33,13 @@ export interface Path2D {
 }
 
 export interface CookieCutterModel {
-  mesh: any; // Three.js Mesh
+  mesh: Object3D;
   paths: Path2D[];
   params: CookieCutterParams;
 }
 
 export interface ExportOptions {
   binary: boolean;
-  includeMetadata: boolean;
 }
 
 export interface PrintabilityCheck {
@@ -51,7 +54,8 @@ export const DEFAULT_PARAMS: CookieCutterParams = {
   cuttingHeight: 12,
   totalHeight: 20,
   taperAngle: 7,
-  scale: 1.0,
+  targetSize: 75,
+  sizeMode: 'longest',
   handleStyle: 'round',
   handleHeight: 8,
   enableHandle: true,

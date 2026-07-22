@@ -1,76 +1,261 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import * as THREE from 'three';
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+  import {
+    createWallThicknessColorAttribute,
+    getTriangleWallThicknesses,
+    measureWallThicknessRange,
+    type WallThicknessRange
+  } from '../../utils/wallThicknessHeatmap';
 
   export let mesh: THREE.Mesh | THREE.Group | null = null;
-  export let buildPlateSize: number = 200; // Default 200mm
+  export let buildPlateSize = 200;
+
+  const dispatch = createEventDispatcher<{ deleteObject: THREE.Object3D }>();
 
   let container: HTMLDivElement;
   let scene: THREE.Scene;
   let camera: THREE.PerspectiveCamera;
   let renderer: THREE.WebGLRenderer;
   let controls: OrbitControls;
-  let animationId: number;
+  let animationId: number | undefined;
   let gridHelper: THREE.GridHelper;
   let buildPlateBorder: THREE.LineSegments;
+  let axesHelper: THREE.AxesHelper;
   let raycaster: THREE.Raycaster;
   let mouse: THREE.Vector2;
-  let selectedObject: THREE.Object3D | null = null;
-  let selectionMode: boolean = false;
-  let highlightMaterial: THREE.MeshStandardMaterial;
+  let displayedMesh: THREE.Mesh | THREE.Group | null = null;
+  let selectedObject: THREE.Mesh | null = null;
+  let selectionHelper: THREE.BoxHelper | null = null;
+  let selectionMode = false;
+  let renderedBuildPlateSize = buildPlateSize;
+  let themeObserver: MutationObserver | undefined;
+  let resizeObserver: ResizeObserver | undefined;
+  let wallHeatmapEnabled = false;
+  let wallHeatmapAvailable = false;
+  let wallHeatmapRange: WallThicknessRange | null = null;
+  let wallHeatmapTarget: number | null = null;
+  let wallHeatmapTargetPosition = 50;
+
+  interface HeatmapOverride {
+    readonly mesh: THREE.Mesh;
+    readonly sourceGeometry: THREE.BufferGeometry;
+    readonly sourceMaterial: THREE.Material | THREE.Material[];
+    readonly heatmapGeometry: THREE.BufferGeometry;
+    readonly heatmapMaterial: THREE.Material | THREE.Material[];
+  }
+
+  let heatmapOverrides: HeatmapOverride[] = [];
 
   onMount(() => {
     initThree();
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => handleResize());
+      resizeObserver.observe(container);
+    }
+    themeObserver = new MutationObserver(applySceneTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     animate();
   });
 
   onDestroy(() => {
-    if (animationId) {
-      cancelAnimationFrame(animationId);
-    }
+    if (animationId !== undefined) cancelAnimationFrame(animationId);
+
+    clearSelection();
+    clearWallThicknessHeatmap();
+    if (displayedMesh && scene) scene.remove(displayedMesh);
+    displayedMesh = null;
+
+    window.removeEventListener('resize', handleResize);
+    resizeObserver?.disconnect();
+    themeObserver?.disconnect();
+    renderer?.domElement.removeEventListener('click', handleClick);
+    controls?.dispose();
+
+    disposeRenderable(gridHelper);
+    disposeRenderable(buildPlateBorder);
+    disposeRenderable(axesHelper);
+
     if (renderer) {
+      renderer.renderLists.dispose();
       renderer.dispose();
-    }
-    if (controls) {
-      controls.dispose();
+      renderer.forceContextLoss();
+      renderer.domElement.remove();
     }
   });
 
-  function initThree() {
-    // Scene
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf0f0f0);
+  function disposeMaterial(material: THREE.Material | THREE.Material[]): void {
+    if (Array.isArray(material)) {
+      material.forEach((item) => item.dispose());
+    } else {
+      material.dispose();
+    }
+  }
 
-    // Raycaster for object picking
+  function disposeRenderable(object: THREE.Object3D | undefined): void {
+    if (!object) return;
+    scene?.remove(object);
+
+    if ('geometry' in object && object.geometry instanceof THREE.BufferGeometry) {
+      object.geometry.dispose();
+    }
+    if ('material' in object) {
+      const material = object.material;
+      if (material instanceof THREE.Material || Array.isArray(material)) {
+        disposeMaterial(material as THREE.Material | THREE.Material[]);
+      }
+    }
+  }
+
+  function targetWallThickness(object: THREE.Object3D | null): number | null {
+    const params = object?.userData.params as { wallThickness?: unknown } | undefined;
+    const value = params?.wallThickness;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  function cloneHeatmapMaterial(
+    material: THREE.Material | THREE.Material[]
+  ): THREE.Material | THREE.Material[] {
+    const clone = (source: THREE.Material): THREE.Material => {
+      const result = source.clone() as THREE.Material & {
+        color?: THREE.Color;
+        vertexColors?: boolean;
+      };
+      if (result.color instanceof THREE.Color) result.color.set(0xffffff);
+      if ('vertexColors' in result) result.vertexColors = true;
+      result.needsUpdate = true;
+      return result;
+    };
+
+    return Array.isArray(material) ? material.map(clone) : clone(material);
+  }
+
+  function clearWallThicknessHeatmap(): void {
+    for (const override of heatmapOverrides) {
+      override.mesh.geometry = override.sourceGeometry;
+      override.mesh.material = override.sourceMaterial;
+      override.heatmapGeometry.dispose();
+      disposeMaterial(override.heatmapMaterial);
+    }
+    heatmapOverrides = [];
+    wallHeatmapRange = null;
+    wallHeatmapTargetPosition = 50;
+  }
+
+  function refreshWallHeatmapAvailability(): void {
+    const target = targetWallThickness(displayedMesh);
+    wallHeatmapTarget = target;
+    let hasMeasurements = false;
+    displayedMesh?.traverse((child) => {
+      if (child instanceof THREE.Mesh && getTriangleWallThicknesses(child.geometry)) {
+        hasMeasurements = true;
+      }
+    });
+    wallHeatmapAvailable = target !== null && hasMeasurements;
+    if (!wallHeatmapAvailable) wallHeatmapEnabled = false;
+  }
+
+  function applyWallThicknessHeatmap(): void {
+    clearWallThicknessHeatmap();
+    const target = targetWallThickness(displayedMesh);
+    if (!displayedMesh || target === null) return;
+
+    const entries: Array<{
+      mesh: THREE.Mesh;
+      measurements: readonly number[];
+    }> = [];
+    const allMeasurements: number[] = [];
+    displayedMesh.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const measurements = getTriangleWallThicknesses(child.geometry);
+      if (!measurements) return;
+      entries.push({ mesh: child, measurements });
+      allMeasurements.push(...measurements);
+    });
+    if (allMeasurements.length === 0) return;
+
+    const range = measureWallThicknessRange(allMeasurements);
+    const maximum = Math.max(range.max, target);
+    const span = range.max - range.min;
+    wallHeatmapTargetPosition = span <= Number.EPSILON
+      ? 50
+      : THREE.MathUtils.clamp(((target - range.min) / span) * 100, 0, 100);
+    for (const { mesh: child, measurements } of entries) {
+      const heatmapGeometry = child.geometry.toNonIndexed();
+      const positions = heatmapGeometry.getAttribute('position');
+      if (positions.count !== measurements.length * 3) {
+        heatmapGeometry.dispose();
+        continue;
+      }
+      heatmapGeometry.setAttribute(
+        'color',
+        createWallThicknessColorAttribute(measurements, target, maximum, positions)
+      );
+      const heatmapMaterial = cloneHeatmapMaterial(child.material);
+      heatmapOverrides.push({
+        mesh: child,
+        sourceGeometry: child.geometry,
+        sourceMaterial: child.material,
+        heatmapGeometry,
+        heatmapMaterial
+      });
+      child.geometry = heatmapGeometry;
+      child.material = heatmapMaterial;
+    }
+
+    if (heatmapOverrides.length > 0) wallHeatmapRange = range;
+  }
+
+  function handleWallHeatmapChange(event: Event): void {
+    wallHeatmapEnabled = (event.currentTarget as HTMLInputElement).checked;
+    if (wallHeatmapEnabled && wallHeatmapAvailable) {
+      applyWallThicknessHeatmap();
+    } else {
+      clearWallThicknessHeatmap();
+    }
+  }
+
+  function createBuildPlate(size: number): void {
+    gridHelper = new THREE.GridHelper(size, 20, 0x666666, 0xcccccc);
+    scene.add(gridHelper);
+
+    const plateGeometry = new THREE.PlaneGeometry(size, size);
+    const borderGeometry = new THREE.EdgesGeometry(plateGeometry);
+    plateGeometry.dispose();
+
+    buildPlateBorder = new THREE.LineSegments(
+      borderGeometry,
+      new THREE.LineBasicMaterial({ color: 0xff6b6b, linewidth: 2 })
+    );
+    buildPlateBorder.rotation.x = -Math.PI / 2;
+    buildPlateBorder.position.y = 0.1;
+    scene.add(buildPlateBorder);
+    renderedBuildPlateSize = size;
+  }
+
+  function replaceBuildPlate(): void {
+    disposeRenderable(gridHelper);
+    disposeRenderable(buildPlateBorder);
+    createBuildPlate(buildPlateSize);
+  }
+
+  function initThree(): void {
+    scene = new THREE.Scene();
+    applySceneTheme();
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
-    // Highlight material for selected objects
-    highlightMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff6b6b,
-      emissive: 0xff0000,
-      emissiveIntensity: 0.3,
-      transparent: true,
-      opacity: 0.8
-    });
-
-    // Camera
-    camera = new THREE.PerspectiveCamera(
-      50,
-      container.clientWidth / container.clientHeight,
-      0.1,
-      1000
-    );
+    const width = Math.max(container.clientWidth, 1);
+    const height = Math.max(container.clientHeight, 1);
+    camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
     camera.position.set(0, 50, 100);
 
-    // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Controls
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
@@ -78,225 +263,146 @@
     controls.minDistance = 10;
     controls.maxDistance = 500;
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
-
     const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
     directionalLight2.position.set(-1, 0.5, -1);
     scene.add(directionalLight2);
 
-    // Build plate grid - dynamic size based on parameter
-    gridHelper = new THREE.GridHelper(buildPlateSize, 20, 0x666666, 0xcccccc);
-    scene.add(gridHelper);
-
-    // Build plate border to show the limits clearly
-    const borderGeometry = new THREE.EdgesGeometry(
-      new THREE.PlaneGeometry(buildPlateSize, buildPlateSize)
-    );
-    const borderMaterial = new THREE.LineBasicMaterial({
-      color: 0xff6b6b,
-      linewidth: 2
-    });
-    buildPlateBorder = new THREE.LineSegments(borderGeometry, borderMaterial);
-    buildPlateBorder.rotation.x = -Math.PI / 2;
-    buildPlateBorder.position.y = 0.1; // Slightly above grid to be visible
-    scene.add(buildPlateBorder);
-
-    // Axes helper (smaller, less intrusive)
-    const axesHelper = new THREE.AxesHelper(30);
+    createBuildPlate(buildPlateSize);
+    axesHelper = new THREE.AxesHelper(30);
     scene.add(axesHelper);
 
-    // Handle window resize
     window.addEventListener('resize', handleResize);
-
-    // Handle mouse clicks for selection
     renderer.domElement.addEventListener('click', handleClick);
+    updateDisplayedMesh(mesh);
   }
 
-  function handleClick(event: MouseEvent) {
-    if (!selectionMode) return;
+  function applySceneTheme(): void {
+    if (!scene) return;
+    const background = getComputedStyle(document.documentElement)
+      .getPropertyValue('--viewer-scene')
+      .trim() || '#f0f0f0';
+    scene.background = new THREE.Color(background);
+  }
 
-    // Calculate mouse position in normalized device coordinates
+  function handleClick(event: MouseEvent): void {
+    if (!selectionMode || !displayedMesh) return;
+
     const rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    // Update raycaster
     raycaster.setFromCamera(mouse, camera);
 
-    // Find intersected objects (only meshes within cookieCutter group, not grid/axes)
-    const cookieCutterGroup = scene.children.find(child => child.name === 'cookieCutter');
-    if (!cookieCutterGroup) return;
+    const clickedObject = raycaster
+      .intersectObject(displayedMesh, true)
+      .map((intersection) => intersection.object)
+      .find((object): object is THREE.Mesh => object instanceof THREE.Mesh);
 
-    const intersects = raycaster.intersectObjects(
-      cookieCutterGroup.children.filter(child => child instanceof THREE.Mesh),
-      true
-    );
-
-    if (intersects.length > 0) {
-      const clickedObject = intersects[0].object;
-
-      // Toggle selection
-      if (selectedObject === clickedObject) {
-        // Deselect
-        restoreOriginalMaterial(selectedObject);
-        selectedObject = null;
-      } else {
-        // Deselect previous
-        if (selectedObject) {
-          restoreOriginalMaterial(selectedObject);
-        }
-        // Select new
-        selectedObject = clickedObject;
-        highlightObject(selectedObject);
-      }
-    } else {
-      // Click on empty space - deselect
-      if (selectedObject) {
-        restoreOriginalMaterial(selectedObject);
-        selectedObject = null;
-      }
+    if (!clickedObject) {
+      clearSelection();
+      return;
     }
+
+    if (selectedObject === clickedObject) {
+      clearSelection();
+      return;
+    }
+
+    clearSelection();
+    selectedObject = clickedObject;
+    selectionHelper = new THREE.BoxHelper(clickedObject, 0xff6b6b);
+    scene.add(selectionHelper);
   }
 
-  function highlightObject(obj: THREE.Object3D) {
-    if (obj instanceof THREE.Mesh) {
-      // Store original material
-      (obj as any).originalMaterial = obj.material;
-      obj.material = highlightMaterial;
-    }
+  function clearSelection(): void {
+    if (selectionHelper) disposeRenderable(selectionHelper);
+    selectionHelper = null;
+    selectedObject = null;
   }
 
-  function restoreOriginalMaterial(obj: THREE.Object3D) {
-    if (obj instanceof THREE.Mesh && (obj as any).originalMaterial) {
-      obj.material = (obj as any).originalMaterial;
-      delete (obj as any).originalMaterial;
+  function deleteSelected(): void {
+    if (!selectedObject) return;
+
+    const objectToDelete = selectedObject;
+    clearSelection();
+    if (heatmapOverrides.length > 0) {
+      clearWallThicknessHeatmap();
+      wallHeatmapEnabled = false;
     }
+    dispatch('deleteObject', objectToDelete);
   }
 
-  function deleteSelected() {
-    if (selectedObject && selectedObject.parent) {
-      selectedObject.parent.remove(selectedObject);
-
-      // Dispose geometry and material
-      if (selectedObject instanceof THREE.Mesh) {
-        selectedObject.geometry?.dispose();
-        if (Array.isArray(selectedObject.material)) {
-          selectedObject.material.forEach(mat => mat.dispose());
-        } else {
-          selectedObject.material?.dispose();
-        }
-      }
-
-      selectedObject = null;
-    }
-  }
-
-  function toggleSelectionMode() {
+  function toggleSelectionMode(): void {
     selectionMode = !selectionMode;
-
-    // Deselect if leaving selection mode
-    if (!selectionMode && selectedObject) {
-      restoreOriginalMaterial(selectedObject);
-      selectedObject = null;
-    }
-
-    // Change cursor
-    if (renderer && renderer.domElement) {
-      renderer.domElement.style.cursor = selectionMode ? 'pointer' : 'default';
-    }
+    if (!selectionMode) clearSelection();
+    if (renderer) renderer.domElement.style.cursor = selectionMode ? 'pointer' : 'default';
   }
 
-  function handleResize() {
+  function handleResize(): void {
     if (!container || !camera || !renderer) return;
 
-    camera.aspect = container.clientWidth / container.clientHeight;
+    const width = Math.max(container.clientWidth, 1);
+    const height = Math.max(container.clientHeight, 1);
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(width, height);
   }
 
-  function animate() {
+  function animate(): void {
     animationId = requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
   }
 
-  // Update build plate when size changes
-  $: if (scene && gridHelper && buildPlateBorder) {
-    // Remove old grid and border
-    scene.remove(gridHelper);
-    scene.remove(buildPlateBorder);
-    gridHelper.geometry.dispose();
-    buildPlateBorder.geometry.dispose();
+  function fitCamera(object: THREE.Object3D): void {
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return;
 
-    // Create new grid with updated size
-    gridHelper = new THREE.GridHelper(buildPlateSize, 20, 0x666666, 0xcccccc);
-    scene.add(gridHelper);
-
-    // Create new border with updated size
-    const borderGeometry = new THREE.EdgesGeometry(
-      new THREE.PlaneGeometry(buildPlateSize, buildPlateSize)
-    );
-    const borderMaterial = new THREE.LineBasicMaterial({
-      color: 0xff6b6b,
-      linewidth: 2
-    });
-    buildPlateBorder = new THREE.LineSegments(borderGeometry, borderMaterial);
-    buildPlateBorder.rotation.x = -Math.PI / 2;
-    buildPlateBorder.position.y = 0.1;
-    scene.add(buildPlateBorder);
-  }
-
-  // Update mesh when it changes
-  $: if (scene && mesh) {
-    // Remove old mesh/group
-    const oldObject = scene.children.find(child => child.name === 'cookieCutter');
-    if (oldObject) {
-      scene.remove(oldObject);
-      // Dispose old geometry and material
-      oldObject.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry?.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach(mat => mat.dispose());
-          } else {
-            child.material?.dispose();
-          }
-        }
-      });
-    }
-
-    // Add new mesh/group
-    if (!mesh.name) {
-      mesh.name = 'cookieCutter';
-    }
-    scene.add(mesh);
-
-    // Center camera on mesh and position it better
-    const box = new THREE.Box3().setFromObject(mesh);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
+    const maxDimension = Math.max(size.x, size.y, size.z);
+    if (!Number.isFinite(maxDimension) || maxDimension <= 0) return;
 
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-    cameraZ *= 2.5; // Zoom out more for better view
-
-    // Position camera at an angle for better 3D view
+    const fieldOfView = camera.fov * (Math.PI / 180);
+    const cameraDistance = Math.abs(maxDimension / 2 / Math.tan(fieldOfView / 2)) * 2.5;
     camera.position.set(
-      center.x + cameraZ * 0.7,
-      center.y + cameraZ * 0.8,
-      center.z + cameraZ * 0.7
+      center.x + cameraDistance * 0.7,
+      center.y + cameraDistance * 0.8,
+      center.z + cameraDistance * 0.7
     );
-
     camera.lookAt(center);
     controls.target.copy(center);
     controls.update();
+  }
+
+  function fitCurrentView(): void {
+    if (displayedMesh) fitCamera(displayedMesh);
+  }
+
+  function updateDisplayedMesh(next: THREE.Mesh | THREE.Group | null): void {
+    if (!scene || displayedMesh === next) return;
+
+    clearSelection();
+    if (displayedMesh) {
+      clearWallThicknessHeatmap();
+      scene.remove(displayedMesh);
+    }
+    displayedMesh = next;
+
+    if (displayedMesh) {
+      scene.add(displayedMesh);
+      fitCamera(displayedMesh);
+    }
+    refreshWallHeatmapAvailability();
+    if (wallHeatmapEnabled) applyWallThicknessHeatmap();
+  }
+
+  $: if (scene) updateDisplayedMesh(mesh);
+  $: if (scene && gridHelper && buildPlateBorder && buildPlateSize !== renderedBuildPlateSize) {
+    replaceBuildPlate();
   }
 </script>
 
@@ -310,24 +416,77 @@
       class:active={selectionMode}
       on:click={toggleSelectionMode}
       title={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
+      aria-label={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
+      aria-pressed={selectionMode}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
       </svg>
-      {selectionMode ? 'Selection ON' : 'Selection OFF'}
+      <span class="control-label">{selectionMode ? 'Finish selecting' : 'Select part'}</span>
     </button>
+
+    <button
+      class="control-btn"
+      on:click={fitCurrentView}
+      title="Fit model in view"
+      aria-label="Fit model in view"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
+      </svg>
+      <span class="control-label">Fit view</span>
+    </button>
+
+    <label
+      class="heatmap-toggle"
+      class:active={wallHeatmapEnabled}
+      class:disabled={!wallHeatmapAvailable}
+      title={wallHeatmapAvailable
+        ? 'Color the cutter from thin to thick using measured wall thickness'
+        : 'Wall-thickness heatmap is available for cutters only'}
+    >
+      <input
+        type="checkbox"
+        checked={wallHeatmapEnabled}
+        on:change={handleWallHeatmapChange}
+        disabled={!wallHeatmapAvailable}
+        aria-describedby={wallHeatmapEnabled ? 'wall-heatmap-legend' : undefined}
+      />
+      <span class="heatmap-swatch" aria-hidden="true"></span>
+      <span class="control-label">Wall heatmap</span>
+    </label>
+
+    {#if wallHeatmapEnabled && wallHeatmapRange && wallHeatmapTarget !== null}
+      <div
+        id="wall-heatmap-legend"
+        class="heatmap-legend"
+        aria-label={`Measured wall thickness ranges from ${wallHeatmapRange.min.toFixed(2)} to ${wallHeatmapRange.max.toFixed(2)} millimeters. Target ${wallHeatmapTarget.toFixed(2)} millimeters.`}
+      >
+        <div class="heatmap-target">Target: {wallHeatmapTarget.toFixed(2)} mm</div>
+        <div
+          class="heatmap-scale"
+          style={`--heatmap-target-position: ${wallHeatmapTargetPosition}%`}
+          aria-hidden="true"
+        ></div>
+        <div class="heatmap-values">
+          <span>Min {wallHeatmapRange.min.toFixed(2)} mm</span>
+          <span>Max {wallHeatmapRange.max.toFixed(2)} mm</span>
+        </div>
+      </div>
+    {/if}
 
     {#if selectionMode && selectedObject}
       <button
         class="control-btn delete-btn"
         on:click={deleteSelected}
         title="Delete selected element"
+        aria-label="Delete selected element"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
-        Delete
+        <span class="control-label">Delete</span>
       </button>
     {/if}
 
@@ -343,6 +502,8 @@
   .viewer-wrapper {
     width: 100%;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
     position: relative;
   }
 
@@ -351,6 +512,7 @@
     height: 100%;
     position: relative;
     overflow: hidden;
+    touch-action: none;
   }
 
   :global(.viewer-container canvas) {
@@ -360,6 +522,7 @@
   .controls-overlay {
     position: absolute;
     top: 1rem;
+    right: 1rem;
     left: 1rem;
     display: flex;
     flex-direction: column;
@@ -367,50 +530,174 @@
     z-index: 10;
   }
 
-  .control-btn {
+  .control-btn,
+  .heatmap-toggle {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #4a5568;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    box-shadow: var(--shadow-sm);
+    min-height: 44px;
+    width: max-content;
+    max-width: 100%;
   }
 
-  .control-btn:hover {
-    border-color: #cbd5e0;
-    background: #f7fafc;
+  .heatmap-toggle {
+    user-select: none;
   }
 
-  .control-btn.active {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
+  .heatmap-toggle input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--color-primary-500);
+    cursor: pointer;
+  }
+
+  .heatmap-swatch {
+    width: 32px;
+    height: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    background: linear-gradient(90deg, #2563eb 0%, #22c55e 50%, #f97316 100%);
+  }
+
+  .control-btn:hover,
+  .heatmap-toggle:hover:not(.disabled) {
+    border-color: var(--color-primary-400);
+    background: var(--surface-callout);
+  }
+
+  .control-btn.active,
+  .heatmap-toggle.active {
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
+    color: var(--color-primary-600);
+  }
+
+  .heatmap-toggle.disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .heatmap-toggle.disabled input {
+    cursor: not-allowed;
+  }
+
+  .heatmap-legend {
+    width: min(320px, 100%);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .heatmap-scale {
+    height: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    background: linear-gradient(
+      90deg,
+      #2563eb 0%,
+      #22c55e var(--heatmap-target-position),
+      #f97316 100%
+    );
+  }
+
+  .heatmap-target {
+    margin-bottom: var(--spacing-1);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+  }
+
+  .heatmap-values {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-1);
+    margin-top: var(--spacing-1);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.35;
+  }
+
+  .heatmap-values span:last-child {
+    text-align: right;
   }
 
   .control-btn.delete-btn {
-    background: #fff5f5;
-    border-color: #fc8181;
-    color: #c53030;
+    background: var(--color-error-light);
+    border-color: var(--color-error);
+    color: var(--color-error);
   }
 
   .control-btn.delete-btn:hover {
-    background: #fed7d7;
-    border-color: #f56565;
+    background: var(--color-error-light);
+    border-color: var(--color-error);
   }
 
   .selection-hint {
-    padding: 0.5rem 0.75rem;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 6px;
-    font-size: 0.8rem;
-    color: #718096;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    box-shadow: var(--shadow-sm);
+  }
+
+  @media (max-width: 480px) {
+    .controls-overlay {
+      top: var(--spacing-2);
+      right: var(--spacing-2);
+      left: var(--spacing-2);
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: var(--spacing-1);
+    }
+
+    .control-btn {
+      width: 44px;
+      min-width: 44px;
+      padding: var(--spacing-2);
+      justify-content: center;
+    }
+
+    .control-label {
+      display: none;
+    }
+
+    .heatmap-toggle {
+      padding: var(--spacing-2);
+      min-height: 44px;
+    }
+
+    .heatmap-toggle .control-label {
+      display: inline;
+    }
+
+    .heatmap-swatch {
+      width: 24px;
+    }
+
+    .heatmap-legend {
+      flex-basis: 100%;
+    }
+
+    .selection-hint {
+      flex-basis: 100%;
+      width: 100%;
+    }
   }
 </style>

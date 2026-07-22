@@ -1,9 +1,37 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get, readonly, type Readable } from 'svelte/store';
 import type { CookieCutterParams, CookieCutterModel, PrintabilityCheck } from '../types/CookieCutter';
 import { DEFAULT_PARAMS } from '../types/CookieCutter';
+import {
+  CutterGenerationError,
+  GENERATION_LIMITS,
+  validateCookieCutterParams
+} from '../utils/generationValidation';
+
+function createDefaultParams(): Readonly<CookieCutterParams> {
+  return Object.freeze({ ...DEFAULT_PARAMS });
+}
+
+/** Convert persisted pre-mm settings without weakening runtime validation. */
+export function migrateLegacyCookieCutterParams(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const source = value as Record<string, unknown>;
+  if ('targetSize' in source && 'sizeMode' in source) return value;
+  if (!('scale' in source) || typeof source.scale !== 'number' || !Number.isFinite(source.scale)) {
+    return value;
+  }
+
+  const { scale, ...rest } = source;
+  return {
+    ...rest,
+    targetSize: DEFAULT_PARAMS.targetSize * scale,
+    sizeMode: 'longest'
+  };
+}
 
 // Parameters store
-export const params = writable<CookieCutterParams>(DEFAULT_PARAMS);
+const paramsStore = writable<Readonly<CookieCutterParams>>(createDefaultParams());
+export const params: Readable<Readonly<CookieCutterParams>> = readonly(paramsStore);
 
 // Uploaded file store
 export const uploadedFile = writable<File | null>(null);
@@ -19,6 +47,7 @@ export const isProcessing = writable<boolean>(false);
 
 // Error state
 export const error = writable<string | null>(null);
+export const parameterError = writable<string | null>(null);
 
 // Printability check
 export const printability = derived(
@@ -27,7 +56,24 @@ export const printability = derived(
 );
 
 // Check if parameters are valid for 3D printing
-function checkPrintability(params: CookieCutterParams): PrintabilityCheck {
+export function checkPrintability(value: unknown): PrintabilityCheck {
+  let params: Readonly<CookieCutterParams>;
+
+  try {
+    params = validateCookieCutterParams(value);
+  } catch (validationError) {
+    const message =
+      validationError instanceof CutterGenerationError
+        ? validationError.message
+        : 'The cutter parameters are invalid.';
+
+    return {
+      isValid: false,
+      warnings: [message],
+      recommendations: [],
+    };
+  }
+
   const warnings: string[] = [];
   const recommendations: string[] = [];
   let isValid = true;
@@ -80,14 +126,95 @@ function checkPrintability(params: CookieCutterParams): PrintabilityCheck {
   };
 }
 
+function minimumTotalHeight(value: Readonly<CookieCutterParams>): number {
+  if (value.mode === 'stamp') return value.totalHeight;
+  const activeHandle = value.enableHandle && value.handleStyle !== 'none';
+  return value.cuttingHeight + (activeHandle ? value.handleHeight : 0);
+}
+
+const TOTAL_HEIGHT_DEPENDENCIES = [
+  'cuttingHeight',
+  'handleHeight',
+  'enableHandle',
+  'handleStyle'
+] as const satisfies readonly (keyof CookieCutterParams)[];
+
+function hasOwnParam(
+  patch: Partial<CookieCutterParams>,
+  key: keyof CookieCutterParams
+): boolean {
+  return Object.prototype.hasOwnProperty.call(patch, key);
+}
+
+function buildParamUpdate(
+  current: Readonly<CookieCutterParams>,
+  patch: Partial<CookieCutterParams>
+): CookieCutterParams {
+  const candidate: CookieCutterParams = { ...current, ...patch };
+
+  const requiredTotalHeight = minimumTotalHeight(candidate);
+  const explicitlyUpdatesTotalHeight = hasOwnParam(patch, 'totalHeight');
+  const updatesTotalHeightDependency = TOTAL_HEIGHT_DEPENDENCIES.some((key) =>
+    hasOwnParam(patch, key)
+  );
+
+  if (candidate.totalHeight < requiredTotalHeight && explicitlyUpdatesTotalHeight) {
+    throw new CutterGenerationError(
+      'INVALID_PARAMS',
+      `The totalHeight parameter must be at least ${requiredTotalHeight} for the current cutting height and handle.`,
+      { field: 'totalHeight', value: candidate.totalHeight }
+    );
+  }
+
+  if (candidate.totalHeight < requiredTotalHeight && updatesTotalHeightDependency) {
+    if (requiredTotalHeight > GENERATION_LIMITS.maxTotalHeight) {
+      throw new CutterGenerationError(
+        'INVALID_PARAMS',
+        `The totalHeight required by this parameter update (${requiredTotalHeight}) exceeds the maximum totalHeight of ${GENERATION_LIMITS.maxTotalHeight}.`,
+        { field: 'totalHeight', value: requiredTotalHeight }
+      );
+    }
+
+    candidate.totalHeight = requiredTotalHeight;
+  }
+
+  return candidate;
+}
+
 // Helper functions to update params
 export function updateParam<K extends keyof CookieCutterParams>(
   key: K,
   value: CookieCutterParams[K]
-) {
-  params.update(p => ({ ...p, [key]: value }));
+): boolean {
+  return updateParams({ [key]: value } as Partial<CookieCutterParams>);
+}
+
+export function updateParams(patch: Partial<CookieCutterParams>): boolean {
+  const current = get(paramsStore);
+
+  try {
+    const candidate = buildParamUpdate(current, patch);
+    const validated = validateCookieCutterParams(candidate);
+    paramsStore.set(validated);
+    parameterError.set(null);
+    return true;
+  } catch (validationError) {
+    if (validationError instanceof CutterGenerationError) {
+      parameterError.set(validationError.message);
+      return false;
+    }
+
+    throw validationError;
+  }
+}
+
+export function setParams(value: unknown) {
+  const validated = validateCookieCutterParams(migrateLegacyCookieCutterParams(value));
+  paramsStore.set(validated);
+  parameterError.set(null);
 }
 
 export function resetParams() {
-  params.set(DEFAULT_PARAMS);
+  paramsStore.set(createDefaultParams());
+  parameterError.set(null);
 }

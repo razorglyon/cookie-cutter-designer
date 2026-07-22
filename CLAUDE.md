@@ -37,7 +37,7 @@ pnpm run check
 - **3D Rendering**: Three.js (0.181.x)
 - **Vector Operations**: js-angusj-clipper (Clipper.js WebAssembly)
 - **Image Vectorization**: imagetracer
-- **Geometric Operations**: @jscad/modeling, makerjs, paper, tess2
+- **Geometric Operations**: @jscad/modeling, paper, tess2
 
 ## Architecture
 

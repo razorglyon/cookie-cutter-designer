@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { params, updateParam } from '../../stores/cookieCutterStore';
-  import type { HandleStyle } from '../../types/CookieCutter';
+  import { parameterError, params, updateParam } from '../../stores/cookieCutterStore';
+  import type { HandleStyle, SizeMode } from '../../types/CookieCutter';
 
   const handleStyles: { value: HandleStyle; label: string }[] = [
     { value: 'none', label: 'No Handle' },
@@ -9,21 +9,33 @@
     { value: 'chamfered', label: 'Chamfered' },
     { value: 'rectangular', label: 'Rectangular' }
   ];
+
+  const sizeModes: { value: SizeMode; label: string }[] = [
+    { value: 'longest', label: 'Longest side' },
+    { value: 'width', label: 'Width' },
+    { value: 'height', label: 'Height' }
+  ];
 </script>
 
 <div class="parameter-panel">
   <h2>Cookie Cutter Parameters</h2>
 
-  <!-- Mode Selection -->
+  {#if $parameterError}
+    <div class="parameter-error" role="alert">
+      <strong>Parameter update failed</strong>
+      <span>{$parameterError}</span>
+    </div>
+  {/if}
+
   <div class="param-group">
-    <h3>Mode</h3>
+    <h3>Design Type</h3>
     <div class="param-control">
-      <label>Design Type</label>
       <div class="mode-selector">
         <button
           class="mode-btn"
           class:active={$params.mode === 'cutter'}
           on:click={() => updateParam('mode', 'cutter')}
+          aria-pressed={$params.mode === 'cutter'}
         >
           ✂️ Cutter
         </button>
@@ -31,6 +43,7 @@
           class="mode-btn"
           class:active={$params.mode === 'stamp'}
           on:click={() => updateParam('mode', 'stamp')}
+          aria-pressed={$params.mode === 'stamp'}
         >
           🔖 Stamp
         </button>
@@ -43,83 +56,78 @@
     {#if $params.mode === 'stamp'}
       <div class="param-control">
         <label for="stampDepth">
-          Stamp Depth: {$params.stampDepth.toFixed(1)}mm
+          Stamp Depth: {$params.stampDepth.toFixed(1)} mm
         </label>
         <input
           id="stampDepth"
           type="range"
+          aria-valuetext={`${$params.stampDepth.toFixed(1)} millimeters`}
           min="1.0"
           max="5.0"
           step="0.5"
           value={$params.stampDepth}
           on:input={(e) => updateParam('stampDepth', parseFloat(e.currentTarget.value))}
         />
-        <div class="param-hint">Depth of the raised relief</div>
+        <div class="param-hint">Range: 1–5 mm · Depth of the raised relief</div>
       </div>
 
-      <div class="param-control">
-        <label>
-          <input
-            type="checkbox"
-            checked={$params.stampBase}
-            on:change={(e) => updateParam('stampBase', e.currentTarget.checked)}
-          />
-          Add Base Plate
-        </label>
-        <div class="param-hint">Adds a solid base for the stamp</div>
-      </div>
+      <div class="param-hint">A 4 mm base is always added so every relief remains one printable tool.</div>
     {/if}
   </div>
 
   <div class="param-group">
     <h3>Dimensions</h3>
 
+    {#if $params.mode === 'cutter'}
     <div class="param-control">
       <label for="wallThickness">
-        Wall Thickness: {$params.wallThickness.toFixed(1)}mm
+        Wall Thickness: {$params.wallThickness.toFixed(1)} mm
       </label>
       <input
         id="wallThickness"
         type="range"
+        aria-valuetext={`${$params.wallThickness.toFixed(1)} millimeters`}
         min="0.6"
         max="2.0"
         step="0.1"
         value={$params.wallThickness}
         on:input={(e) => updateParam('wallThickness', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 0.8-1.2mm</div>
+      <div class="param-hint">Range: 0.6–2 mm · Recommended: 0.8–1.2 mm</div>
     </div>
 
     <div class="param-control">
       <label for="cuttingHeight">
-        Cutting Height: {$params.cuttingHeight.toFixed(0)}mm
+        Cutting Height: {$params.cuttingHeight.toFixed(0)} mm
       </label>
       <input
         id="cuttingHeight"
         type="range"
+        aria-valuetext={`${$params.cuttingHeight.toFixed(0)} millimeters`}
         min="8"
         max="25"
         step="1"
         value={$params.cuttingHeight}
         on:input={(e) => updateParam('cuttingHeight', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 10-15mm</div>
+      <div class="param-hint">Range: 8–25 mm · Recommended: 10–15 mm</div>
     </div>
 
     <div class="param-control">
       <label for="totalHeight">
-        Total Height: {$params.totalHeight.toFixed(0)}mm
+        Total Height: {$params.totalHeight.toFixed(0)} mm
       </label>
       <input
         id="totalHeight"
         type="range"
+        aria-valuetext={`${$params.totalHeight.toFixed(0)} millimeters`}
         min="15"
         max="40"
         step="1"
         value={$params.totalHeight}
         on:input={(e) => updateParam('totalHeight', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 15-25mm</div>
+      <div class="param-hint">Range: 15–40 mm · Recommended: 15–25 mm</div>
     </div>
 
     <div class="param-control">
@@ -129,44 +137,59 @@
       <input
         id="taperAngle"
         type="range"
+        aria-valuetext={`${$params.taperAngle.toFixed(0)} degrees`}
         min="0"
         max="15"
         step="1"
         value={$params.taperAngle}
         on:input={(e) => updateParam('taperAngle', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 5-10°</div>
+      <div class="param-hint">Range: 0–15° · Recommended: 5–10°</div>
     </div>
+    {/if}
 
-    <div class="param-control">
-      <label for="scale">
-        Scale: {($params.scale * 100).toFixed(0)}%
-      </label>
-      <input
-        id="scale"
-        type="range"
-        min="0.5"
-        max="3.0"
-        step="0.1"
-        value={$params.scale}
-        on:input={(e) => updateParam('scale', parseFloat(e.currentTarget.value))}
-      />
+    <div class="param-control size-control">
+      <label for="targetSize">Final Size</label>
+      <div class="size-inputs">
+        <input
+          id="targetSize"
+          type="number"
+          aria-label="Final size in millimeters"
+          min="10"
+          max={$params.buildPlateSize}
+          step="1"
+          value={$params.targetSize}
+          on:change={(e) => updateParam('targetSize', e.currentTarget.valueAsNumber)}
+        />
+        <span>mm</span>
+        <select
+          aria-label="Dimension controlled by final size"
+          value={$params.sizeMode}
+          on:change={(e) => updateParam('sizeMode', e.currentTarget.value as SizeMode)}
+        >
+          {#each sizeModes as mode}
+            <option value={mode.value}>{mode.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="param-hint">Controls the measured outer dimension of the generated model.</div>
     </div>
 
     <div class="param-control">
       <label for="buildPlateSize">
-        Build Plate Size: {$params.buildPlateSize.toFixed(0)}mm ({($params.buildPlateSize / 10).toFixed(0)}cm)
+        Build Plate Size: {$params.buildPlateSize.toFixed(0)} mm ({($params.buildPlateSize / 10).toFixed(0)} cm)
       </label>
       <input
         id="buildPlateSize"
         type="range"
+        aria-valuetext={`${$params.buildPlateSize.toFixed(0)} millimeters`}
         min="100"
         max="300"
         step="10"
         value={$params.buildPlateSize}
         on:input={(e) => updateParam('buildPlateSize', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Common sizes: 150mm, 200mm, 220mm, 250mm</div>
+      <div class="param-hint">Range: 100–300 mm · Common sizes: 150, 200, 220, 250 mm</div>
     </div>
   </div>
 
@@ -189,11 +212,12 @@
     {#if $params.handleStyle !== 'none'}
       <div class="param-control">
         <label for="handleHeight">
-          Handle Height: {$params.handleHeight.toFixed(0)}mm
+          Handle Height: {$params.handleHeight.toFixed(0)} mm
         </label>
         <input
           id="handleHeight"
           type="range"
+          aria-valuetext={`${$params.handleHeight.toFixed(0)} millimeters`}
           min="3"
           max="15"
           step="1"
@@ -207,93 +231,60 @@
   <div class="param-group">
     <h3>Advanced</h3>
 
-    <div class="param-control checkbox">
-      <input
-        id="enableEmbossing"
-        type="checkbox"
-        checked={$params.enableEmbossing}
-        on:change={(e) => updateParam('enableEmbossing', e.currentTarget.checked)}
-      />
-      <label for="enableEmbossing">Enable Embossing/Stamp</label>
-    </div>
-
-    {#if $params.enableEmbossing}
-      <div class="param-control">
-        <label for="embossDepth">
-          Emboss Depth: {$params.embossDepth.toFixed(1)}mm
-        </label>
-        <input
-          id="embossDepth"
-          type="range"
-          min="1.0"
-          max="5.0"
-          step="0.5"
-          value={$params.embossDepth}
-          on:input={(e) => updateParam('embossDepth', parseFloat(e.currentTarget.value))}
-        />
-        <div class="param-hint">Typical: 2-3mm</div>
+    <div class="param-control">
+      <span class="control-label">Standalone Embossing</span>
+      <div class="param-hint">
+        Not available in cutter mode. Select Stamp mode and use Stamp Depth for raised relief.
       </div>
-    {/if}
+    </div>
   </div>
 </div>
 
 <style>
   .parameter-panel {
-    padding: 1rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    min-width: 0;
+    padding: var(--spacing-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-card);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
+    overflow-wrap: anywhere;
   }
 
-  .mode-selector {
+  .parameter-error {
     display: flex;
-    gap: 0.5rem;
-    margin: 0.5rem 0;
-  }
-
-  .mode-btn {
-    flex: 1;
-    padding: 0.75rem 1rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #4a5568;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .mode-btn:hover {
-    border-color: #cbd5e0;
-    background: #f7fafc;
-  }
-
-  .mode-btn.active {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
-    font-weight: 600;
+    flex-direction: column;
+    gap: var(--spacing-1);
+    margin-bottom: var(--spacing-4);
+    padding: var(--spacing-3);
+    border-left: 4px solid var(--color-error);
+    border-radius: var(--radius-md);
+    background: var(--color-error-light);
+    color: var(--color-error);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
   }
 
   h2 {
-    margin: 0 0 1rem;
-    font-size: 1.25rem;
-    color: #2d3748;
-    font-weight: 600;
+    margin: 0 0 var(--spacing-4);
+    color: var(--text-primary);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
   }
 
   h3 {
-    margin: 0.75rem 0 0.5rem;
-    font-size: 1rem;
-    color: #4a5568;
-    font-weight: 600;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 0.4rem;
+    margin: var(--spacing-3) 0 var(--spacing-2);
+    padding-bottom: var(--spacing-2);
+    border-bottom: 1px solid var(--border-default);
+    color: var(--text-secondary);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
   }
 
   .param-group {
-    margin-bottom: 1rem;
+    margin-bottom: var(--spacing-4);
   }
 
   .param-group:first-of-type h3 {
@@ -301,96 +292,158 @@
   }
 
   .param-control {
-    margin-bottom: 0.9rem;
+    min-width: 0;
+    margin-bottom: var(--spacing-4);
   }
 
-  .param-control.checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .param-control.checkbox input[type="checkbox"] {
-    width: auto;
-    margin: 0;
-  }
-
-  label {
+  label,
+  .control-label {
     display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    color: #4a5568;
-    font-size: 0.95rem;
+    margin-bottom: var(--spacing-2);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
   }
 
-  .param-control.checkbox label {
-    margin: 0;
+  .mode-selector {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-2);
+  }
+
+  .mode-btn {
+    min-height: var(--button-height);
+    flex: 1;
+    min-width: 0;
+    padding: 0 var(--spacing-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-input);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  }
+
+  .mode-btn:hover {
+    border-color: var(--color-primary-400);
+    background: var(--surface-callout);
+  }
+
+  .mode-btn.active {
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
+    color: var(--color-primary-600);
+    font-weight: var(--font-weight-semibold);
   }
 
   input[type="range"] {
     width: 100%;
-    height: 6px;
-    border-radius: 3px;
-    background: #e2e8f0;
+    height: 44px;
+    background: transparent;
     outline: none;
+    appearance: none;
     -webkit-appearance: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
   }
 
   input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
+    margin-top: -9px;
     border-radius: 50%;
-    background: #4299e1;
+    background: var(--color-primary-600);
     cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  input[type="range"]::-webkit-slider-thumb:hover {
-    background: #3182ce;
+    appearance: none;
+    -webkit-appearance: none;
   }
 
   input[type="range"]::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #4299e1;
-    cursor: pointer;
+    width: 24px;
+    height: 24px;
     border: none;
-    transition: background 0.2s;
-  }
-
-  input[type="range"]::-moz-range-thumb:hover {
-    background: #3182ce;
-  }
-
-  select {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
-    background: white;
-    font-size: 0.95rem;
-    color: #2d3748;
+    border-radius: 50%;
+    background: var(--color-primary-600);
     cursor: pointer;
-    transition: border-color 0.2s;
   }
 
-  select:hover {
-    border-color: #a0aec0;
+  input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
   }
 
-  select:focus {
-    outline: none;
-    border-color: #4299e1;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  select,
+  input[type="number"] {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--input-height);
+    padding: 0 var(--spacing-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-input);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+  }
+
+  .size-inputs {
+    display: grid;
+    grid-template-columns: minmax(5rem, 0.7fr) auto minmax(8rem, 1.3fr);
+    align-items: center;
+    gap: var(--spacing-2);
+    min-width: 0;
+  }
+
+  .size-inputs span {
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
   }
 
   .param-hint {
-    margin-top: 0.25rem;
-    font-size: 0.8rem;
-    color: #718096;
-    font-style: italic;
+    margin-top: var(--spacing-1);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-normal);
+  }
+
+  @media (max-width: 768px) {
+    .mode-btn,
+    select,
+    input[type="number"] {
+      min-height: 44px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .parameter-panel {
+      padding: var(--spacing-3);
+    }
+
+    h2 {
+      font-size: var(--font-size-lg);
+      line-height: var(--line-height-tight);
+    }
+
+    .param-control {
+      margin-bottom: var(--spacing-3);
+    }
+  }
+
+  @media (max-width: 380px) {
+    .size-inputs {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .size-inputs select {
+      grid-column: 1 / -1;
+    }
   }
 </style>

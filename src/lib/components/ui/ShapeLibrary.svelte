@@ -1,16 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { SHAPE_LIBRARY, getAllCategories, getShapesByCategory, type ShapeDefinition } from '../../utils/shapeLibrary';
+  import { getAllCategories, getShapesByCategory, type ShapeDefinition } from '../../utils/shapeLibrary';
 
   const dispatch = createEventDispatcher<{
-    selectShape: string; // SVG string
+    selectShape: { svg: string; name: string };
   }>();
 
   let selectedCategory: ShapeDefinition['category'] = 'basic';
-  let isOpen = false;
 
   const categories = getAllCategories();
-  const categoryLabels: Record<string, string> = {
+  const categoryLabels: Record<ShapeDefinition['category'], string> = {
     basic: 'Basic',
     seasonal: 'Seasonal',
     animals: 'Animals',
@@ -20,223 +19,181 @@
 
   $: shapes = getShapesByCategory(selectedCategory);
 
-  function selectShape(shape: ShapeDefinition) {
-    dispatch('selectShape', shape.svg);
-    isOpen = false;
-  }
-
-  function toggleLibrary() {
-    isOpen = !isOpen;
+  function selectShape(shape: ShapeDefinition): void {
+    dispatch('selectShape', { svg: shape.svg, name: shape.name });
   }
 </script>
 
-<div class="shape-library">
-  <button class="library-toggle" on:click={toggleLibrary}>
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
-    </svg>
-    Shape Library
-  </button>
-
-  {#if isOpen}
-    <div class="library-modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Shape Library</h3>
-          <button class="close-btn" on:click={() => isOpen = false}>✕</button>
-        </div>
-
-        <div class="categories">
-          {#each categories as category}
-            <button
-              class="category-btn"
-              class:active={selectedCategory === category}
-              on:click={() => selectedCategory = category}
-            >
-              {categoryLabels[category]}
-            </button>
-          {/each}
-        </div>
-
-        <div class="shapes-grid">
-          {#each shapes as shape (shape.id)}
-            <button
-              class="shape-card"
-              on:click={() => selectShape(shape)}
-              title={shape.name}
-            >
-              <div class="shape-icon">{shape.icon}</div>
-              <div class="shape-name">{shape.name}</div>
-            </button>
-          {/each}
-        </div>
-      </div>
+<section class="shape-library" aria-labelledby="shape-library-title">
+  <header class="library-header">
+    <div class="header-icon" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
+      </svg>
     </div>
-  {/if}
-</div>
+    <div>
+      <h2 id="shape-library-title">Shape Library</h2>
+      <p>Choose a ready-made shape to start your design.</p>
+    </div>
+  </header>
+
+  <div class="categories" role="group" aria-label="Shape categories">
+    {#each categories as category}
+      <button
+        class="category-filter"
+        class:active={selectedCategory === category}
+        on:click={() => selectedCategory = category}
+        aria-pressed={selectedCategory === category}
+      >
+        {categoryLabels[category]}
+      </button>
+    {/each}
+  </div>
+
+  <div class="shapes-grid" aria-live="polite">
+    {#each shapes as shape (shape.id)}
+      <button
+        class="shape-card"
+        data-shape-id={shape.id}
+        on:click={() => selectShape(shape)}
+        aria-label={`Use ${shape.name} shape`}
+      >
+        <span class="shape-icon" aria-hidden="true">{shape.icon}</span>
+        <span class="shape-name">{shape.name}</span>
+      </button>
+    {/each}
+  </div>
+</section>
 
 <style>
   .shape-library {
-    position: relative;
-  }
-
-  .library-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #4a5568;
-    cursor: pointer;
-    transition: all 0.2s;
-    width: 100%;
-  }
-
-  .library-toggle:hover {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
-  }
-
-  .library-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 1rem;
-  }
-
-  .modal-content {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    max-width: 600px;
-    width: 100%;
-    max-height: 80vh;
     display: flex;
     flex-direction: column;
+    gap: var(--spacing-4);
+    min-height: 100%;
   }
 
-  .modal-header {
+  .library-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
+    align-items: flex-start;
+    gap: var(--spacing-3);
+    padding: var(--spacing-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-card);
+    box-shadow: var(--shadow-sm);
   }
 
-  .modal-header h3 {
+  .header-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: var(--radius-md);
+    background: var(--surface-callout);
+    color: var(--color-primary-600);
+  }
+
+  h2 {
     margin: 0;
-    font-size: 1.25rem;
-    color: #2d3748;
+    color: var(--text-primary);
+    font-size: var(--font-size-xl);
+    line-height: var(--line-height-tight);
   }
 
-  .close-btn {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    font-size: 1.5rem;
-    color: #a0aec0;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 0.2s;
-  }
-
-  .close-btn:hover {
-    background: #f7fafc;
-    color: #4a5568;
+  .library-header p {
+    margin: var(--spacing-1) 0 0;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
   }
 
   .categories {
     display: flex;
-    gap: 0.5rem;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
+    gap: var(--spacing-2);
+    padding-bottom: var(--spacing-1);
     overflow-x: auto;
   }
 
-  .category-btn {
-    padding: 0.5rem 1rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #4a5568;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
+  .category-filter {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 var(--spacing-3);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-full);
+    background: var(--surface-card);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   }
 
-  .category-btn:hover {
-    border-color: #cbd5e0;
-    background: #f7fafc;
+  .category-filter:hover {
+    border-color: var(--color-primary-400);
+    background: var(--surface-callout);
   }
 
-  .category-btn.active {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
+  .category-filter.active {
+    border-color: var(--color-primary-600);
+    background: var(--color-primary-600);
+    color: white;
   }
 
   .shapes-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 1rem;
-    padding: 1.5rem;
-    overflow-y: auto;
-    flex: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-3);
+    padding-bottom: var(--spacing-4);
   }
 
   .shape-card {
     display: flex;
+    min-height: 116px;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
+    justify-content: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-card);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-xs);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
   }
 
   .shape-card:hover {
-    border-color: #4299e1;
-    background: #ebf8ff;
+    border-color: var(--color-primary-400);
+    background: var(--surface-callout);
+    box-shadow: var(--shadow-md);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.2);
   }
 
   .shape-icon {
-    font-size: 2.5rem;
+    display: grid;
+    place-items: center;
+    min-height: 44px;
+    font-size: 2.25rem;
+    line-height: 1;
+  }
+
+  .shape-card[data-shape-id='square'] .shape-icon {
+    filter: drop-shadow(0 0 1px var(--text-primary));
   }
 
   .shape-name {
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: #4a5568;
+    color: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
     text-align: center;
   }
 
-  .shape-card:hover .shape-name {
-    color: #2c5282;
+  @media (max-width: 360px) {
+    .shapes-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
