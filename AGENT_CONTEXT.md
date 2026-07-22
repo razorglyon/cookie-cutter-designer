@@ -5,7 +5,7 @@
 - GitHub : `razorglyon/cookie-cutter-designer`
 - Clone persistant : `/workspace/cookie-cutter-designer`
 - Branche par défaut : `main`
-- Branche courante : `fix/robust-cutter-generation`
+- Branche courante : `perf/split-heavy-bundles`
 - Push interdit sans GO explicite de Rza.
 
 ## Stack
@@ -41,15 +41,17 @@
 
 ## État actuel
 
-- Branche : `fix/robust-cutter-generation`
-- Dernière action : intégration du contrôleur de génération UI, ownership Three.js et nettoyage complet du viewer.
-- Tests : `145/145` réussis.
+- Branche : `perf/split-heavy-bundles`
+- Branche parente publiée : `fix/robust-cutter-generation` à `ffbe4e2`.
+- Dernière action : chargement différé des panneaux optionnels et isolation de Three.js dans un chunk fournisseur stable.
+- Tests : `146/146` réussis, dont un smoke test DOM des panneaux chargés dynamiquement.
 - Typecheck : `0 erreur, 0 avertissement`.
-- Build : réussi ; avertissement connu pour deux chunks supérieurs à 500 kB.
+- Build : réussi sans avertissement ; budgets intégrés de 200 KiB pour l'entrée et 600 KiB pour les chunks asynchrones.
+- Bundle : entrée `827,48 → 135,81 kB` ; chargement initial JS `-12,6 %`, gzip `-13,7 %`, CSS `-64,4 %`.
 - Audit : aucune vulnérabilité connue.
-- Smoke HTTP : `200`, point de montage `#app` présent.
-- État Git : changements du dernier lot non commités.
-- À faire ensuite : revue finale du diff, puis commit local atomique après validation du périmètre.
+- Smoke HTTP : index `200` et `36/36` assets servis.
+- État Git : optimisation prête pour un commit local séparé ; aucun push de cette branche.
+- À faire ensuite : commit local, puis demander un nouveau GO avant tout push.
 
 ## Décisions / pièges connus
 
@@ -61,6 +63,10 @@
 - La sélection du viewer utilise un `BoxHelper` local pour ne pas remplacer les matériaux du modèle.
 - L’embossage autonome est refusé explicitement ; le mode Stamp est l’alternative prise en charge.
 - L’export STL refuse les objets vides, non finis, dégénérés ou ouverts.
+- Les panneaux optionnels doivent rester chargés par `import()` uniquement à l'ouverture de leur catégorie.
+- Three.js reste préchargé car le cœur de l'application en dépend ; il est isolé pour améliorer le cache navigateur.
+- Le runtime Clipper/WASM reste asynchrone et séparé du chargement initial.
+- Le plugin Vite `bundle-budget` bloque toute régression dépassant les budgets documentés.
 
 ## Documentation
 

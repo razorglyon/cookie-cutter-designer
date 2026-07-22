@@ -2,23 +2,9 @@
   import { onDestroy, tick } from 'svelte';
   import FileUpload from './lib/components/ui/FileUpload.svelte';
   import ParameterPanel from './lib/components/ui/ParameterPanel.svelte';
-  import PrintabilityInfo from './lib/components/ui/PrintabilityInfo.svelte';
   import ThreeViewer from './lib/components/viewer/ThreeViewer.svelte';
   import ShapeLibrary from './lib/components/ui/ShapeLibrary.svelte';
   import HistoryPanel from './lib/components/ui/HistoryPanel.svelte';
-  import OptimizationPanel from './lib/components/ui/OptimizationPanel.svelte';
-  import SlicePreview from './lib/components/ui/SlicePreview.svelte';
-  import BezierEditor from './lib/components/ui/BezierEditor.svelte';
-  import MaterialManager from './lib/components/ui/MaterialManager.svelte';
-  import PatternGenerator from './lib/components/ui/PatternGenerator.svelte';
-  import AdvancedExport from './lib/components/ui/AdvancedExport.svelte';
-  import CloudGallery from './lib/components/ui/CloudGallery.svelte';
-  import BatchMode from './lib/components/ui/BatchMode.svelte';
-  import CollisionDetector from './lib/components/ui/CollisionDetector.svelte';
-  import AIImageProcessor from './lib/components/ui/AIImageProcessor.svelte';
-  import BooleanOperations from './lib/components/ui/BooleanOperations.svelte';
-  import GeminiAPIConfig from './lib/components/ui/GeminiAPIConfig.svelte';
-  import AIAssistant from './lib/components/ui/AIAssistant.svelte';
 
   import {
     uploadedFile,
@@ -579,37 +565,73 @@
           <ShapeLibrary on:selectShape={(e) => handleShapeSelect(e.detail)} />
 
         {:else if activeCategory === 'advanced'}
-          <AIImageProcessor on:processedImage={handleAIProcessedImage} />
-          <BezierEditor on:pathCreated={(e) => handleShapeSelect(e.detail)} />
-          <PatternGenerator on:patternCreated={(e) => handleShapeSelect(e.detail)} />
-          <BooleanOperations on:shapeCreated={(e) => handleShapeSelect(e.detail)} />
+          {#await import('./lib/components/ui/AIImageProcessor.svelte') then component}
+            <component.default on:processedImage={handleAIProcessedImage} />
+          {/await}
+          {#await import('./lib/components/ui/BezierEditor.svelte') then component}
+            <component.default on:pathCreated={(e) => handleShapeSelect(e.detail)} />
+          {/await}
+          {#await import('./lib/components/ui/PatternGenerator.svelte') then component}
+            <component.default on:patternCreated={(e) => handleShapeSelect(e.detail)} />
+          {/await}
+          {#await import('./lib/components/ui/BooleanOperations.svelte') then component}
+            <component.default on:shapeCreated={(e) => handleShapeSelect(e.detail)} />
+          {/await}
 
         {:else if activeCategory === 'ai'}
-          <GeminiAPIConfig />
-          <AIAssistant params={$params} svgContent={svgCache} on:optimizedSVG={(e) => handleShapeSelect(e.detail)} />
+          {#await import('./lib/components/ui/GeminiAPIConfig.svelte') then component}
+            <component.default />
+          {/await}
+          {#await import('./lib/components/ui/AIAssistant.svelte') then component}
+            <component.default
+              params={$params}
+              svgContent={svgCache}
+              on:optimizedSVG={(e) => handleShapeSelect(e.detail)}
+            />
+          {/await}
 
         {:else if activeCategory === 'gallery'}
-          <CloudGallery currentSvg={svgCache} currentParams={$params} on:loadDesign={handleLoadFromGallery} />
+          {#await import('./lib/components/ui/CloudGallery.svelte') then component}
+            <component.default
+              currentSvg={svgCache}
+              currentParams={$params}
+              on:loadDesign={handleLoadFromGallery}
+            />
+          {/await}
 
         {:else if activeCategory === 'materials' && $model}
-          <MaterialManager on:materialChanged={handleMaterialChange} />
-          <OptimizationPanel on:applyFix={(e) => updateParams(e.detail)} />
-          <CollisionDetector mesh={currentMesh} buildPlateSize={$params.buildPlateSize} />
+          {#await import('./lib/components/ui/MaterialManager.svelte') then component}
+            <component.default on:materialChanged={handleMaterialChange} />
+          {/await}
+          {#await import('./lib/components/ui/OptimizationPanel.svelte') then component}
+            <component.default on:applyFix={(e) => updateParams(e.detail)} />
+          {/await}
+          {#await import('./lib/components/ui/CollisionDetector.svelte') then component}
+            <component.default mesh={currentMesh} buildPlateSize={$params.buildPlateSize} />
+          {/await}
 
         {:else if activeCategory === 'preview' && $model}
-          <SlicePreview mesh={currentMesh} layerHeight={0.2} />
-          <PrintabilityInfo />
+          {#await import('./lib/components/ui/SlicePreview.svelte') then component}
+            <component.default mesh={currentMesh} layerHeight={0.2} />
+          {/await}
+          {#await import('./lib/components/ui/PrintabilityInfo.svelte') then component}
+            <component.default />
+          {/await}
 
         {:else if activeCategory === 'batch' && $model}
-          <BatchMode
-            currentSvg={svgCache}
-            currentParams={$params}
-            buildPlateSize={$params.buildPlateSize}
-            on:batchCreated={handleBatchCreated}
-          />
+          {#await import('./lib/components/ui/BatchMode.svelte') then component}
+            <component.default
+              currentSvg={svgCache}
+              currentParams={$params}
+              buildPlateSize={$params.buildPlateSize}
+              on:batchCreated={handleBatchCreated}
+            />
+          {/await}
 
         {:else if activeCategory === 'export' && $model}
-          <AdvancedExport mesh={currentMesh} filename={fileName} params={$params} />
+          {#await import('./lib/components/ui/AdvancedExport.svelte') then component}
+            <component.default mesh={currentMesh} filename={fileName} params={$params} />
+          {/await}
         {/if}
       </div>
     </div>
