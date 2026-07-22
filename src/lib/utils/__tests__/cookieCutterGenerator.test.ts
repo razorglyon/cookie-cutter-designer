@@ -17,6 +17,10 @@ const closedSquareSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10
   <path d="M 0 0 H 100 V 100 H 0 Z" />
 </svg>`;
 
+const rectangularSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50">
+  <path d="M 0 0 H 100 V 50 H 0 Z" />
+</svg>`;
+
 const concaveSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
   <path d="M 0 0 H 40 V 15 H 15 V 40 H 0 Z" />
 </svg>`;
@@ -108,6 +112,12 @@ describe('generateCookieCutter', () => {
     expect(center.x).toBeCloseTo(0, 5);
     expect(center.z).toBeCloseTo(0, 5);
     expect(group.userData.contourCount).toBe(1);
+    const size = box.getSize(new THREE.Vector3());
+    expect(Math.max(size.x, size.z)).toBeCloseTo(DEFAULT_PARAMS.targetSize, 1);
+    expect(group.userData.dimensions).toMatchObject({
+      targetSize: DEFAULT_PARAMS.targetSize,
+      sizeMode: 'longest'
+    });
   });
 
   it('stops at cuttingHeight when the handle is disabled', async () => {
@@ -158,6 +168,26 @@ describe('generateCookieCutter', () => {
     expectWatertight(meshes(group)[0]);
   });
 
+  it.each([
+    ['width', 60],
+    ['height', 40]
+  ] as const)('fits the final %s to an explicit millimeter target', async (sizeMode, targetSize) => {
+    const group = await generateCookieCutter(
+      rectangularSvg,
+      params({
+        sizeMode,
+        targetSize,
+        enableHandle: false,
+        handleStyle: 'none',
+        taperAngle: 0
+      })
+    );
+    const size = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
+    const measured = sizeMode === 'width' ? size.x : size.z;
+
+    expect(measured).toBeCloseTo(targetSize, 1);
+  });
+
   it('rejects open-only SVG with the extraction error', async () => {
     await expectGenerationError(
       () => generateCookieCutter(openPathSvg, params()),
@@ -174,7 +204,7 @@ describe('generateCookieCutter', () => {
             enableHandle: false,
             handleStyle: 'none',
             taperAngle: 0,
-            scale: 3,
+            targetSize: 120,
             buildPlateSize: 100
           })
         ),

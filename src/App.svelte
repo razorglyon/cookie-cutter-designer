@@ -16,13 +16,16 @@
     updateParams
   } from './lib/stores/cookieCutterStore';
   import { historyStore } from './lib/stores/historyStore';
-  import { vectorizeImage, readFileAsText, cleanSVG } from './lib/utils/imageProcessor';
+  import {
+    vectorizeImage,
+    readFileAsText,
+    cleanSVG,
+    terminateImageProcessor
+  } from './lib/utils/imageProcessor';
   import { generateCookieCutter } from './lib/utils/cookieCutterGenerator';
-  import { generateStamp } from './lib/utils/stampGenerator';
   import { exportToSTL, estimateSTLSize, formatFileSize } from './lib/utils/stlExporter';
   import { applyMaterialToMesh, type MaterialPreset } from './lib/utils/materialManager';
   import type { SavedDesign } from './lib/utils/cloudGallery';
-  import { validateCookieCutterParams } from './lib/utils/generationValidation';
   import { disposeObject3D } from './lib/utils/disposeThree';
   import { LatestGenerationGuard } from './lib/utils/latestGenerationGuard';
   import type { CookieCutterParams } from './lib/types/CookieCutter';
@@ -30,6 +33,7 @@
   import * as THREE from 'three';
 
   type ModelObject = Mesh | Group;
+  type ModelDimensions = Readonly<{ width: number; depth: number; height: number }>;
   type Category =
     | 'upload'
     | 'params'
@@ -51,6 +55,7 @@
   let isRestoringHistory = false;
   let activeCategory: Category = 'upload';
   let darkMode = false;
+  let vectorizationController: AbortController | null = null;
   const THEME_STORAGE_KEY = 'cookie-cutter-theme';
 
   const generationGuard = new LatestGenerationGuard<ModelObject>((stale) => {
@@ -60,6 +65,11 @@
   function applyTheme(nextDarkMode: boolean): void {
     darkMode = nextDarkMode;
     document.documentElement.classList.toggle('dark-mode', darkMode);
+  }
+
+  function measureModel(object: THREE.Object3D): ModelDimensions {
+    const size = new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());
+    return { width: size.x, depth: size.z, height: size.y };
   }
 
   function toggleDarkMode() {
@@ -117,9 +127,13 @@
     paramsSnapshot: Readonly<CookieCutterParams>
   ): Promise<void> {
     try {
-      const next = paramsSnapshot.mode === 'stamp'
-        ? await generateStamp(svgSnapshot, { ...paramsSnapshot })
-        : await generateCookieCutter(svgSnapshot, paramsSnapshot);
+      let next: ModelObject;
+      if (paramsSnapshot.mode === 'stamp') {
+        const { generateStamp } = await import('./lib/utils/stampGenerator');
+        next = await generateStamp(svgSnapshot, { ...paramsSnapshot });
+      } else {
+        next = await generateCookieCutter(svgSnapshot, paramsSnapshot);
+      }
 
       if (!generationGuard.accept(revision, next)) return;
 
@@ -167,6 +181,9 @@
   async function handleFileUpload(event: CustomEvent<File>) {
     const file = event.detail;
     const revision = ++sourceRevision;
+    vectorizationController?.abort();
+    const controller = new AbortController();
+    vectorizationController = controller;
     cancelPendingGeneration();
     $uploadedFile = file;
     fileName = file.name;
@@ -177,7 +194,7 @@
     try {
       const svgString = file.type === 'image/svg+xml' || file.name.endsWith('.svg')
         ? cleanSVG(await readFileAsText(file))
-        : await vectorizeImage(file);
+        : await vectorizeImage(file, controller.signal);
 
       if (revision !== sourceRevision) return;
       publishSvg(svgString, file.name);
@@ -189,6 +206,7 @@
         ? processingError.message
         : 'Failed to process file';
     } finally {
+      if (vectorizationController === controller) vectorizationController = null;
       if (revision === sourceRevision && !published) $isProcessing = false;
     }
   }
@@ -198,7 +216,7 @@
 
     try {
       const filename = `${fileName.replace(/\.[^/.]+$/, '') || 'cookie-cutter'}.stl`;
-      exportToSTL(currentMesh, filename, { binary: true, includeMetadata: false });
+      exportToSTL(currentMesh, filename, { binary: true });
       $error = null;
     } catch (exportError) {
       console.error('Error exporting STL:', exportError);
@@ -233,6 +251,7 @@
   $: estimatedSize = currentMesh
     ? formatFileSize(estimateSTLSize(currentMesh, true))
     : null;
+  $: modelDimensions = currentMesh ? measureModel(currentMesh) : null;
 
   $: if (!isRestoringHistory && svgCache && $params) {
     historyStore.pushState({
@@ -302,10 +321,9 @@
   function handleLoadFromGallery(event: CustomEvent<SavedDesign>) {
     try {
       const design = event.detail;
-      const nextParams = validateCookieCutterParams(design.params);
       const nextSvg = cleanSVG(design.svgData);
 
-      setParams(nextParams);
+      setParams(design.params);
       sourceRevision += 1;
       publishSvg(nextSvg, `${design.metadata.name}.svg`);
     } catch (galleryError) {
@@ -386,6 +404,8 @@
 
   onDestroy(() => {
     sourceRevision += 1;
+    vectorizationController?.abort();
+    terminateImageProcessor();
     cancelPendingGeneration();
     if (currentMesh) disposeObject3D(currentMesh);
     currentMesh = null;
@@ -406,11 +426,16 @@
       <div class="header-actions">
         {#if $model}
           <span class="current-file">{fileName}</span>
-          <button class="btn btn-outline btn-sm" on:click={requestNewDesign}>
+          <button
+            class="btn btn-outline btn-sm"
+            on:click={requestNewDesign}
+            title="Start a new design"
+            aria-label="Start a new design"
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 12h18M12 3v18"/>
             </svg>
-            New Design
+            <span class="new-design-label">New Design</span>
           </button>
         {/if}
         <button
@@ -445,7 +470,7 @@
   <div class="app-layout">
     <!-- Mini Sidebar with Category Icons -->
     <aside class="mini-sidebar">
-      <nav class="category-nav">
+      <nav class="category-nav" aria-label="Design tools">
         <button
           class="category-btn"
           class:active={activeCategory === 'upload'}
@@ -631,8 +656,8 @@
           {/if}
 
         {:else if activeCategory === 'params' && $model}
-          <ParameterPanel />
           <HistoryPanel on:undo={handleUndo} on:redo={handleRedo} />
+          <ParameterPanel />
 
         {:else if activeCategory === 'shapes'}
           <ShapeLibrary on:selectShape={(e) => handleShapeSelect(e.detail)} />
@@ -786,6 +811,15 @@
           buildPlateSize={$params.buildPlateSize}
           on:deleteObject={handleDeleteObject}
         />
+        {#if modelDimensions}
+          <div class="dimension-badge" aria-label="Final model dimensions">
+            <strong>Final size</strong>
+            <span>
+              {modelDimensions.width.toFixed(1)} × {modelDimensions.depth.toFixed(1)} × {modelDimensions.height.toFixed(1)} mm
+            </span>
+            <small>width × depth × height</small>
+          </div>
+        {/if}
       {:else}
         <div class="empty-state">
           <div class="empty-icon">
@@ -836,7 +870,9 @@
      ============================================ */
   main {
     height: 100%;
+    height: 100dvh;
     width: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -860,6 +896,7 @@
     justify-content: space-between;
     padding: var(--spacing-2) var(--spacing-4);
     max-width: 100%;
+    min-width: 0;
     height: 48px;
   }
 
@@ -867,6 +904,11 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-2);
+    min-width: 0;
+  }
+
+  .logo-text {
+    min-width: 0;
   }
 
   .logo-icon {
@@ -944,6 +986,7 @@
     gap: 0;
     width: 100%;
     min-width: 0;
+    min-height: 0;
   }
 
   /* ============================================
@@ -956,6 +999,7 @@
     flex-direction: column;
     border-right: 1px solid var(--border-strong);
     z-index: var(--z-sticky);
+    min-width: 0;
   }
 
   .category-nav {
@@ -963,6 +1007,7 @@
     flex-direction: column;
     padding: var(--spacing-2) 0;
     gap: var(--spacing-1);
+    min-width: 0;
   }
 
   .category-btn {
@@ -1062,6 +1107,7 @@
     overflow: hidden;
     border-right: 1px solid var(--border-default);
     min-width: 0;
+    width: 100%;
   }
 
   .panel-content {
@@ -1071,6 +1117,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-3);
+    min-width: 0;
+    overscroll-behavior: contain;
   }
 
   .feature-header {
@@ -1198,6 +1246,36 @@
     overflow: hidden;
     width: 100%;
     min-width: 0;
+    min-height: 0;
+  }
+
+  .dimension-badge {
+    position: absolute;
+    right: var(--spacing-4);
+    bottom: var(--spacing-4);
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+    padding: var(--spacing-3);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    max-width: calc(100% - 2 * var(--spacing-4));
+  }
+
+  .dimension-badge span {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .dimension-badge small {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
   }
 
   /* ============================================
@@ -1281,25 +1359,30 @@
   @media (max-width: 768px) {
     .app-layout {
       grid-template-columns: 1fr;
-      grid-template-rows: auto auto 1fr;
+      grid-template-rows: auto minmax(0, 1fr) minmax(13rem, 42%);
     }
 
     .mini-sidebar {
       flex-direction: row;
       border-right: none;
-      border-bottom: 1px solid var(--color-gray-700);
+      border-bottom: 1px solid var(--border-strong);
     }
 
     .category-nav {
       flex-direction: row;
+      width: 100%;
       padding: 0 var(--spacing-2);
       overflow-x: auto;
-      width: 100%;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x proximity;
+      -webkit-overflow-scrolling: touch;
     }
 
     .category-btn {
       height: 48px;
       min-width: 48px;
+      flex: 0 0 48px;
+      scroll-snap-align: start;
     }
 
     .nav-label {
@@ -1308,24 +1391,54 @@
 
     .category-btn.active::before {
       left: 50%;
-      transform: translateX(-50%);
       top: auto;
       bottom: 0;
       width: 60%;
       height: 3px;
       border-radius: var(--radius-full) var(--radius-full) 0 0;
+      transform: translateX(-50%);
     }
 
     .content-panel {
-      max-height: 40vh;
+      min-height: 0;
+      max-height: none;
+      border-right: none;
+      border-bottom: 1px solid var(--border-default);
+    }
+
+    .viewer-panel {
+      min-height: 13rem;
     }
 
     .header-content {
-      padding: var(--spacing-2) var(--spacing-3);
+      height: auto;
+      min-height: 56px;
+      gap: var(--spacing-2);
+      padding-top: var(--spacing-1);
+      padding-right: max(var(--spacing-3), env(safe-area-inset-right));
+      padding-bottom: var(--spacing-1);
+      padding-left: max(var(--spacing-3), env(safe-area-inset-left));
+    }
+
+    .logo-section {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .logo-icon {
+      flex-shrink: 0;
+      font-size: 1.5rem;
+    }
+
+    .logo-text {
+      overflow: hidden;
     }
 
     .logo-text h1 {
+      overflow: hidden;
       font-size: var(--font-size-sm);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .tagline {
@@ -1333,13 +1446,58 @@
     }
 
     .current-file {
-      max-width: 100px;
-      font-size: 0.75rem;
+      display: none;
+    }
+
+    .header-actions {
+      flex-shrink: 0;
+      gap: var(--spacing-2);
     }
 
     .btn-sm {
-      font-size: 0.75rem;
+      min-width: 44px;
+      height: 44px;
       padding: 0 var(--spacing-2);
+      font-size: 0.75rem;
+    }
+
+    .dimension-badge {
+      right: var(--spacing-2);
+      bottom: var(--spacing-2);
+      left: var(--spacing-2);
+      width: max-content;
+      max-width: calc(100% - 2 * var(--spacing-2));
+      padding: var(--spacing-2);
+    }
+
+    .dimension-badge span,
+    .dimension-badge small {
+      white-space: normal;
+    }
+  }
+
+  @media (max-width: 768px) and (max-height: 650px) {
+    .panel-content {
+      padding: var(--spacing-1) var(--spacing-2);
+      gap: var(--spacing-1);
+    }
+
+    .quick-start {
+      padding: var(--spacing-1);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .new-design-label {
+      display: none;
+    }
+
+    .logo-text h1 {
+      font-size: var(--font-size-xs);
+    }
+
+    .panel-content {
+      padding: var(--spacing-2);
     }
   }
 </style>

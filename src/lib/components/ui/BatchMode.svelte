@@ -6,8 +6,7 @@
     createBatch,
     duplicateItem,
     checkBuildPlateFit,
-    estimateBatchPrintTime,
-    estimateBatchFilament,
+    BatchGenerationError,
     type BatchItem,
     type BatchLayout
   } from '../../utils/batchProcessor';
@@ -24,6 +23,9 @@
   let batchItems: BatchItem[] = [];
   let layout: BatchLayout = { type: 'grid', spacing: 20, columns: 3 };
   let processing = false;
+  let batchController: AbortController | null = null;
+  let completedItems = 0;
+  let batchStatus: string | null = null;
 
   function addCurrentDesign() {
     if (!currentSvg) return;
@@ -57,22 +59,39 @@
   }
 
   async function generateBatch() {
+    if (processing) {
+      batchController?.abort();
+      return;
+    }
     if (batchItems.length === 0) return;
 
     processing = true;
+    completedItems = 0;
+    batchStatus = null;
+    const controller = new AbortController();
+    batchController = controller;
     try {
-      const result = await createBatch(batchItems, layout, buildPlateSize);
+      const result = await createBatch(batchItems, layout, buildPlateSize, {
+        signal: controller.signal,
+        onProgress: (completed) => { completedItems = completed; }
+      });
+      batchStatus = `${result.report.succeeded} items · ${result.totalDimensions.width.toFixed(1)} × ${result.totalDimensions.height.toFixed(1)} mm`;
       dispatch('batchCreated', result.mesh);
     } catch (error) {
-      console.error('Error generating batch:', error);
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        batchStatus = 'Cancelled — no partial batch was kept.';
+      } else if (error instanceof BatchGenerationError) {
+        batchStatus = error.failures.map((failure) => `${failure.name}: ${failure.message}`).join(' · ');
+      } else {
+        batchStatus = error instanceof Error ? error.message : 'Batch generation failed.';
+      }
     } finally {
+      if (batchController === controller) batchController = null;
       processing = false;
     }
   }
 
   $: fitCheck = checkBuildPlateFit(batchItems, layout, buildPlateSize);
-  $: estimatedTime = estimateBatchPrintTime(batchItems);
-  $: estimatedFilament = estimateBatchFilament(batchItems);
 </script>
 
 <div class="batch-mode">
@@ -118,23 +137,15 @@
         {/each}
       </div>
 
-      <div class="stats">
-        <div class="stat">
-          <span>Time:</span>
-          <strong>{estimatedTime}min</strong>
-        </div>
-        <div class="stat">
-          <span>Filament:</span>
-          <strong>{estimatedFilament}g</strong>
-        </div>
-      </div>
 
-      {#if !fitCheck.fits}
-        <div class="warning">⚠️ Some items may not fit!</div>
+      {#if fitCheck.warnings.length > 0}
+        <div class="warning">{fitCheck.warnings.join(' · ')}</div>
       {/if}
 
-      <button class="generate-btn" on:click={generateBatch} disabled={processing || batchItems.length === 0}>
-        {processing ? 'Processing...' : 'Generate Batch'}
+      {#if batchStatus}<div class="batch-status">{batchStatus}</div>{/if}
+
+      <button class="generate-btn" on:click={generateBatch} disabled={!processing && batchItems.length === 0}>
+        {processing ? `Cancel (${completedItems}/${batchItems.length})` : 'Generate Atomic Batch'}
       </button>
     </div>
   {/if}
@@ -228,17 +239,12 @@
     cursor: pointer;
   }
 
-  .stats {
-    display: flex;
-    gap: 2rem;
-    padding: 1rem;
-    background: #f7fafc;
-    border-radius: 6px;
-  }
-
-  .stat {
-    display: flex;
-    gap: 0.5rem;
+  .batch-status {
+    padding: 0.75rem;
+    background: #f0fff4;
+    border-left: 4px solid #48bb78;
+    color: #276749;
+    overflow-wrap: anywhere;
   }
 
   .warning {

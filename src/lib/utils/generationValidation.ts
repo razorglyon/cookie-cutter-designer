@@ -1,4 +1,4 @@
-import type { CookieCutterParams, HandleStyle } from '../types/CookieCutter';
+import type { CookieCutterParams, HandleStyle, SizeMode } from '../types/CookieCutter';
 
 export type CutterGenerationErrorCode =
   | 'INVALID_PARAMS'
@@ -47,8 +47,8 @@ export const GENERATION_LIMITS = Object.freeze({
   maxTotalHeight: 150,
   minTaperAngle: 0,
   maxTaperAngle: 30,
-  minScale: 0.01,
-  maxScale: 100,
+  minTargetSize: 10,
+  maxTargetSize: 1000,
   minHandleHeight: 0,
   maxHandleHeight: 100,
   minBuildPlateSize: 20,
@@ -64,7 +64,8 @@ const PARAM_KEYS = [
   'cuttingHeight',
   'totalHeight',
   'taperAngle',
-  'scale',
+  'targetSize',
+  'sizeMode',
   'handleStyle',
   'handleHeight',
   'enableHandle',
@@ -85,6 +86,7 @@ const HANDLE_STYLES = [
   'none'
 ] as const satisfies readonly HandleStyle[];
 const MODES = ['cutter', 'stamp'] as const satisfies readonly CookieCutterParams['mode'][];
+const SIZE_MODES = ['longest', 'width', 'height'] as const satisfies readonly SizeMode[];
 
 function invalidParameter(field: string, message: string, value?: unknown): never {
   throw new CutterGenerationError('INVALID_PARAMS', message, { field, value });
@@ -171,7 +173,8 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
   const cuttingHeight = readFiniteNumber(record, 'cuttingHeight');
   const totalHeight = readFiniteNumber(record, 'totalHeight');
   const taperAngle = readFiniteNumber(record, 'taperAngle');
-  const scale = readFiniteNumber(record, 'scale');
+  const targetSize = readFiniteNumber(record, 'targetSize');
+  const sizeMode = readEnum(record, 'sizeMode', SIZE_MODES);
   const handleStyle = readEnum(record, 'handleStyle', HANDLE_STYLES);
   const handleHeight = readFiniteNumber(record, 'handleHeight');
   const enableHandle = readBoolean(record, 'enableHandle');
@@ -206,7 +209,12 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
     GENERATION_LIMITS.minTaperAngle,
     GENERATION_LIMITS.maxTaperAngle
   );
-  requireRange('scale', scale, GENERATION_LIMITS.minScale, GENERATION_LIMITS.maxScale);
+  requireRange(
+    'targetSize',
+    targetSize,
+    GENERATION_LIMITS.minTargetSize,
+    GENERATION_LIMITS.maxTargetSize
+  );
   requireRange(
     'handleHeight',
     handleHeight,
@@ -232,7 +240,7 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
     GENERATION_LIMITS.maxStampDepth
   );
 
-  if (totalHeight < cuttingHeight) {
+  if (mode === 'cutter' && totalHeight < cuttingHeight) {
     invalidParameter(
       'totalHeight',
       'The totalHeight parameter must be greater than or equal to cuttingHeight.',
@@ -241,6 +249,7 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
   }
 
   if (
+    mode === 'cutter' &&
     enableHandle &&
     handleStyle !== 'none' &&
     totalHeight < cuttingHeight + handleHeight
@@ -260,6 +269,14 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
     );
   }
 
+  if (mode === 'stamp' && !stampBase) {
+    invalidParameter(
+      'stampBase',
+      'The stampBase parameter is required in Stamp mode to connect every relief region.',
+      stampBase
+    );
+  }
+
   if (enableEmbossing) {
     invalidParameter(
       'enableEmbossing',
@@ -273,7 +290,8 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
     cuttingHeight,
     totalHeight,
     taperAngle,
-    scale,
+    targetSize,
+    sizeMode,
     handleStyle,
     handleHeight,
     enableHandle,

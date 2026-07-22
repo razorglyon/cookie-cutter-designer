@@ -109,15 +109,14 @@ export function analyzeParameters(params: CookieCutterParams): OptimizationRepor
     }
   }
 
-  // Check build plate size vs scale
-  const estimatedSize = 100 * params.scale; // Rough estimate
-  if (estimatedSize > params.buildPlateSize) {
+  // The selected final dimension must fit the configured build plate.
+  if (params.targetSize > params.buildPlateSize) {
     issues.push({
       severity: 'error',
       category: 'printability',
       message: 'Design may not fit on build plate',
-      suggestion: 'Reduce scale or increase build plate size',
-      autoFix: { scale: params.buildPlateSize / 120 }
+      suggestion: 'Reduce final size or increase build plate size',
+      autoFix: { targetSize: params.buildPlateSize }
     });
   }
 
@@ -182,7 +181,7 @@ export function estimatePrintTime(params: CookieCutterParams): number {
   // Very rough estimation based on volume
   const wallVolume = params.wallThickness * params.cuttingHeight * 100; // Simplified
   const handleVolume = params.enableHandle ? params.handleHeight * 50 : 0;
-  const totalVolume = (wallVolume + handleVolume) * params.scale;
+  const totalVolume = (wallVolume + handleVolume) * (params.targetSize / 75);
 
   // Assume 10mm³/min print speed
   return Math.round(totalVolume / 10);
@@ -196,7 +195,7 @@ export function estimateFilamentUsage(params: CookieCutterParams): number {
   // PLA density ≈ 1.24 g/cm³
   const wallVolume = params.wallThickness * params.cuttingHeight * 100; // mm³
   const handleVolume = params.enableHandle ? params.handleHeight * 50 : 0;
-  const totalVolume = (wallVolume + handleVolume) * params.scale;
+  const totalVolume = (wallVolume + handleVolume) * (params.targetSize / 75);
 
   // Convert mm³ to cm³ and multiply by density
   return Math.round((totalVolume / 1000) * 1.24);

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { ExportOptions } from '../types/CookieCutter';
 import { CutterGenerationError } from './generationValidation';
 import { validatePrintableObject } from './geometryValidation';
+import { cloneForManufacturing } from './manufacturingCoordinates';
 
 function exportFailure(
   message: string,
@@ -18,16 +19,30 @@ export function serializeSTL(
   object: THREE.Object3D,
   binary: boolean = true
 ): DataView | string {
-  const report = validatePrintableObject(object);
+  const sourceReport = validatePrintableObject(object);
+  if (!sourceReport.valid) {
+    exportFailure(`STL export blocked: ${sourceReport.errors[0]}`, {
+      errors: sourceReport.errors,
+      triangles: sourceReport.triangles,
+      shells: sourceReport.shells,
+      meshes: sourceReport.meshes,
+      volume: sourceReport.volume
+    });
+  }
+
+  const manufacturingObject = cloneForManufacturing(object);
+  const report = validatePrintableObject(manufacturingObject);
   if (!report.valid) {
     exportFailure(`STL export blocked: ${report.errors[0]}`, {
       errors: report.errors,
       triangles: report.triangles,
-      shells: report.shells
+      shells: report.shells,
+      meshes: report.meshes,
+      volume: report.volume
     });
   }
 
-  const output = new STLExporter().parse(object, { binary });
+  const output = new STLExporter().parse(manufacturingObject, { binary });
 
   if (binary) {
     if (!(output instanceof DataView)) {
@@ -98,15 +113,30 @@ export function serializeSTL(
 export function exportToSTL(
   object: THREE.Object3D,
   filename: string = 'cookie-cutter.stl',
-  options: ExportOptions = { binary: true, includeMetadata: false }
+  options: ExportOptions = { binary: true }
 ): void {
   const serialized = serializeSTL(object, options.binary);
-  const blob =
-    serialized instanceof DataView
-      ? new Blob([serialized.buffer as ArrayBuffer], { type: 'application/octet-stream' })
-      : new Blob([serialized], { type: 'text/plain' });
+  const blob = createSTLBlob(serialized);
 
   downloadBlob(blob, filename);
+}
+
+/**
+ * Preserve the exact DataView window instead of accidentally including bytes
+ * before or after the serialized STL payload.
+ */
+export function createSTLBlob(serialized: DataView | string): Blob {
+  if (typeof serialized === 'string') {
+    return new Blob([serialized], { type: 'model/stl' });
+  }
+
+  const window = new Uint8Array(
+    serialized.buffer,
+    serialized.byteOffset,
+    serialized.byteLength
+  );
+  const ownedBytes = Uint8Array.from(window);
+  return new Blob([ownedBytes], { type: 'model/stl' });
 }
 
 function downloadBlob(blob: Blob, filename: string): void {

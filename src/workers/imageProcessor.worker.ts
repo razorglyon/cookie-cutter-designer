@@ -1,44 +1,74 @@
 import { ImageTracer } from 'imagetracer';
+import type {
+  ImageWorkerRequest,
+  ImageWorkerResponse
+} from '../lib/utils/imageWorkerProtocol';
 
-// Types for messages
-interface VectorizeMessage {
-  type: 'vectorize';
-  imageData: ImageData;
-  options: any;
+const cancelledRequests = new Set<string>();
+const scope = self as unknown as {
+  onmessage: ((event: MessageEvent<ImageWorkerRequest>) => void) | null;
+  postMessage(message: ImageWorkerResponse): void;
+};
+
+function respond(response: ImageWorkerResponse): void {
+  scope.postMessage(response);
 }
 
-interface WorkerResponse {
-  type: 'success' | 'error';
-  data?: any;
-  error?: string;
-}
+scope.onmessage = (event: MessageEvent<ImageWorkerRequest>) => {
+  const request = event.data;
+  if (request.type === 'cancel') {
+    cancelledRequests.add(request.requestId);
+    return;
+  }
 
-// Listen for messages from main thread
-self.onmessage = async (e: MessageEvent<VectorizeMessage>) => {
-  const { type, imageData, options } = e.data;
+  const { requestId } = request;
+  if (cancelledRequests.delete(requestId)) {
+    respond({ type: 'cancelled', requestId });
+    return;
+  }
 
   try {
-    if (type === 'vectorize') {
-      // Create ImageTracer instance
-      const tracer = new ImageTracer();
+    const expectedBytes = request.width * request.height * 4;
+    if (
+      !Number.isInteger(request.width) ||
+      !Number.isInteger(request.height) ||
+      request.width <= 0 ||
+      request.height <= 0 ||
+      request.pixels.byteLength !== expectedBytes
+    ) {
+      respond({
+        type: 'error',
+        requestId,
+        error: {
+          code: 'INVALID_PIXELS',
+          message: 'Raster pixel dimensions do not match the transferred buffer.'
+        }
+      });
+      return;
+    }
 
-      // Perform vectorization in worker thread
-      const svgString = tracer.imageDataToSVG(imageData, options);
+    const tracer = new ImageTracer();
+    const imageData = {
+      width: request.width,
+      height: request.height,
+      data: new Uint8ClampedArray(request.pixels)
+    } as ImageData;
+    const svg = tracer.imageDataToSVG(imageData, request.options);
 
-      // Send result back to main thread
-      const response: WorkerResponse = {
-        type: 'success',
-        data: svgString
-      };
-      self.postMessage(response);
+    if (cancelledRequests.delete(requestId)) {
+      respond({ type: 'cancelled', requestId });
+    } else {
+      respond({ type: 'success', requestId, svg });
     }
   } catch (error) {
-    // Send error back to main thread
-    const response: WorkerResponse = {
+    respond({
       type: 'error',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
-    self.postMessage(response);
+      requestId,
+      error: {
+        code: 'VECTORIZATION_FAILED',
+        message: error instanceof Error ? error.message : 'Unknown vectorization error.'
+      }
+    });
   }
 };
 

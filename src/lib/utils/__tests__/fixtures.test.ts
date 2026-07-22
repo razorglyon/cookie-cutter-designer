@@ -4,6 +4,7 @@ import {
   concavePoints,
   duplicatePoints,
   emptySvg,
+  noisyRasterFixture,
   openPathSvg,
   squarePoints,
   starPoints,
@@ -38,5 +39,16 @@ describe('3D generation fixtures', () => {
 
     container.innerHTML = openPathSvg;
     expect(container.querySelector('path')?.getAttribute('d')).not.toMatch(/[zZ]/);
+  });
+
+  it('provides a deterministic opaque noisy raster fixture', () => {
+    const first = noisyRasterFixture(16, 8);
+    const second = noisyRasterFixture(16, 8);
+
+    expect(first.width).toBe(16);
+    expect(first.height).toBe(8);
+    expect(first.data).toEqual(second.data);
+    expect(Array.from(first.data).filter((_value, index) => index % 4 === 3))
+      .toEqual(Array(16 * 8).fill(255));
   });
 });

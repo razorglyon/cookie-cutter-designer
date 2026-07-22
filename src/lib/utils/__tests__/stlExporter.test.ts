@@ -4,6 +4,7 @@ import { DEFAULT_PARAMS } from '../../types/CookieCutter';
 import { createTestCookieCutter } from '../cookieCutterGenerator';
 import { CutterGenerationError } from '../generationValidation';
 import {
+  createSTLBlob,
   estimateSTLSize,
   exportToSTL,
   serializeSTL
@@ -71,6 +72,26 @@ describe('serializeSTL', () => {
     );
   });
 
+  it('serializes the model with Z as the manufacturing height axis', async () => {
+    const cutter = await validCutter();
+    const binary = serializeSTL(cutter, true) as DataView;
+    const triangleCount = binary.getUint32(80, true);
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+
+    for (let triangle = 0; triangle < triangleCount; triangle += 1) {
+      const start = 84 + triangle * 50;
+      for (const component of [5, 8, 11]) {
+        const z = binary.getFloat32(start + component * 4, true);
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+      }
+    }
+
+    expect(minZ).toBeCloseTo(0, 5);
+    expect(maxZ).toBeCloseTo(DEFAULT_PARAMS.totalHeight, 5);
+  });
+
   it('rejects an empty object before invoking the exporter', () => {
     const error = expectExportError(() => serializeSTL(new THREE.Group(), true));
 
@@ -96,6 +117,19 @@ describe('serializeSTL', () => {
 });
 
 describe('exportToSTL', () => {
+  it('creates a Blob from the exact DataView window', async () => {
+    const buffer = new ArrayBuffer(12);
+    const allBytes = new Uint8Array(buffer);
+    allBytes.set([90, 91, 1, 2, 3, 4, 92, 93]);
+    const view = new DataView(buffer, 2, 4);
+
+    const blob = createSTLBlob(view);
+
+    expect(blob.size).toBe(4);
+    expect(blob.type).toBe('model/stl');
+    expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual([1, 2, 3, 4]);
+  });
+
   it('never creates a download URL when preflight fails', () => {
     const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
 

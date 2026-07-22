@@ -1,115 +1,104 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import * as THREE from 'three';
-  import type { Mesh, Group } from 'three';
+  import { onDestroy } from 'svelte';
+  import type { Group, Mesh } from 'three';
   import {
     sliceMesh,
     getMeshBounds,
     calculateOptimalLayerHeight,
-    estimateLayerPrintTime,
+    disposeSliceLayers,
     type SliceLayer
   } from '../../utils/slicer';
 
   export let mesh: Mesh | Group | null = null;
-  export let layerHeight: number = 0.2;
+  export let layerHeight = 0.2;
 
   let sliceLayers: SliceLayer[] = [];
-  let currentLayerIndex: number = 0;
-  let isSlicing: boolean = false;
-  let totalPrintTime: number = 0;
-  let showSliceView: boolean = false;
-  let autoPlay: boolean = false;
+  let currentLayerIndex = 0;
+  let isSlicing = false;
+  let slicingError: string | null = null;
+  let showSliceView = false;
+  let autoPlay = false;
   let playInterval: number | null = null;
 
-  $: if (mesh && showSliceView) {
-    performSlicing();
-  }
-
+  $: if (mesh && showSliceView) performSlicing();
   $: currentLayer = sliceLayers[currentLayerIndex];
   $: layerProgress = sliceLayers.length > 0
     ? ((currentLayerIndex + 1) / sliceLayers.length * 100).toFixed(0)
     : 0;
+  $: drawing = currentLayer ? createDrawing(currentLayer) : null;
 
-  async function performSlicing() {
+  function createDrawing(layer: SliceLayer): { viewBox: string; paths: string[] } {
+    const points = layer.contours.flat();
+    const minX = Math.min(...points.map((point) => point.x));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxY = Math.max(...points.map((point) => point.y));
+    const padding = Math.max(1, Math.max(maxX - minX, maxY - minY) * 0.05);
+    return {
+      viewBox: `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`,
+      paths: layer.contours.map((contour) =>
+        `${contour.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')} Z`
+      )
+    };
+  }
+
+  function performSlicing(): void {
     if (!mesh) return;
-
     isSlicing = true;
+    slicingError = null;
     try {
       const bounds = getMeshBounds(mesh);
-
-      // Use provided layer height or calculate optimal
-      const optimalHeight = layerHeight || calculateOptimalLayerHeight(bounds.maxZ - bounds.minZ);
-
-      sliceLayers = sliceMesh(mesh, {
-        layerHeight: optimalHeight,
-        minZ: bounds.minZ,
-        maxZ: bounds.maxZ
+      const effectiveHeight = layerHeight || calculateOptimalLayerHeight(bounds.maxHeight - bounds.minHeight);
+      const nextLayers = sliceMesh(mesh, {
+        layerHeight: effectiveHeight,
+        minHeight: bounds.minHeight,
+        maxHeight: bounds.maxHeight
       });
-
-      // Calculate total print time
-      totalPrintTime = sliceLayers.reduce((total, layer) => {
-        return total + estimateLayerPrintTime(layer);
-      }, 0);
-
+      disposeSliceLayers(sliceLayers);
+      sliceLayers = nextLayers;
       currentLayerIndex = 0;
-    } catch (err) {
-      console.error('Error slicing mesh:', err);
+    } catch (error) {
+      slicingError = error instanceof Error ? error.message : 'Layer preview failed.';
     } finally {
       isSlicing = false;
     }
   }
 
-  function nextLayer() {
-    if (currentLayerIndex < sliceLayers.length - 1) {
-      currentLayerIndex++;
-    }
+  function nextLayer(): void {
+    if (currentLayerIndex < sliceLayers.length - 1) currentLayerIndex += 1;
   }
 
-  function previousLayer() {
-    if (currentLayerIndex > 0) {
-      currentLayerIndex--;
-    }
+  function previousLayer(): void {
+    if (currentLayerIndex > 0) currentLayerIndex -= 1;
   }
 
-  function jumpToLayer(index: number) {
+  function jumpToLayer(index: number): void {
     currentLayerIndex = Math.max(0, Math.min(index, sliceLayers.length - 1));
   }
 
-  function toggleAutoPlay() {
+  function toggleAutoPlay(): void {
     autoPlay = !autoPlay;
-
     if (autoPlay) {
-      playInterval = setInterval(() => {
-        if (currentLayerIndex < sliceLayers.length - 1) {
-          currentLayerIndex++;
-        } else {
-          currentLayerIndex = 0; // Loop back to start
-        }
-      }, 500) as unknown as number;
-    } else {
-      if (playInterval) {
-        clearInterval(playInterval);
-        playInterval = null;
-      }
+      playInterval = window.setInterval(() => {
+        currentLayerIndex = currentLayerIndex < sliceLayers.length - 1
+          ? currentLayerIndex + 1
+          : 0;
+      }, 500);
+    } else if (playInterval !== null) {
+      window.clearInterval(playInterval);
+      playInterval = null;
     }
-  }
-
-  function formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}m ${secs}s`;
   }
 
   onDestroy(() => {
-    if (playInterval) {
-      clearInterval(playInterval);
-    }
+    if (playInterval !== null) window.clearInterval(playInterval);
+    disposeSliceLayers(sliceLayers);
   });
 </script>
 
 <div class="slice-preview">
   <div class="preview-header">
-    <h3>🔍 Slice Preview</h3>
+    <h3>Layer Intersection Preview</h3>
     <button class="toggle-btn" on:click={() => showSliceView = !showSliceView}>
       {showSliceView ? '▼' : '▶'}
     </button>
@@ -126,7 +115,19 @@
           <div class="spinner"></div>
           <p>Slicing model...</p>
         </div>
+      {:else if slicingError}
+        <div class="no-layers"><p>{slicingError}</p></div>
       {:else if sliceLayers.length > 0}
+        <p class="preview-note">
+          Geometric cross-section only — no infill, supports, extrusion paths or G-code.
+        </p>
+        {#if drawing}
+          <svg class="layer-drawing" viewBox={drawing.viewBox} aria-label="Current layer intersections">
+            {#each drawing.paths as path}
+              <path d={path} />
+            {/each}
+          </svg>
+        {/if}
         <div class="layer-controls">
           <div class="layer-info">
             <div class="info-row">
@@ -135,11 +136,7 @@
             </div>
             <div class="info-row">
               <span class="label">Height:</span>
-              <span class="value">{currentLayer.z.toFixed(2)}mm</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Total Time:</span>
-              <span class="value">{formatTime(totalPrintTime)}</span>
+              <span class="value">{currentLayer.height.toFixed(2)} mm</span>
             </div>
           </div>
 
@@ -191,8 +188,8 @@
               <span class="stat-value">{currentLayer.contours.length}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Layer Time:</span>
-              <span class="stat-value">{formatTime(estimateLayerPrintTime(currentLayer))}</span>
+              <span class="stat-label">Points:</span>
+              <span class="stat-value">{currentLayer.contours.reduce((sum, contour) => sum + contour.length, 0)}</span>
             </div>
           </div>
         </div>
@@ -272,6 +269,31 @@
     gap: 1rem;
   }
 
+  .preview-note {
+    margin: 0;
+    padding: 0.75rem;
+    border-left: 3px solid #4299e1;
+    background: #ebf8ff;
+    color: #2c5282;
+    font-size: 0.8rem;
+  }
+
+  .layer-drawing {
+    width: 100%;
+    height: 220px;
+    padding: 0.75rem;
+    box-sizing: border-box;
+    border-radius: 6px;
+    background: #1a202c;
+  }
+
+  .layer-drawing path {
+    fill: rgba(66, 153, 225, 0.18);
+    stroke: #63b3ed;
+    stroke-width: 0.5;
+    vector-effect: non-scaling-stroke;
+  }
+
   .no-model,
   .no-layers,
   .slicing-progress {
@@ -304,7 +326,7 @@
 
   .layer-info {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
     padding: 0.75rem;
     background: #f7fafc;

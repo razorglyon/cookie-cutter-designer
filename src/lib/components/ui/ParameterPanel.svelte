@@ -1,6 +1,6 @@
 <script lang="ts">
   import { parameterError, params, updateParam } from '../../stores/cookieCutterStore';
-  import type { HandleStyle } from '../../types/CookieCutter';
+  import type { HandleStyle, SizeMode } from '../../types/CookieCutter';
 
   const handleStyles: { value: HandleStyle; label: string }[] = [
     { value: 'none', label: 'No Handle' },
@@ -8,6 +8,12 @@
     { value: 'round', label: 'Round' },
     { value: 'chamfered', label: 'Chamfered' },
     { value: 'rectangular', label: 'Rectangular' }
+  ];
+
+  const sizeModes: { value: SizeMode; label: string }[] = [
+    { value: 'longest', label: 'Longest side' },
+    { value: 'width', label: 'Width' },
+    { value: 'height', label: 'Height' }
   ];
 </script>
 
@@ -65,23 +71,14 @@
         <div class="param-hint">Range: 1–5 mm · Depth of the raised relief</div>
       </div>
 
-      <div class="param-control">
-        <label>
-          <input
-            type="checkbox"
-            checked={$params.stampBase}
-            on:change={(e) => updateParam('stampBase', e.currentTarget.checked)}
-          />
-          Add Base Plate
-        </label>
-        <div class="param-hint">Adds a solid base for the stamp</div>
-      </div>
+      <div class="param-hint">A 4 mm base is always added so every relief remains one printable tool.</div>
     {/if}
   </div>
 
   <div class="param-group">
     <h3>Dimensions</h3>
 
+    {#if $params.mode === 'cutter'}
     <div class="param-control">
       <label for="wallThickness">
         Wall Thickness: {$params.wallThickness.toFixed(1)} mm
@@ -149,21 +146,33 @@
       />
       <div class="param-hint">Range: 0–15° · Recommended: 5–10°</div>
     </div>
+    {/if}
 
-    <div class="param-control">
-      <label for="scale">
-        Scale: {($params.scale * 100).toFixed(0)}%
-      </label>
-      <input
-        id="scale"
-        type="range"
-        aria-valuetext={`${($params.scale * 100).toFixed(0)} percent`}
-        min="0.5"
-        max="3.0"
-        step="0.1"
-        value={$params.scale}
-        on:input={(e) => updateParam('scale', parseFloat(e.currentTarget.value))}
-      />
+    <div class="param-control size-control">
+      <label for="targetSize">Final Size</label>
+      <div class="size-inputs">
+        <input
+          id="targetSize"
+          type="number"
+          aria-label="Final size in millimeters"
+          min="10"
+          max={$params.buildPlateSize}
+          step="1"
+          value={$params.targetSize}
+          on:change={(e) => updateParam('targetSize', e.currentTarget.valueAsNumber)}
+        />
+        <span>mm</span>
+        <select
+          aria-label="Dimension controlled by final size"
+          value={$params.sizeMode}
+          on:change={(e) => updateParam('sizeMode', e.currentTarget.value as SizeMode)}
+        >
+          {#each sizeModes as mode}
+            <option value={mode.value}>{mode.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="param-hint">Controls the measured outer dimension of the generated model.</div>
     </div>
 
     <div class="param-control">
@@ -233,12 +242,15 @@
 
 <style>
   .parameter-panel {
+    width: 100%;
+    min-width: 0;
     padding: var(--spacing-4);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
     background: var(--surface-card);
     color: var(--text-secondary);
     box-shadow: var(--shadow-sm);
+    overflow-wrap: anywhere;
   }
 
   .parameter-error {
@@ -280,6 +292,7 @@
   }
 
   .param-control {
+    min-width: 0;
     margin-bottom: var(--spacing-4);
   }
 
@@ -293,14 +306,16 @@
   }
 
   .mode-selector {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--spacing-2);
     margin-bottom: var(--spacing-2);
   }
 
   .mode-btn {
-    min-height: var(--button-height-lg);
+    min-height: var(--button-height);
     flex: 1;
+    min-width: 0;
     padding: 0 var(--spacing-3);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
@@ -325,17 +340,24 @@
 
   input[type="range"] {
     width: 100%;
-    height: 6px;
-    border-radius: var(--radius-full);
-    background: var(--text-muted);
+    height: 44px;
+    background: transparent;
     outline: none;
     appearance: none;
     -webkit-appearance: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
   }
 
   input[type="range"]::-webkit-slider-thumb {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
+    margin-top: -9px;
     border-radius: 50%;
     background: var(--color-primary-600);
     cursor: pointer;
@@ -344,16 +366,24 @@
   }
 
   input[type="range"]::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
     border: none;
     border-radius: 50%;
     background: var(--color-primary-600);
     cursor: pointer;
   }
 
-  select {
+  input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
+  }
+
+  select,
+  input[type="number"] {
     width: 100%;
+    min-width: 0;
     min-height: var(--input-height);
     padding: 0 var(--spacing-3);
     border: 1px solid var(--border-strong);
@@ -364,10 +394,56 @@
     cursor: pointer;
   }
 
+  .size-inputs {
+    display: grid;
+    grid-template-columns: minmax(5rem, 0.7fr) auto minmax(8rem, 1.3fr);
+    align-items: center;
+    gap: var(--spacing-2);
+    min-width: 0;
+  }
+
+  .size-inputs span {
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+  }
+
   .param-hint {
     margin-top: var(--spacing-1);
     color: var(--text-muted);
     font-size: var(--font-size-xs);
     line-height: var(--line-height-normal);
+  }
+
+  @media (max-width: 768px) {
+    .mode-btn,
+    select,
+    input[type="number"] {
+      min-height: 44px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .parameter-panel {
+      padding: var(--spacing-3);
+    }
+
+    h2 {
+      font-size: var(--font-size-lg);
+      line-height: var(--line-height-tight);
+    }
+
+    .param-control {
+      margin-bottom: var(--spacing-3);
+    }
+  }
+
+  @media (max-width: 380px) {
+    .size-inputs {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .size-inputs select {
+      grid-column: 1 / -1;
+    }
   }
 </style>

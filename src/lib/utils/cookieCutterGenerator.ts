@@ -3,7 +3,11 @@ import {
   mergeGeometries,
   mergeVertices
 } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { CookieCutterParams, HandleStyle } from '../types/CookieCutter';
+import type {
+  CookieCutterParams,
+  HandleStyle,
+  SizeMode
+} from '../types/CookieCutter';
 import { extractClosedContours, type NormalizedContour } from './contourExtraction';
 import { createTaperedWallGeometry } from './cutterGeometry';
 import {
@@ -24,6 +28,9 @@ const HANDLE_SPREAD: Readonly<Record<Exclude<HandleStyle, 'none'>, number>> = Ob
   chamfered: 1,
   rectangular: 0.25
 });
+
+const SIZE_FIT_MAX_ITERATIONS = 5;
+const SIZE_FIT_MIN_SCALE = 1e-6;
 
 function createCutterMaterial(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial(MATERIAL_OPTIONS);
@@ -131,7 +138,8 @@ function finalizeJoinedGeometry(
 
 async function createContourGeometry(
   contour: NormalizedContour,
-  params: Readonly<CookieCutterParams>
+  params: Readonly<CookieCutterParams>,
+  scale: number
 ): Promise<THREE.BufferGeometry> {
   const activeHandle = hasActiveHandle(params);
   const joinStyle = 'miter';
@@ -139,7 +147,7 @@ async function createContourGeometry(
     wallThickness: params.wallThickness,
     height: params.cuttingHeight,
     taperAngle: params.taperAngle,
-    scale: params.scale,
+    scale,
     joinStyle,
     capTop: !activeHandle
   });
@@ -162,7 +170,7 @@ async function createContourGeometry(
       wallThickness: seamWallThickness,
       height: handleHeight,
       taperAngle: handleTaperAngle,
-      scale: params.scale,
+      scale,
       baseHeight: params.cuttingHeight,
       joinStyle,
       capBottom: false
@@ -173,6 +181,118 @@ async function createContourGeometry(
     body.dispose();
     handle?.dispose();
   }
+}
+
+function selectedPlanarDimension(
+  width: number,
+  height: number,
+  mode: SizeMode
+): number {
+  if (mode === 'width') return width;
+  if (mode === 'height') return height;
+  return Math.max(width, height);
+}
+
+function sourceDimension(
+  contours: ReadonlyArray<NormalizedContour>,
+  mode: SizeMode
+): number {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const contour of contours) {
+    for (const point of contour) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+  }
+
+  const dimension = selectedPlanarDimension(maxX - minX, maxY - minY, mode);
+  if (!Number.isFinite(dimension) || dimension <= 0) {
+    throw new CutterGenerationError(
+      'INVALID_GEOMETRY',
+      'The artwork has no measurable planar dimension.',
+      { field: 'targetSize', sizeMode: mode }
+    );
+  }
+
+  return dimension;
+}
+
+function measuredPlanarDimension(group: THREE.Group, mode: SizeMode): number {
+  const size = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
+  return selectedPlanarDimension(size.x, size.z, mode);
+}
+
+async function buildCutterGroup(
+  contours: ReadonlyArray<NormalizedContour>,
+  params: Readonly<CookieCutterParams>,
+  scale: number
+): Promise<THREE.Group> {
+  const group = new THREE.Group();
+  group.name = 'cookieCutter';
+
+  try {
+    for (let index = 0; index < contours.length; index += 1) {
+      const geometry = await createContourGeometry(contours[index], params, scale);
+      const mesh = new THREE.Mesh(geometry, createCutterMaterial());
+      mesh.name = `cutter-body-${index}`;
+      mesh.userData.contourIndex = index;
+      group.add(mesh);
+    }
+
+    return group;
+  } catch (error) {
+    disposeGroup(group);
+    throw error;
+  }
+}
+
+async function buildFittedCutterGroup(
+  contours: ReadonlyArray<NormalizedContour>,
+  params: Readonly<CookieCutterParams>
+): Promise<{ group: THREE.Group; scale: number }> {
+  let scale = params.targetSize / sourceDimension(contours, params.sizeMode);
+  const tolerance = Math.max(0.02, params.targetSize * 0.0005);
+
+  for (let iteration = 0; iteration < SIZE_FIT_MAX_ITERATIONS; iteration += 1) {
+    if (!Number.isFinite(scale) || scale < SIZE_FIT_MIN_SCALE) {
+      throw new CutterGenerationError(
+        'INVALID_GEOMETRY',
+        'The requested physical size is too small for the selected wall and handle.',
+        { field: 'targetSize', targetSize: params.targetSize }
+      );
+    }
+
+    const group = await buildCutterGroup(contours, params, scale);
+    const measured = measuredPlanarDimension(group, params.sizeMode);
+    const difference = Math.abs(measured - params.targetSize);
+
+    if (Number.isFinite(measured) && measured > 0 && difference <= tolerance) {
+      return { group, scale };
+    }
+
+    disposeGroup(group);
+    if (!Number.isFinite(measured) || measured <= 0) {
+      throw new CutterGenerationError(
+        'INVALID_GEOMETRY',
+        'The generated cutter has no measurable planar dimension.',
+        { field: 'targetSize', measured }
+      );
+    }
+
+    scale *= params.targetSize / measured;
+  }
+
+  throw new CutterGenerationError(
+    'INVALID_GEOMETRY',
+    'The cutter could not converge to the requested physical size.',
+    { field: 'targetSize', targetSize: params.targetSize, sizeMode: params.sizeMode }
+  );
 }
 
 function assertFitsBuildPlate(
@@ -193,7 +313,7 @@ function assertFitsBuildPlate(
   if (size.x > params.buildPlateSize || size.z > params.buildPlateSize) {
     throw new CutterGenerationError(
       'INVALID_GEOMETRY',
-      'The cutter does not fit on the selected build plate. Reduce the scale or choose a larger plate.',
+      'The cutter does not fit on the selected build plate. Reduce the target size or choose a larger plate.',
       {
         field: 'buildPlateSize',
         width: size.x,
@@ -215,17 +335,11 @@ export async function generateCookieCutter(
 ): Promise<THREE.Group> {
   const params = validateCookieCutterParams(paramsValue);
   const contours = extractClosedContours(svgString);
-  const group = new THREE.Group();
-  group.name = 'cookieCutter';
+  let group: THREE.Group | null = null;
 
   try {
-    for (let index = 0; index < contours.length; index += 1) {
-      const geometry = await createContourGeometry(contours[index], params);
-      const mesh = new THREE.Mesh(geometry, createCutterMaterial());
-      mesh.name = `cutter-body-${index}`;
-      mesh.userData.contourIndex = index;
-      group.add(mesh);
-    }
+    const fitted = await buildFittedCutterGroup(contours, params);
+    group = fitted.group;
 
     const bounds = assertFitsBuildPlate(group, params);
     const center = bounds.getCenter(new THREE.Vector3());
@@ -241,11 +355,20 @@ export async function generateCookieCutter(
       );
     }
 
+    const finalSize = centeredBounds.getSize(new THREE.Vector3());
     group.userData.params = { ...params };
     group.userData.contourCount = contours.length;
+    group.userData.effectiveScale = fitted.scale;
+    group.userData.dimensions = Object.freeze({
+      width: finalSize.x,
+      depth: finalSize.z,
+      height: finalSize.y,
+      targetSize: params.targetSize,
+      sizeMode: params.sizeMode
+    });
     return group;
   } catch (error) {
-    disposeGroup(group);
+    if (group) disposeGroup(group);
 
     if (error instanceof CutterGenerationError) throw error;
     throw new CutterGenerationError(

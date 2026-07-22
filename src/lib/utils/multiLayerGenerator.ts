@@ -61,7 +61,7 @@ async function generateLayerMesh(
       break;
 
     case 'stamp':
-      geometry = createStampGeometry(shapes[0], layer.depth, params.scale);
+      geometry = createStampGeometry(shapes[0], layer.depth, params.targetSize / 100);
       material = new THREE.MeshStandardMaterial({
         color: 0xffb74d,
         roughness: 0.6,
@@ -70,7 +70,7 @@ async function generateLayerMesh(
       break;
 
     case 'emboss':
-      geometry = createEmbossGeometry(shapes[0], layer.depth, params.scale);
+      geometry = createEmbossGeometry(shapes[0], layer.depth, params.targetSize / 100);
       material = new THREE.MeshStandardMaterial({
         color: 0xff9800,
         roughness: 0.7,
@@ -109,8 +109,9 @@ function createCutterGeometry(
 
   const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
 
-  if (params.scale !== 1.0) {
-    geometry.scale(params.scale, params.scale, params.scale);
+  const physicalScale = params.targetSize / 100;
+  if (physicalScale !== 1.0) {
+    geometry.scale(physicalScale, physicalScale, physicalScale);
   }
 
   return geometry;

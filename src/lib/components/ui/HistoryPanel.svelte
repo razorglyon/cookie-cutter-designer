@@ -125,10 +125,12 @@
   .history-panel {
     display: flex;
     position: sticky;
-    bottom: 0;
+    top: 0;
     z-index: var(--z-dropdown);
     flex-direction: column;
     gap: var(--spacing-2);
+    width: 100%;
+    min-width: 0;
   }
 
   .history-controls {
@@ -139,6 +141,8 @@
     border-radius: var(--radius-lg);
     background: var(--surface-elevated);
     box-shadow: var(--shadow-sm);
+    width: 100%;
+    min-width: 0;
   }
 
   .control-btn {
@@ -153,6 +157,8 @@
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    min-width: 0;
+    min-height: 44px;
   }
 
   .control-btn:hover:not(:disabled) {
@@ -168,6 +174,7 @@
 
   .control-btn.info-btn {
     margin-left: auto;
+    flex: 0 0 auto;
   }
 
   .history-count {
@@ -183,7 +190,7 @@
   }
 
   .history-list {
-    max-height: 300px;
+    max-height: min(300px, 40vh);
     padding: var(--spacing-4);
     overflow-y: auto;
     border: 1px solid var(--border-default);
@@ -246,5 +253,28 @@
     margin-top: var(--spacing-1);
     color: var(--text-muted);
     font-size: var(--font-size-xs);
+  }
+
+  @media (max-width: 480px) {
+    .history-controls {
+      gap: var(--spacing-1);
+      padding: var(--spacing-1);
+    }
+
+    .control-btn:not(.info-btn) {
+      flex: 1;
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 340px) {
+    .btn-label {
+      display: none;
+    }
+
+    .control-btn:not(.info-btn) {
+      flex: 0 0 44px;
+      padding: var(--spacing-2);
+    }
   }
 </style>

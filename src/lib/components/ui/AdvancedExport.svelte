@@ -1,14 +1,10 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import type { Mesh, Group } from 'three';
   import {
     exportToOBJ,
     exportTo3MF,
-    exportToGCODE,
-    getDefaultPrinterProfiles,
     estimateExportSize,
-    type ExportFormat,
-    type PrinterProfile
+    type ExportFormat
   } from '../../utils/advancedExporter';
   import { exportToSTL } from '../../utils/stlExporter';
   import type { CookieCutterParams } from '../../types/CookieCutter';
@@ -19,17 +15,12 @@
 
   let showPanel = false;
   let selectedFormat: ExportFormat = 'stl';
-  let selectedProfile: PrinterProfile = getDefaultPrinterProfiles()[0];
   let binaryFormat = true;
-  let includeMetadata = true;
-
-  const printerProfiles = getDefaultPrinterProfiles();
 
   const formats = [
-    { id: 'stl' as ExportFormat, name: 'STL', icon: '📦', description: 'Standard Tessellation Language (most common)' },
-    { id: 'obj' as ExportFormat, name: 'OBJ', icon: '🔷', description: 'Wavefront Object (compatible with many tools)' },
-    { id: '3mf' as ExportFormat, name: '3MF', icon: '📐', description: '3D Manufacturing Format (modern, with metadata)' },
-    { id: 'gcode' as ExportFormat, name: 'GCODE', icon: '⚙️', description: 'Direct printer instructions (ready to print)' }
+    { id: 'stl' as ExportFormat, name: 'STL', icon: '📦', description: 'Validated mesh in slicer-compatible Z-up coordinates' },
+    { id: 'obj' as ExportFormat, name: 'OBJ', icon: '🔷', description: 'Validated Wavefront mesh for compatible 3D tools' },
+    { id: '3mf' as ExportFormat, name: '3MF', icon: '📐', description: 'Standards-compliant package with millimeter units and metadata' }
   ];
 
   function handleExport() {
@@ -39,16 +30,13 @@
 
     switch (selectedFormat) {
       case 'stl':
-        exportToSTL(mesh, `${exportFilename}.stl`, { binary: binaryFormat, includeMetadata });
+        exportToSTL(mesh, `${exportFilename}.stl`, { binary: binaryFormat });
         break;
       case 'obj':
         exportToOBJ(mesh, `${exportFilename}.obj`);
         break;
       case '3mf':
         exportTo3MF(mesh, `${exportFilename}.3mf`, params);
-        break;
-      case 'gcode':
-        exportToGCODE(mesh, `${exportFilename}.gcode`, selectedProfile, params);
         break;
     }
   }
@@ -100,58 +88,15 @@
             <input type="checkbox" bind:checked={binaryFormat} />
             <span>Binary Format (smaller file size)</span>
           </label>
-          <label class="checkbox-option">
-            <input type="checkbox" bind:checked={includeMetadata} />
-            <span>Include Metadata</span>
-          </label>
+          <p class="format-note">
+            STL files are unitless; this application exports dimensions for slicers that interpret them as millimeters.
+          </p>
         </div>
       {/if}
 
-      {#if selectedFormat === 'gcode'}
-        <div class="printer-section">
-          <h4>Printer Profile</h4>
-          <div class="profile-selector">
-            {#each printerProfiles as profile}
-              <button
-                class="profile-btn"
-                class:selected={selectedProfile.name === profile.name}
-                on:click={() => selectedProfile = profile}
-              >
-                <div class="profile-name">{profile.name}</div>
-                <div class="profile-specs">
-                  {profile.bedSize.x}×{profile.bedSize.y}mm | {profile.nozzleDiameter}mm nozzle
-                </div>
-              </button>
-            {/each}
-          </div>
-
-          <div class="profile-details">
-            <h5>Profile Settings</h5>
-            <div class="details-grid">
-              <div class="detail">
-                <span class="detail-label">Bed Size:</span>
-                <span class="detail-value">
-                  {selectedProfile.bedSize.x}×{selectedProfile.bedSize.y}×{selectedProfile.bedSize.z}mm
-                </span>
-              </div>
-              <div class="detail">
-                <span class="detail-label">Nozzle:</span>
-                <span class="detail-value">{selectedProfile.nozzleDiameter}mm</span>
-              </div>
-              <div class="detail">
-                <span class="detail-label">Temp:</span>
-                <span class="detail-value">
-                  {selectedProfile.temperature.nozzle}°C / {selectedProfile.temperature.bed}°C
-                </span>
-              </div>
-              <div class="detail">
-                <span class="detail-label">Layer Height:</span>
-                <span class="detail-value">{selectedProfile.layerHeight}mm</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
+      <p class="slicer-note">
+        Generate printer-specific G-code with a trusted slicer such as OrcaSlicer, PrusaSlicer, Bambu Studio, or Cura.
+      </p>
 
       <!-- Export Info -->
       <div class="export-info">
@@ -209,12 +154,6 @@
     font-weight: 600;
   }
 
-  h5 {
-    margin: 0 0 0.5rem;
-    font-size: 0.85rem;
-    color: #4a5568;
-    font-weight: 600;
-  }
 
   .toggle-btn {
     width: 24px;
@@ -236,8 +175,7 @@
   }
 
   .format-section,
-  .options-section,
-  .printer-section {
+  .options-section {
     padding: 1rem;
     background: #f7fafc;
     border-radius: 6px;
@@ -319,71 +257,20 @@
     color: #4a5568;
   }
 
-  .profile-selector {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
 
-  .profile-btn {
-    padding: 0.75rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-align: left;
-  }
-
-  .profile-btn:hover {
-    border-color: #4299e1;
-  }
-
-  .profile-btn.selected {
-    border-color: #4299e1;
-    background: #ebf8ff;
-  }
-
-  .profile-name {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #2d3748;
-    margin-bottom: 0.25rem;
-  }
-
-  .profile-specs {
+  .format-note,
+  .slicer-note {
+    margin: 0.75rem 0 0;
+    color: var(--text-muted);
     font-size: 0.8rem;
-    color: #718096;
+    line-height: 1.45;
   }
 
-  .profile-details {
-    padding: 1rem;
-    background: white;
+  .slicer-note {
+    padding: 0.75rem;
+    border: 1px solid var(--border-subtle);
     border-radius: 6px;
-  }
-
-  .details-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-  }
-
-  .detail {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .detail-label {
-    font-size: 0.75rem;
-    color: #a0aec0;
-    text-transform: uppercase;
-  }
-
-  .detail-value {
-    font-size: 0.9rem;
-    color: #2d3748;
-    font-weight: 600;
+    background: var(--surface-muted);
   }
 
   .export-info {

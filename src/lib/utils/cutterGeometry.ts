@@ -364,7 +364,6 @@ function addLoopSides(
   indices: number[],
   positions: readonly THREE.Vector3[],
   loop: IndexedLoopPair,
-  center: Readonly<Point2D>,
   inner: boolean
 ): void {
   for (let index = 0; index < loop.bottomIndices.length; index += 1) {
@@ -373,10 +372,11 @@ function addLoopSides(
     const bottomNext = loop.bottomIndices[next];
     const topCurrent = loop.topIndices[index];
     const topNext = loop.topIndices[next];
-    const midpoint = positions[bottomCurrent].clone().add(positions[bottomNext]).multiplyScalar(0.5);
+    const edgeX = positions[bottomNext].x - positions[bottomCurrent].x;
+    const edgeZ = positions[bottomNext].z - positions[bottomCurrent].z;
     const desiredNormal = inner
-      ? new THREE.Vector3(center.x - midpoint.x, 0, center.y - midpoint.z)
-      : new THREE.Vector3(midpoint.x - center.x, 0, midpoint.z - center.y);
+      ? new THREE.Vector3(-edgeZ, 0, edgeX)
+      : new THREE.Vector3(edgeZ, 0, -edgeX);
 
     addOrientedTriangle(
       indices,
@@ -448,7 +448,6 @@ function addRegionPair(
     indices,
     positions,
     outerLoop,
-    polygonCentroid(pair.bottom.outer),
     false
   );
 
@@ -457,7 +456,6 @@ function addRegionPair(
       indices,
       positions,
       holeLoops[index],
-      polygonCentroid(holePairs[index][0]),
       true
     );
   }

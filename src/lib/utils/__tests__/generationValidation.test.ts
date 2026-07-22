@@ -6,6 +6,7 @@ import {
   parameterError,
   params,
   printability,
+  migrateLegacyCookieCutterParams,
   resetParams,
   setParams,
   updateParam,
@@ -76,8 +77,8 @@ describe('GENERATION_LIMITS', () => {
       maxTotalHeight: 150,
       minTaperAngle: 0,
       maxTaperAngle: 30,
-      minScale: 0.01,
-      maxScale: 100,
+      minTargetSize: 10,
+      maxTargetSize: 1000,
       minHandleHeight: 0,
       maxHandleHeight: 100,
       minBuildPlateSize: 20,
@@ -107,7 +108,7 @@ describe('validateCookieCutterParams', () => {
         cuttingHeight: 1,
         totalHeight: 1,
         taperAngle: 0,
-        scale: 0.01,
+        targetSize: 10,
         enableHandle: false,
         handleHeight: 0,
         buildPlateSize: 20,
@@ -124,7 +125,7 @@ describe('validateCookieCutterParams', () => {
         cuttingHeight: 100,
         totalHeight: 150,
         taperAngle: 30,
-        scale: 100,
+        targetSize: 1000,
         handleStyle: 'none',
         handleHeight: 100,
         buildPlateSize: 1000,
@@ -134,10 +135,10 @@ describe('validateCookieCutterParams', () => {
     ).not.toThrow();
   });
 
-  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
-    'rejects invalid scale %s instead of clamping it',
-    (scale) => {
-      expectInvalidParams({ ...validParams(), scale }, 'scale');
+  it.each([0, -1, 9.99, 1000.01, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid target size %s instead of clamping it',
+    (targetSize) => {
+      expectInvalidParams({ ...validParams(), targetSize }, 'targetSize');
     }
   );
 
@@ -177,6 +178,26 @@ describe('validateCookieCutterParams', () => {
     );
 
     expect(validationError.message).toMatch(/cuttingHeight.*handleHeight/i);
+  });
+
+  it('does not apply cutter height coupling to Stamp mode', () => {
+    expect(() =>
+      validateCookieCutterParams({
+        ...validParams(),
+        mode: 'stamp',
+        stampBase: true,
+        cuttingHeight: 100,
+        totalHeight: 1,
+        handleHeight: 100
+      })
+    ).not.toThrow();
+  });
+
+  it('rejects baseless Stamp mode because it cannot guarantee one connected tool', () => {
+    expectInvalidParams(
+      { ...validParams(), mode: 'stamp', stampBase: false },
+      'stampBase'
+    );
   });
 
   it('does not reserve handle height when the handle style is none', () => {
@@ -227,7 +248,8 @@ describe('validateCookieCutterParams', () => {
 
   it.each([
     ['handleStyle', 'rounded'],
-    ['mode', 'laser']
+    ['mode', 'laser'],
+    ['sizeMode', 'diagonal']
   ])('rejects unknown %s enum values', (field, value) => {
     expectInvalidParams({ ...validParams(), [field]: value }, field);
   });
@@ -246,17 +268,33 @@ describe('validateCookieCutterParams', () => {
     expectInvalidParams([], 'params');
 
     const incomplete: Record<string, unknown> = { ...validParams() };
-    delete incomplete.scale;
-    expectInvalidParams(incomplete, 'scale');
+    delete incomplete.targetSize;
+    expectInvalidParams(incomplete, 'targetSize');
 
     expectInvalidParams({ ...validParams(), unexpected: true }, 'unexpected');
   });
 
   it('never silently falls back for an invalid value', () => {
-    const source = { ...validParams(), scale: undefined };
+    const source = { ...validParams(), targetSize: undefined };
 
-    expectInvalidParams(source, 'scale');
-    expect(source.scale).toBeUndefined();
+    expectInvalidParams(source, 'targetSize');
+    expect(source.targetSize).toBeUndefined();
+  });
+});
+
+describe('legacy parameter migration', () => {
+  it('converts percentage scale into an explicit millimeter target', () => {
+    const legacy: Record<string, unknown> = { ...validParams(), scale: 1.2 };
+    delete legacy.targetSize;
+    delete legacy.sizeMode;
+
+    expect(migrateLegacyCookieCutterParams(legacy)).toMatchObject({
+      targetSize: 90,
+      sizeMode: 'longest'
+    });
+
+    setParams(legacy);
+    expect(get(params)).toMatchObject({ targetSize: 90, sizeMode: 'longest' });
   });
 });
 
@@ -279,22 +317,22 @@ describe('cookieCutterStore parameter safety', () => {
   });
 
   it('stores validated copies without retaining the caller object', () => {
-    const input = { ...validParams(), scale: 2 };
+    const input = { ...validParams(), targetSize: 80 };
 
     setParams(input);
     const stored = get(params);
-    input.scale = 3;
+    input.targetSize = 90;
 
     expect(stored).not.toBe(input);
-    expect(stored.scale).toBe(2);
+    expect(stored.targetSize).toBe(80);
     expect(Object.isFrozen(stored)).toBe(true);
   });
 
   it('preserves the previous snapshot when setParams rejects input', () => {
-    setParams({ ...validParams(), scale: 2 });
+    setParams({ ...validParams(), targetSize: 80 });
     const before = get(params);
 
-    expect(() => setParams({ ...validParams(), scale: Number.NaN })).toThrow(
+    expect(() => setParams({ ...validParams(), targetSize: Number.NaN })).toThrow(
       CutterGenerationError
     );
     expect(get(params)).toBe(before);
@@ -316,12 +354,12 @@ describe('cookieCutterStore parameter safety', () => {
     error.set('Generation failed');
 
     expect(() => {
-      result = updateParam('scale', 0);
+      result = updateParam('targetSize', 0);
     }).not.toThrow();
 
     expect(result).toBe(false);
     expect(get(params)).toBe(before);
-    expect(get(parameterError)).toMatch(/scale/i);
+    expect(get(parameterError)).toMatch(/targetSize/i);
     expect(get(error)).toBe('Generation failed');
   });
 
@@ -336,12 +374,12 @@ describe('cookieCutterStore parameter safety', () => {
 
   it('clears only parameterError after a valid update', () => {
     error.set('Generation failed');
-    expect(updateParam('scale', 0)).toBe(false);
-    expect(get(parameterError)).toMatch(/scale/i);
+    expect(updateParam('targetSize', 0)).toBe(false);
+    expect(get(parameterError)).toMatch(/targetSize/i);
 
-    expect(updateParam('scale', 2)).toBe(true);
+    expect(updateParam('targetSize', 80)).toBe(true);
 
-    expect(get(params).scale).toBe(2);
+    expect(get(params).targetSize).toBe(80);
     expect(get(parameterError)).toBeNull();
     expect(get(error)).toBe('Generation failed');
   });
@@ -456,11 +494,11 @@ describe('cookieCutterStore parameter safety', () => {
   it('rejects an invalid optimizer patch atomically and preserves snapshot identity', () => {
     const before = get(params);
 
-    expect(updateParams({ wallThickness: 1.2, scale: 0 })).toBe(false);
+    expect(updateParams({ wallThickness: 1.2, targetSize: 0 })).toBe(false);
 
     expect(get(params)).toBe(before);
     expect(get(params).wallThickness).toBe(DEFAULT_PARAMS.wallThickness);
-    expect(get(parameterError)).toMatch(/scale/i);
+    expect(get(parameterError)).toMatch(/targetSize/i);
   });
 
   it('refuses an explicitly low totalHeight in a multi-parameter patch', () => {
@@ -473,7 +511,7 @@ describe('cookieCutterStore parameter safety', () => {
   });
 
   it('resets to a fresh default snapshot without sharing DEFAULT_PARAMS', () => {
-    setParams({ ...validParams(), scale: 2 });
+    setParams({ ...validParams(), targetSize: 80 });
     parameterError.set('Previous parameter error');
 
     resetParams();

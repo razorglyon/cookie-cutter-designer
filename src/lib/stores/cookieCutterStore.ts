@@ -11,6 +11,24 @@ function createDefaultParams(): Readonly<CookieCutterParams> {
   return Object.freeze({ ...DEFAULT_PARAMS });
 }
 
+/** Convert persisted pre-mm settings without weakening runtime validation. */
+export function migrateLegacyCookieCutterParams(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const source = value as Record<string, unknown>;
+  if ('targetSize' in source && 'sizeMode' in source) return value;
+  if (!('scale' in source) || typeof source.scale !== 'number' || !Number.isFinite(source.scale)) {
+    return value;
+  }
+
+  const { scale, ...rest } = source;
+  return {
+    ...rest,
+    targetSize: DEFAULT_PARAMS.targetSize * scale,
+    sizeMode: 'longest'
+  };
+}
+
 // Parameters store
 const paramsStore = writable<Readonly<CookieCutterParams>>(createDefaultParams());
 export const params: Readable<Readonly<CookieCutterParams>> = readonly(paramsStore);
@@ -109,6 +127,7 @@ export function checkPrintability(value: unknown): PrintabilityCheck {
 }
 
 function minimumTotalHeight(value: Readonly<CookieCutterParams>): number {
+  if (value.mode === 'stamp') return value.totalHeight;
   const activeHandle = value.enableHandle && value.handleStyle !== 'none';
   return value.cuttingHeight + (activeHandle ? value.handleHeight : 0);
 }
@@ -190,7 +209,7 @@ export function updateParams(patch: Partial<CookieCutterParams>): boolean {
 }
 
 export function setParams(value: unknown) {
-  const validated = validateCookieCutterParams(value);
+  const validated = validateCookieCutterParams(migrateLegacyCookieCutterParams(value));
   paramsStore.set(validated);
   parameterError.set(null);
 }

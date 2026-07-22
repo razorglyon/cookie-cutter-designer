@@ -27,6 +27,9 @@ function bundleBudget(): Plugin {
 export default defineConfig({
   plugins: [svelte(), bundleBudget()],
   base: '/cookie-cutter-designer/',
+  preview: {
+    allowedHosts: ['cookie-cutter-dev.tail218fe6.ts.net']
+  },
   build: {
     // Three.js and the Clipper WASM runtime are isolated, cached async dependencies.
     chunkSizeWarningLimit: 600,

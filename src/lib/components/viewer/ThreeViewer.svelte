@@ -25,9 +25,14 @@
   let selectionMode = false;
   let renderedBuildPlateSize = buildPlateSize;
   let themeObserver: MutationObserver | undefined;
+  let resizeObserver: ResizeObserver | undefined;
 
   onMount(() => {
     initThree();
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => handleResize());
+      resizeObserver.observe(container);
+    }
     themeObserver = new MutationObserver(applySceneTheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     animate();
@@ -41,6 +46,7 @@
     displayedMesh = null;
 
     window.removeEventListener('resize', handleResize);
+    resizeObserver?.disconnect();
     themeObserver?.disconnect();
     renderer?.domElement.removeEventListener('click', handleClick);
     controls?.dispose();
@@ -117,7 +123,7 @@
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
@@ -271,19 +277,25 @@
       class:active={selectionMode}
       on:click={toggleSelectionMode}
       title={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
+      aria-label={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
       aria-pressed={selectionMode}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
       </svg>
-      {selectionMode ? 'Finish selecting' : 'Select part'}
+      <span class="control-label">{selectionMode ? 'Finish selecting' : 'Select part'}</span>
     </button>
 
-    <button class="control-btn" on:click={fitCurrentView} title="Fit model in view">
+    <button
+      class="control-btn"
+      on:click={fitCurrentView}
+      title="Fit model in view"
+      aria-label="Fit model in view"
+    >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
       </svg>
-      Fit view
+      <span class="control-label">Fit view</span>
     </button>
 
     {#if selectionMode && selectedObject}
@@ -291,12 +303,13 @@
         class="control-btn delete-btn"
         on:click={deleteSelected}
         title="Delete selected element"
+        aria-label="Delete selected element"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
-        Delete
+        <span class="control-label">Delete</span>
       </button>
     {/if}
 
@@ -312,6 +325,8 @@
   .viewer-wrapper {
     width: 100%;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
     position: relative;
   }
 
@@ -320,6 +335,7 @@
     height: 100%;
     position: relative;
     overflow: hidden;
+    touch-action: none;
   }
 
   :global(.viewer-container canvas) {
@@ -329,6 +345,7 @@
   .controls-overlay {
     position: absolute;
     top: 1rem;
+    right: 1rem;
     left: 1rem;
     display: flex;
     flex-direction: column;
@@ -350,6 +367,9 @@
     cursor: pointer;
     transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
     box-shadow: var(--shadow-sm);
+    min-height: 44px;
+    width: max-content;
+    max-width: 100%;
   }
 
   .control-btn:hover {
@@ -382,5 +402,32 @@
     font-size: var(--font-size-xs);
     color: var(--text-muted);
     box-shadow: var(--shadow-sm);
+  }
+
+  @media (max-width: 480px) {
+    .controls-overlay {
+      top: var(--spacing-2);
+      right: var(--spacing-2);
+      left: var(--spacing-2);
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: var(--spacing-1);
+    }
+
+    .control-btn {
+      width: 44px;
+      min-width: 44px;
+      padding: var(--spacing-2);
+      justify-content: center;
+    }
+
+    .control-label {
+      display: none;
+    }
+
+    .selection-hint {
+      flex-basis: 100%;
+      width: 100%;
+    }
   }
 </style>

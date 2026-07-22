@@ -1,331 +1,283 @@
+import { strToU8, zipSync } from 'fflate';
 import * as THREE from 'three';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
-import type { Mesh, Group } from 'three';
 import type { CookieCutterParams } from '../types/CookieCutter';
+import { CutterGenerationError } from './generationValidation';
+import { validatePrintableObject } from './geometryValidation';
+import { cloneForManufacturing } from './manufacturingCoordinates';
 
-export type ExportFormat = 'stl' | 'obj' | '3mf' | 'gcode';
+export type ExportFormat = 'stl' | 'obj' | '3mf';
 
-export interface ExportOptions {
-  format: ExportFormat;
-  binary: boolean;
-  includeMetadata: boolean;
-  printerProfile?: PrinterProfile;
+const MODEL_CONTENT_TYPE =
+  'application/vnd.ms-package.3dmanufacturing-3dmodel+xml';
+const THREE_MF_MIME_TYPE = 'model/3mf';
+const CUSTOM_METADATA_NAMESPACE =
+  'https://cookie-cutter-designer.app/3mf/metadata/2026';
+
+interface ModelVertex {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
 }
 
-export interface PrinterProfile {
-  name: string;
-  bedSize: { x: number; y: number; z: number };
-  nozzleDiameter: number;
-  filamentDiameter: number;
-  printSpeed: number;
-  travelSpeed: number;
-  retraction: { distance: number; speed: number };
-  temperature: { nozzle: number; bed: number };
-  layerHeight: number;
+interface ModelTriangle {
+  readonly v1: number;
+  readonly v2: number;
+  readonly v3: number;
 }
 
-/**
- * Export to OBJ format
- */
-export function exportToOBJ(object: Mesh | Group, filename: string): void {
-  const exporter = new OBJExporter();
-  const result = exporter.parse(object);
-
-  downloadFile(result, filename, 'text/plain');
+interface ModelMesh {
+  readonly id: number;
+  readonly vertices: readonly ModelVertex[];
+  readonly triangles: readonly ModelTriangle[];
 }
 
-/**
- * Export to 3MF format (simplified XML-based format)
- */
-export function exportTo3MF(object: Mesh | Group, filename: string, params: CookieCutterParams): void {
-  const vertices: number[] = [];
-  const triangles: number[][] = [];
-  let vertexOffset = 0;
+function exportFailure(
+  message: string,
+  details: Readonly<Record<string, unknown>>
+): never {
+  throw new CutterGenerationError('EXPORT_FAILED', message, details);
+}
 
-  // Collect all vertices and triangles
+function validatedManufacturingObject(object: THREE.Object3D): THREE.Group {
+  const sourceReport = validatePrintableObject(object);
+  if (!sourceReport.valid) {
+    exportFailure(`Export blocked: ${sourceReport.errors[0]}`, {
+      errors: sourceReport.errors,
+      triangles: sourceReport.triangles,
+      shells: sourceReport.shells,
+      meshes: sourceReport.meshes,
+      volume: sourceReport.volume
+    });
+  }
+
+  const manufacturingObject = cloneForManufacturing(object);
+  const report = validatePrintableObject(manufacturingObject);
+
+  if (!report.valid) {
+    exportFailure(`Export blocked: ${report.errors[0]}`, {
+      errors: report.errors,
+      triangles: report.triangles,
+      shells: report.shells,
+      meshes: report.meshes,
+      volume: report.volume
+    });
+  }
+
+  return manufacturingObject;
+}
+
+function finiteCoordinate(value: number): number {
+  if (!Number.isFinite(value)) {
+    exportFailure('The manufacturing model contains a non-finite coordinate.', {
+      value
+    });
+  }
+
+  if (Math.abs(value) < 1e-9) return 0;
+  return Number(value.toPrecision(10));
+}
+
+function coordinateKey(vertex: ModelVertex): string {
+  return `${vertex.x}:${vertex.y}:${vertex.z}`;
+}
+
+function collectModelMeshes(object: THREE.Object3D): ModelMesh[] {
+  const meshes: ModelMesh[] = [];
+  const transformed = new THREE.Vector3();
+
+  object.updateMatrixWorld(true);
   object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.geometry) {
-      const geometry = child.geometry;
-      const positionAttribute = geometry.getAttribute('position');
+    if (!(child instanceof THREE.Mesh)) return;
 
-      if (!positionAttribute) return;
+    const position = child.geometry.getAttribute('position');
+    const index = child.geometry.getIndex();
+    if (!position) return;
 
-      const worldMatrix = child.matrixWorld;
+    const vertices: ModelVertex[] = [];
+    const triangles: ModelTriangle[] = [];
+    const vertexIndices = new Map<string, number>();
+    const elementCount = index ? index.count : position.count;
 
-      // Get vertices
-      for (let i = 0; i < positionAttribute.count; i++) {
-        const vertex = new THREE.Vector3(
-          positionAttribute.getX(i),
-          positionAttribute.getY(i),
-          positionAttribute.getZ(i)
-        );
-        vertex.applyMatrix4(worldMatrix);
-        vertices.push(vertex.x, vertex.y, vertex.z);
-      }
+    const addVertex = (positionIndex: number): number => {
+      transformed.fromBufferAttribute(position, positionIndex).applyMatrix4(child.matrixWorld);
+      const vertex: ModelVertex = {
+        x: finiteCoordinate(transformed.x),
+        y: finiteCoordinate(transformed.y),
+        z: finiteCoordinate(transformed.z)
+      };
+      const key = coordinateKey(vertex);
+      const existing = vertexIndices.get(key);
+      if (existing !== undefined) return existing;
 
-      // Get triangles
-      const index = geometry.index;
-      if (index) {
-        for (let i = 0; i < index.count; i += 3) {
-          triangles.push([
-            index.getX(i) + vertexOffset,
-            index.getX(i + 1) + vertexOffset,
-            index.getX(i + 2) + vertexOffset
-          ]);
-        }
-      } else {
-        for (let i = 0; i < positionAttribute.count; i += 3) {
-          triangles.push([
-            i + vertexOffset,
-            i + 1 + vertexOffset,
-            i + 2 + vertexOffset
-          ]);
-        }
-      }
+      const created = vertices.length;
+      vertices.push(vertex);
+      vertexIndices.set(key, created);
+      return created;
+    };
 
-      vertexOffset += positionAttribute.count;
+    for (let item = 0; item < elementCount; item += 3) {
+      const first = index ? index.getX(item) : item;
+      const second = index ? index.getX(item + 1) : item + 1;
+      const third = index ? index.getX(item + 2) : item + 2;
+      triangles.push({
+        v1: addVertex(first),
+        v2: addVertex(second),
+        v3: addVertex(third)
+      });
     }
+
+    meshes.push({ id: meshes.length + 1, vertices, triangles });
   });
 
-  // Generate 3MF XML
-  const xml = generate3MFContent(vertices, triangles, params);
+  if (meshes.length === 0) {
+    exportFailure('The manufacturing model contains no mesh.', {});
+  }
 
-  downloadFile(xml, filename, 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml');
+  return meshes;
 }
 
-/**
- * Generate 3MF XML content
- */
-function generate3MFContent(
-  vertices: number[],
-  triangles: number[][],
-  params: CookieCutterParams
-): string {
-  let vertexData = '';
-  for (let i = 0; i < vertices.length; i += 3) {
-    vertexData += `    <vertex x="${vertices[i].toFixed(3)}" y="${vertices[i + 1].toFixed(3)}" z="${vertices[i + 2].toFixed(3)}" />\n`;
-  }
+function modelMeshXML(mesh: ModelMesh): string {
+  const vertices = mesh.vertices
+    .map(
+      (vertex) =>
+        `          <vertex x="${vertex.x}" y="${vertex.y}" z="${vertex.z}"/>`
+    )
+    .join('\n');
+  const triangles = mesh.triangles
+    .map(
+      (triangle) =>
+        `          <triangle v1="${triangle.v1}" v2="${triangle.v2}" v3="${triangle.v3}"/>`
+    )
+    .join('\n');
 
-  let triangleData = '';
-  for (const triangle of triangles) {
-    triangleData += `    <triangle v1="${triangle[0]}" v2="${triangle[1]}" v3="${triangle[2]}" />\n`;
-  }
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
-  <metadata name="Title">Cookie Cutter</metadata>
-  <metadata name="Designer">Claude Code - Cookie Cutter Designer</metadata>
-  <metadata name="Description">Custom 3D-printable cookie cutter</metadata>
-  <metadata name="WallThickness">${params.wallThickness}</metadata>
-  <metadata name="CuttingHeight">${params.cuttingHeight}</metadata>
-  <resources>
-    <object id="1" type="model">
+  return `    <object id="${mesh.id}" type="model">
       <mesh>
         <vertices>
-${vertexData}
+${vertices}
         </vertices>
         <triangles>
-${triangleData}
+${triangles}
         </triangles>
       </mesh>
-    </object>
+    </object>`;
+}
+
+function generate3MFModel(
+  meshes: readonly ModelMesh[],
+  params: CookieCutterParams
+): string {
+  const resources = meshes.map(modelMeshXML).join('\n');
+  const buildItems = meshes
+    .map((mesh) => `    <item objectid="${mesh.id}"/>`)
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:ccd="${CUSTOM_METADATA_NAMESPACE}">
+  <metadata name="Title">Cookie Cutter</metadata>
+  <metadata name="Designer">Cookie Cutter Designer</metadata>
+  <metadata name="Description">Validated 3D-printable cookie cutter</metadata>
+  <metadata name="Application">Cookie Cutter Designer</metadata>
+  <metadata name="ccd:WallThickness" preserve="1">${params.wallThickness}</metadata>
+  <metadata name="ccd:CuttingHeight" preserve="1">${params.cuttingHeight}</metadata>
+  <resources>
+${resources}
   </resources>
   <build>
-    <item objectid="1" />
+${buildItems}
   </build>
 </model>`;
 }
 
-/**
- * Generate GCODE for direct printing
- */
-export function exportToGCODE(
-  object: Mesh | Group,
+function contentTypesXML(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Override PartName="/3D/3dmodel.model" ContentType="${MODEL_CONTENT_TYPE}"/>
+</Types>`;
+}
+
+function rootRelationshipsXML(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>`;
+}
+
+/** Serialize a validated object to a minimal 3MF Core OPC package. */
+export function serialize3MF(
+  object: THREE.Object3D,
+  params: CookieCutterParams
+): Uint8Array {
+  const manufacturingObject = validatedManufacturingObject(object);
+  const model = generate3MFModel(collectModelMeshes(manufacturingObject), params);
+
+  return zipSync(
+    {
+      '[Content_Types].xml': strToU8(contentTypesXML()),
+      '_rels/.rels': strToU8(rootRelationshipsXML()),
+      '3D/3dmodel.model': strToU8(model)
+    },
+    { level: 6 }
+  );
+}
+
+/** Serialize a validated object to OBJ in Z-up manufacturing coordinates. */
+export function serializeOBJ(object: THREE.Object3D): string {
+  return new OBJExporter().parse(validatedManufacturingObject(object));
+}
+
+export function exportToOBJ(object: THREE.Object3D, filename: string): void {
+  downloadBlob(new Blob([serializeOBJ(object)], { type: 'model/obj' }), filename);
+}
+
+export function exportTo3MF(
+  object: THREE.Object3D,
   filename: string,
-  profile: PrinterProfile,
   params: CookieCutterParams
 ): void {
-  const gcode = generateGCODE(object, profile, params);
-  downloadFile(gcode, filename, 'text/plain');
+  const archive = serialize3MF(object, params);
+  const ownedArchive = Uint8Array.from(archive);
+  downloadBlob(new Blob([ownedArchive], { type: THREE_MF_MIME_TYPE }), filename);
 }
 
-/**
- * Generate GCODE content
- */
-function generateGCODE(
-  object: Mesh | Group,
-  profile: PrinterProfile,
-  params: CookieCutterParams
-): string {
-  const lines: string[] = [];
-
-  // Header
-  lines.push('; GCODE generated by Cookie Cutter Designer');
-  lines.push('; https://claude.com/claude-code');
-  lines.push(`; Printer Profile: ${profile.name}`);
-  lines.push(`; Date: ${new Date().toISOString()}`);
-  lines.push('');
-
-  // Start GCODE
-  lines.push('; Start GCODE');
-  lines.push('G21 ; Set units to millimeters');
-  lines.push('G90 ; Use absolute positioning');
-  lines.push('M82 ; Use absolute distances for extrusion');
-  lines.push(`M104 S${profile.temperature.nozzle} ; Set nozzle temperature`);
-  lines.push(`M140 S${profile.temperature.bed} ; Set bed temperature`);
-  lines.push('M190 S' + profile.temperature.bed + ' ; Wait for bed temperature');
-  lines.push('M109 S' + profile.temperature.nozzle + ' ; Wait for nozzle temperature');
-  lines.push('G28 ; Home all axes');
-  lines.push('G1 Z15.0 F6000 ; Move the platform down 15mm');
-  lines.push('G92 E0 ; Reset extruder');
-  lines.push('G1 F200 E3 ; Extrude 3mm of filament');
-  lines.push('G92 E0 ; Reset extruder');
-  lines.push('');
-
-  // Calculate center position
-  const box = new THREE.Box3().setFromObject(object);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-
-  const startX = (profile.bedSize.x - size.x) / 2;
-  const startY = (profile.bedSize.y - size.y) / 2;
-
-  lines.push('; Print moves');
-  lines.push(`; Object size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} mm`);
-  lines.push(`; Estimated layers: ${Math.ceil(size.y / profile.layerHeight)}`);
-  lines.push('');
-
-  // Simple path generation (perimeter only for now)
-  const layerCount = Math.ceil(size.y / profile.layerHeight);
-  let e = 0; // Extrusion amount
-
-  for (let layer = 0; layer < layerCount; layer++) {
-    const z = layer * profile.layerHeight;
-    lines.push(`; Layer ${layer + 1}/${layerCount}`);
-    lines.push(`G0 Z${z.toFixed(3)} F${profile.travelSpeed}`);
-
-    // Simple square perimeter (placeholder - real slicing would be more complex)
-    const points = [
-      [startX, startY + z],
-      [startX + size.x, startY + z],
-      [startX + size.x, startY + size.z + z],
-      [startX, startY + size.z + z],
-      [startX, startY + z]
-    ];
-
-    for (let i = 0; i < points.length; i++) {
-      const [x, y] = points[i];
-      if (i === 0) {
-        lines.push(`G0 X${x.toFixed(3)} Y${y.toFixed(3)} F${profile.travelSpeed} ; Move to start`);
-      } else {
-        const distance = Math.sqrt(
-          Math.pow(points[i][0] - points[i - 1][0], 2) +
-          Math.pow(points[i][1] - points[i - 1][1], 2)
-        );
-        e += (distance * profile.layerHeight * profile.nozzleDiameter) /
-          (Math.PI * Math.pow(profile.filamentDiameter / 2, 2));
-        lines.push(`G1 X${x.toFixed(3)} Y${y.toFixed(3)} E${e.toFixed(5)} F${profile.printSpeed}`);
-      }
-    }
-    lines.push('');
-  }
-
-  // End GCODE
-  lines.push('; End GCODE');
-  lines.push('M104 S0 ; Turn off nozzle');
-  lines.push('M140 S0 ; Turn off bed');
-  lines.push('G91 ; Relative positioning');
-  lines.push('G1 E-2 F300 ; Retract filament');
-  lines.push('G1 Z10 F3000 ; Move Z up');
-  lines.push('G90 ; Absolute positioning');
-  lines.push('G28 X0 Y0 ; Home X and Y');
-  lines.push('M84 ; Disable steppers');
-  lines.push('; Total extrusion: ' + e.toFixed(2) + 'mm');
-
-  return lines.join('\n');
-}
-
-/**
- * Download file helper
- */
-function downloadFile(content: string, filename: string, mimeType: string): void {
-  const blob = new Blob([content], { type: mimeType });
+function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
+  document.body.appendChild(link);
+
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
 }
 
-/**
- * Get default printer profiles
- */
-export function getDefaultPrinterProfiles(): PrinterProfile[] {
-  return [
-    {
-      name: 'Prusa i3 MK3S',
-      bedSize: { x: 250, y: 210, z: 210 },
-      nozzleDiameter: 0.4,
-      filamentDiameter: 1.75,
-      printSpeed: 3000,
-      travelSpeed: 7200,
-      retraction: { distance: 0.8, speed: 2400 },
-      temperature: { nozzle: 215, bed: 60 },
-      layerHeight: 0.2
-    },
-    {
-      name: 'Creality Ender 3',
-      bedSize: { x: 220, y: 220, z: 250 },
-      nozzleDiameter: 0.4,
-      filamentDiameter: 1.75,
-      printSpeed: 3000,
-      travelSpeed: 6000,
-      retraction: { distance: 5, speed: 2700 },
-      temperature: { nozzle: 200, bed: 60 },
-      layerHeight: 0.2
-    },
-    {
-      name: 'Bambu Lab X1',
-      bedSize: { x: 256, y: 256, z: 256 },
-      nozzleDiameter: 0.4,
-      filamentDiameter: 1.75,
-      printSpeed: 12000,
-      travelSpeed: 30000,
-      retraction: { distance: 0.8, speed: 4200 },
-      temperature: { nozzle: 220, bed: 65 },
-      layerHeight: 0.2
-    }
-  ];
-}
-
-/**
- * Estimate file sizes for different formats
- */
-export function estimateExportSize(object: Mesh | Group, format: ExportFormat): number {
+/** Estimate output size for display only. */
+export function estimateExportSize(
+  object: THREE.Object3D,
+  format: ExportFormat
+): number {
   let triangleCount = 0;
 
   object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.geometry) {
-      const geometry = child.geometry;
-      if (geometry.index) {
-        triangleCount += geometry.index.count / 3;
-      } else if (geometry.attributes.position) {
-        triangleCount += geometry.attributes.position.count / 3;
-      }
-    }
+    if (!(child instanceof THREE.Mesh)) return;
+    const position = child.geometry.getAttribute('position');
+    if (!position) return;
+    triangleCount += child.geometry.index
+      ? child.geometry.index.count / 3
+      : position.count / 3;
   });
 
   switch (format) {
     case 'stl':
-      return 84 + triangleCount * 50; // Binary STL
+      return 84 + triangleCount * 50;
     case 'obj':
-      return triangleCount * 150; // Approximate text size
+      return triangleCount * 150;
     case '3mf':
-      return 1000 + triangleCount * 100; // XML overhead + triangle data
-    case 'gcode':
-      return triangleCount * 80; // Approximate GCODE size
-    default:
-      return 0;
+      return 600 + triangleCount * 35;
   }
 }
