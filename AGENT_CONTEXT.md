@@ -5,8 +5,8 @@
 - GitHub : `razorglyon/cookie-cutter-designer`
 - Clone persistant : `/workspace/cookie-cutter-designer`
 - Branche par défaut : `main`
-- Branche courante : `chore/refresh-dependencies` (destinée à `main`)
-- Branche de référence : `main` (`dea9e70` après fusion des PR #35 et #37)
+- Branche courante de référence : `main`
+- Dernière consolidation : PR #35 (pipeline/heatmap), PR #37 (`@tsconfig/svelte`) et PR #40 (dépendances cœur)
 - Push interdit sans GO explicite de Rza.
 
 ## Stack
@@ -55,8 +55,8 @@
 
 ## État actuel
 
-- Branche : `chore/refresh-dependencies` (destinée à `main`).
-- Dernière action : PR #35 fusionnée dans `main`, PR #37 intégrée, puis consolidation de Three.js `0.185.1`, `@types/node` `24.13.3` et `happy-dom` `20.11.1` dans une branche unique.
+- Branche : `main`.
+- Dernière action : intégration de Three.js `0.185.1`, `@types/node` `24.13.3` et `happy-dom` `20.11.1` après la fusion du pipeline print-ready et de la heatmap.
 - Heatmap : mesure par triangle entre contours opposés pendant la génération, propagée après fusion body/poignée dans `geometry.userData`, puis appliquée sur une copie non indexée réservée au viewer.
 - Rendu : bleu sous la cible, vert à la cible, orange au maximum mesuré; capots horizontaux neutres et couleurs lissées entre sommets latéraux partagés.
 - UI : toggle décoché par défaut, désactivé en mode Stamp, légende accessible `Target / Min / Max` en millimètres et restauration du matériau monochrome après désactivation.
@@ -72,8 +72,8 @@
 - Validation visuelle : Circle et Star validés en Cutter; dégradé latéral lissé, capots neutres, thèmes sombre/clair, 20 bascules successives, option désactivée en Stamp. Camofox ne redimensionne pas son viewport (`1860×992`), donc pas de nouvelle capture mobile spécifique à la heatmap.
 - Preview mobile privé : Tailscale Serve configuré en userspace sur `cookie-cutter-dev.tail218fe6.ts.net`; accès limité au tailnet.
 - Audit : aucune vulnérabilité connue au niveau `moderate` lors du dernier contrôle.
-- État Git : branche de dépendances validée localement ; fusion distante encore à réaliser.
-- À faire ensuite : fusionner la PR consolidée de dépendances, synchroniser `main` et confirmer zéro PR ouverte.
+- État Git : `main` consolidé via PR avec checks `validate` et GitGuardian réussis.
+- À faire ensuite : surveiller les prochains rapports Dependabot et traiter uniquement les mises à jour recréées depuis le manifeste courant.
 
 ## Décisions / pièges connus
 
