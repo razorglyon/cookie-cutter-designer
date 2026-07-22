@@ -5,8 +5,8 @@
 - GitHub : `razorglyon/cookie-cutter-designer`
 - Clone persistant : `/workspace/cookie-cutter-designer`
 - Branche par défaut : `main`
-- Branche courante : `feature/wall-thickness-heatmap`
-- Branche de départ : `fix/ux-ui-consistency`
+- Branche courante de référence : `main`
+- Dernière consolidation : PR #35 (pipeline/heatmap), PR #37 (`@tsconfig/svelte`) et PR #40 (dépendances cœur)
 - Push interdit sans GO explicite de Rza.
 
 ## Stack
@@ -55,8 +55,8 @@
 
 ## État actuel
 
-- Branche : `feature/wall-thickness-heatmap`.
-- Dernière action : ajout d’une heatmap optionnelle de l’épaisseur locale réelle sur les faces verticales du Cutter, sans modifier le STL.
+- Branche : `main`.
+- Dernière action : intégration de Three.js `0.185.1`, `@types/node` `24.13.3` et `happy-dom` `20.11.1` après la fusion du pipeline print-ready et de la heatmap.
 - Heatmap : mesure par triangle entre contours opposés pendant la génération, propagée après fusion body/poignée dans `geometry.userData`, puis appliquée sur une copie non indexée réservée au viewer.
 - Rendu : bleu sous la cible, vert à la cible, orange au maximum mesuré; capots horizontaux neutres et couleurs lissées entre sommets latéraux partagés.
 - UI : toggle décoché par défaut, désactivé en mode Stamp, légende accessible `Target / Min / Max` en millimètres et restauration du matériau monochrome après désactivation.
@@ -64,16 +64,16 @@
 - JSCAD : `@jscad/modeling` mis à jour de `2.12.6` à `2.13.0`; la mise à jour seule ne corrige pas le Heart, confirmé par un test rouge sans la réparation locale.
 - Régression Heart : forme intégrée à `75 mm`, relief `5 mm`, poignée ronde `8 mm`, hauteur finale `17 mm`, une mesh, un shell et export STL validé.
 - Responsive : header compact, navigation horizontale tactile, panneaux sans largeur desktop résiduelle, historique placé en haut, sliders 44 px et overlays 3D adaptés aux écrans étroits.
-- Tests : `216/216` réussis dans 22 fichiers avec `--maxWorkers=1`.
+- Tests : `216/216` réussis dans 22 fichiers avec `--maxWorkers=1` et Three.js `0.185.1`.
 - Typecheck : `0 erreur, 0 avertissement`.
 - Smoke exports : `3/3` réussis ; STL, OBJ et 3MF générés et validés.
-- Build : réussi en 14,76 s ; chunk d’entrée `138,97 kB`, sous la limite `200 KiB`.
+- Build : réussi en 14,50 s ; chunk d’entrée `138,97 kB`, sous la limite `200 KiB`.
 - Diff : `git diff --check` réussi.
 - Validation visuelle : Circle et Star validés en Cutter; dégradé latéral lissé, capots neutres, thèmes sombre/clair, 20 bascules successives, option désactivée en Stamp. Camofox ne redimensionne pas son viewport (`1860×992`), donc pas de nouvelle capture mobile spécifique à la heatmap.
 - Preview mobile privé : Tailscale Serve configuré en userspace sur `cookie-cutter-dev.tail218fe6.ts.net`; accès limité au tailnet.
 - Audit : aucune vulnérabilité connue au niveau `moderate` lors du dernier contrôle.
-- État Git : feature locale validée, sans commit et sans push.
-- À faire ensuite : présenter le diff final à Rza, puis créer le commit local uniquement après validation explicite.
+- État Git : `main` consolidé via PR avec checks `validate` et GitGuardian réussis.
+- À faire ensuite : surveiller les prochains rapports Dependabot et traiter uniquement les mises à jour recréées depuis le manifeste courant.
 
 ## Décisions / pièges connus
 
@@ -87,6 +87,7 @@
 - Pour les côtés concaves, orienter les triangles depuis la normale locale de l'arête, jamais depuis un centroïde supposé intérieur.
 - La heatmap transporte une valeur par triangle dans `BufferGeometry.userData`; l’export STL ignore cette métadonnée et le viewer clone géométrie/matériau avant d’ajouter les couleurs.
 - Les capots sont détectés par la normale géométrique de chaque triangle non indexé et restent neutres; seules les faces latérales contribuent au lissage par position partagée.
+- Protection de `main` : check strict `validate`, historique linéaire, force-push et suppression interdits ; aucune approbation externe obligatoire sur ce dépôt solo.
 - Un détail plus petit que les offsets de paroi peut changer la topologie : refuser explicitement plutôt que lisser silencieusement.
 - Stamp impose une base commune afin de connecter tous les reliefs; `modifiers.generalize` répare normalement les unions JSCAD avant triangulation.
 - Bug upstream JSCAD confirmé : l’union base/relief du Heart laisse deux trous triangulaires de `0,00004002825 mm²` sur le capot supérieur, même en `2.13.0` avec `simplify: true`.
