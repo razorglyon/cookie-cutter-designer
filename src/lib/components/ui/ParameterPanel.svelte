@@ -214,33 +214,12 @@
   <div class="param-group">
     <h3>Advanced</h3>
 
-    <div class="param-control checkbox">
-      <input
-        id="enableEmbossing"
-        type="checkbox"
-        checked={$params.enableEmbossing}
-        on:change={(e) => updateParam('enableEmbossing', e.currentTarget.checked)}
-      />
-      <label for="enableEmbossing">Enable Embossing/Stamp</label>
-    </div>
-
-    {#if $params.enableEmbossing}
-      <div class="param-control">
-        <label for="embossDepth">
-          Emboss Depth: {$params.embossDepth.toFixed(1)}mm
-        </label>
-        <input
-          id="embossDepth"
-          type="range"
-          min="1.0"
-          max="5.0"
-          step="0.5"
-          value={$params.embossDepth}
-          on:input={(e) => updateParam('embossDepth', parseFloat(e.currentTarget.value))}
-        />
-        <div class="param-hint">Typical: 2-3mm</div>
+    <div class="param-control">
+      <span class="control-label">Standalone Embossing</span>
+      <div class="param-hint">
+        Not available in cutter mode. Select Stamp mode and use Stamp Depth for raised relief.
       </div>
-    {/if}
+    </div>
   </div>
 </div>
 
@@ -325,17 +304,6 @@
     margin-bottom: 0.9rem;
   }
 
-  .param-control.checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .param-control.checkbox input[type="checkbox"] {
-    width: auto;
-    margin: 0;
-  }
-
   label,
   .control-label {
     display: block;
@@ -345,9 +313,6 @@
     font-size: 0.95rem;
   }
 
-  .param-control.checkbox label {
-    margin: 0;
-  }
 
   input[type="range"] {
     width: 100%;

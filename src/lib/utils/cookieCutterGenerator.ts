@@ -1,407 +1,270 @@
 import * as THREE from 'three';
-import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
-import type { CookieCutterParams } from '../types/CookieCutter';
+import {
+  mergeGeometries,
+  mergeVertices
+} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import type { CookieCutterParams, HandleStyle } from '../types/CookieCutter';
+import { extractClosedContours, type NormalizedContour } from './contourExtraction';
+import { createTaperedWallGeometry } from './cutterGeometry';
+import {
+  CutterGenerationError,
+  validateCookieCutterParams
+} from './generationValidation';
+
+const MATERIAL_OPTIONS = Object.freeze({
+  color: 0xffa726,
+  roughness: 0.5,
+  metalness: 0.1,
+  side: THREE.DoubleSide
+});
+
+const HANDLE_SPREAD: Readonly<Record<Exclude<HandleStyle, 'none'>, number>> = Object.freeze({
+  flat: 0,
+  round: 0.75,
+  chamfered: 1,
+  rectangular: 0.25
+});
+
+function createCutterMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial(MATERIAL_OPTIONS);
+}
+
+function hasActiveHandle(params: Readonly<CookieCutterParams>): boolean {
+  return params.enableHandle && params.handleStyle !== 'none';
+}
+
+function disposeGroup(group: THREE.Group): void {
+  group.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+
+    child.geometry.dispose();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) material.dispose();
+  });
+}
+
+function assertWatertightGeometry(geometry: THREE.BufferGeometry): void {
+  const positions = geometry.getAttribute('position');
+  const index = geometry.getIndex();
+
+  if (!positions || !index || index.count === 0 || index.count % 3 !== 0) {
+    throw new CutterGenerationError(
+      'INVALID_GEOMETRY',
+      'The generated cutter geometry is empty or incomplete.',
+      { field: 'geometry' }
+    );
+  }
+
+  const edgeCounts = new Map<string, number>();
+  const first = new THREE.Vector3();
+  const second = new THREE.Vector3();
+  const third = new THREE.Vector3();
+  const edgeA = new THREE.Vector3();
+  const edgeB = new THREE.Vector3();
+
+  for (let item = 0; item < index.count; item += 3) {
+    const triangle = [index.getX(item), index.getX(item + 1), index.getX(item + 2)];
+
+    first.fromBufferAttribute(positions as THREE.BufferAttribute, triangle[0]);
+    second.fromBufferAttribute(positions as THREE.BufferAttribute, triangle[1]);
+    third.fromBufferAttribute(positions as THREE.BufferAttribute, triangle[2]);
+    edgeA.subVectors(second, first);
+    edgeB.subVectors(third, first);
+
+    if (edgeA.cross(edgeB).lengthSq() <= 1e-16) {
+      throw new CutterGenerationError(
+        'INVALID_GEOMETRY',
+        'The generated cutter contains a degenerate triangle.',
+        { triangle: item / 3 }
+      );
+    }
+
+    for (let edge = 0; edge < 3; edge += 1) {
+      const start = triangle[edge];
+      const end = triangle[(edge + 1) % 3];
+      const key = start < end ? `${start}:${end}` : `${end}:${start}`;
+      edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const invalidEdge = Array.from(edgeCounts.entries()).find(([, count]) => count !== 2);
+  if (invalidEdge) {
+    throw new CutterGenerationError(
+      'INVALID_GEOMETRY',
+      'The generated cutter surface is not watertight.',
+      { edge: invalidEdge[0], incidence: invalidEdge[1] }
+    );
+  }
+}
+
+function finalizeJoinedGeometry(
+  segments: readonly THREE.BufferGeometry[]
+): THREE.BufferGeometry {
+  const prepared = segments.map((segment) => {
+    const clone = segment.clone();
+    clone.deleteAttribute('normal');
+    return clone;
+  });
+
+  let merged: THREE.BufferGeometry | null = null;
+  try {
+    merged = mergeGeometries(prepared, false);
+    if (!merged) {
+      throw new CutterGenerationError(
+        'INVALID_GEOMETRY',
+        'The cutter wall segments could not be merged.',
+        { field: 'geometry' }
+      );
+    }
+
+    const welded = mergeVertices(merged, 1e-5);
+    welded.computeVertexNormals();
+    welded.computeBoundingBox();
+    welded.computeBoundingSphere();
+    assertWatertightGeometry(welded);
+    return welded;
+  } finally {
+    for (const geometry of prepared) geometry.dispose();
+    merged?.dispose();
+  }
+}
+
+async function createContourGeometry(
+  contour: NormalizedContour,
+  params: Readonly<CookieCutterParams>
+): Promise<THREE.BufferGeometry> {
+  const activeHandle = hasActiveHandle(params);
+  const joinStyle = 'miter';
+  const body = await createTaperedWallGeometry(contour, {
+    wallThickness: params.wallThickness,
+    height: params.cuttingHeight,
+    taperAngle: params.taperAngle,
+    scale: params.scale,
+    joinStyle,
+    capTop: !activeHandle
+  });
+
+  if (!activeHandle) {
+    assertWatertightGeometry(body);
+    return body;
+  }
+
+  const handleHeight = params.totalHeight - params.cuttingHeight;
+  const taperOffset =
+    Math.tan((params.taperAngle * Math.PI) / 180) * params.cuttingHeight;
+  const seamWallThickness = params.wallThickness + taperOffset * 2;
+  const topSpread = HANDLE_SPREAD[params.handleStyle as Exclude<HandleStyle, 'none'>];
+  const handleTaperAngle = Math.atan(topSpread / handleHeight) * (180 / Math.PI);
+  let handle: THREE.BufferGeometry | null = null;
+
+  try {
+    handle = await createTaperedWallGeometry(contour, {
+      wallThickness: seamWallThickness,
+      height: handleHeight,
+      taperAngle: handleTaperAngle,
+      scale: params.scale,
+      baseHeight: params.cuttingHeight,
+      joinStyle,
+      capBottom: false
+    });
+
+    return finalizeJoinedGeometry([body, handle]);
+  } finally {
+    body.dispose();
+    handle?.dispose();
+  }
+}
+
+function assertFitsBuildPlate(
+  group: THREE.Group,
+  params: Readonly<CookieCutterParams>
+): THREE.Box3 {
+  const bounds = new THREE.Box3().setFromObject(group);
+  const size = bounds.getSize(new THREE.Vector3());
+
+  if (!Number.isFinite(size.x + size.y + size.z) || size.x <= 0 || size.y <= 0 || size.z <= 0) {
+    throw new CutterGenerationError(
+      'INVALID_GEOMETRY',
+      'The generated cutter has invalid dimensions.',
+      { field: 'bounds' }
+    );
+  }
+
+  if (size.x > params.buildPlateSize || size.z > params.buildPlateSize) {
+    throw new CutterGenerationError(
+      'INVALID_GEOMETRY',
+      'The cutter does not fit on the selected build plate. Reduce the scale or choose a larger plate.',
+      {
+        field: 'buildPlateSize',
+        width: size.x,
+        depth: size.z,
+        max: params.buildPlateSize
+      }
+    );
+  }
+
+  return bounds;
+}
 
 /**
- * Generate a 3D cookie cutter mesh from SVG path data
+ * Generate a finite, watertight cookie-cutter group from all valid closed SVG contours.
  */
 export async function generateCookieCutter(
   svgString: string,
-  params: CookieCutterParams
+  paramsValue: Readonly<CookieCutterParams>
 ): Promise<THREE.Group> {
-  // Parse SVG
-  const loader = new SVGLoader();
-  const svgData = loader.parse(svgString);
-
-  if (!svgData.paths || svgData.paths.length === 0) {
-    throw new Error('No paths found in SVG');
-  }
-
-  // Create a group to hold all meshes
+  const params = validateCookieCutterParams(paramsValue);
+  const contours = extractClosedContours(svgString);
   const group = new THREE.Group();
   group.name = 'cookieCutter';
 
-  // Process each path
-  let shapeIndex = 0;
-  for (const path of svgData.paths) {
-    const shapes = SVGLoader.createShapes(path);
-
-    for (const shape of shapes) {
-      // Create the main cutter body with extrusion
-      const mesh = createCutterBody(shape, params);
-      mesh.name = `cutter-body-${shapeIndex}`;
+  try {
+    for (let index = 0; index < contours.length; index += 1) {
+      const geometry = await createContourGeometry(contours[index], params);
+      const mesh = new THREE.Mesh(geometry, createCutterMaterial());
+      mesh.name = `cutter-body-${index}`;
+      mesh.userData.contourIndex = index;
       group.add(mesh);
-
-      // Add handle if enabled
-      if (params.handleStyle !== 'none' && params.enableHandle) {
-        const handle = createHandle(shape, params);
-        if (handle) {
-          handle.name = `handle-${shapeIndex}`;
-          group.add(handle);
-        }
-      }
-
-      shapeIndex++;
-    }
-  }
-
-  // Auto-scale to fit within build plate
-  const buildPlateSize = params.buildPlateSize || 200; // mm
-  const box = new THREE.Box3().setFromObject(group);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-
-  // Calculate the maximum dimension (X or Z, ignore Y which is height)
-  const maxDimension = Math.max(size.x, size.z);
-
-  // Scale down if too large, keeping 80% of build plate for safety
-  if (maxDimension > buildPlateSize * 0.8) {
-    const autoScale = (buildPlateSize * 0.8) / maxDimension;
-    group.scale.set(autoScale, autoScale, autoScale);
-
-    // Recalculate bounding box after scaling
-    box.setFromObject(group);
-    center.copy(box.getCenter(new THREE.Vector3()));
-  }
-
-  // Position so it's centered on X/Z and sitting on the grid (Y=0)
-  group.position.set(-center.x, 0, -center.z);
-
-  // Return the group with all elements separate (not merged)
-  // This allows individual selection and deletion
-  return group;
-}
-
-/**
- * Create the main cutter body from a shape (hollow walls only)
- */
-function createCutterBody(
-  shape: THREE.Shape,
-  params: CookieCutterParams
-): THREE.Mesh {
-  // Get the outline points
-  const points = shape.getPoints();
-
-  // Create the wall geometry using a tube/path approach
-  const wallGeometry = createHollowWallGeometry(points, params);
-
-  // Create material
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffa726,
-    roughness: 0.5,
-    metalness: 0.1,
-    side: THREE.DoubleSide,
-  });
-
-  const mesh = new THREE.Mesh(wallGeometry, material);
-  return mesh;
-}
-
-/**
- * Create hollow wall geometry (just the walls, no top/bottom)
- */
-function createHollowWallGeometry(
-  points: THREE.Vector2[],
-  params: CookieCutterParams
-): THREE.BufferGeometry {
-  // Validate input
-  if (!points || points.length < 3) {
-    throw new Error('Need at least 3 points to create geometry');
-  }
-
-  const vertices: number[] = [];
-  const indices: number[] = [];
-  const normals: number[] = [];
-
-  const wallThickness = params.wallThickness;
-  const height = params.cuttingHeight;
-  const numPoints = points.length;
-
-  // For each point, create inner and outer vertices
-  for (let i = 0; i < numPoints; i++) {
-    const p = points[i];
-    const pNext = points[(i + 1) % numPoints];
-    const pPrev = points[(i - 1 + numPoints) % numPoints];
-
-    // Calculate normal direction (perpendicular to the edge)
-    const dx = pNext.x - pPrev.x;
-    const dy = pNext.y - pPrev.y;
-    const len = Math.sqrt(dx * dx + dy * dy);
-
-    // Avoid division by zero - if points are too close, use default normal
-    let nx, ny;
-    if (len < 0.0001) {
-      nx = 0;
-      ny = 1;
-    } else {
-      // Normal pointing outward (perpendicular)
-      nx = -dy / len;
-      ny = dx / len;
     }
 
-    // Outer point (outward by half wall thickness)
-    const outerX = p.x + nx * wallThickness / 2;
-    const outerY = p.y + ny * wallThickness / 2;
+    const bounds = assertFitsBuildPlate(group, params);
+    const center = bounds.getCenter(new THREE.Vector3());
+    group.position.set(-center.x, -bounds.min.y, -center.z);
+    group.updateMatrixWorld(true);
 
-    // Inner point (inward by half wall thickness)
-    const innerX = p.x - nx * wallThickness / 2;
-    const innerY = p.y - ny * wallThickness / 2;
-
-    // Create vertices at bottom (y=0) and top (y=height)
-    // Bottom outer
-    vertices.push(outerX * params.scale, 0, outerY * params.scale);
-    // Top outer
-    vertices.push(outerX * params.scale, height, outerY * params.scale);
-    // Bottom inner
-    vertices.push(innerX * params.scale, 0, innerY * params.scale);
-    // Top inner
-    vertices.push(innerX * params.scale, height, innerY * params.scale);
-
-    // Normals (will be recalculated)
-    for (let j = 0; j < 4; j++) {
-      normals.push(0, 1, 0);
-    }
-  }
-
-  // Create faces
-  for (let i = 0; i < numPoints; i++) {
-    const i0 = i * 4;
-    const i1 = ((i + 1) % numPoints) * 4;
-
-    // Outer wall (2 triangles)
-    indices.push(i0, i0 + 1, i1);
-    indices.push(i1, i0 + 1, i1 + 1);
-
-    // Inner wall (2 triangles)
-    indices.push(i0 + 2, i1 + 2, i0 + 3);
-    indices.push(i1 + 2, i1 + 3, i0 + 3);
-
-    // Top rim (connecting outer and inner at top)
-    indices.push(i0 + 1, i0 + 3, i1 + 1);
-    indices.push(i1 + 1, i0 + 3, i1 + 3);
-
-    // Bottom cutting edge (connecting outer and inner at bottom)
-    indices.push(i0, i1, i0 + 2);
-    indices.push(i1, i1 + 2, i0 + 2);
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-
-  return geometry;
-}
-
-/**
- * Calculate taper offset based on angle
- */
-function calcTaperOffset(params: CookieCutterParams): number {
-  const angleRad = (params.taperAngle * Math.PI) / 180;
-  return Math.tan(angleRad) * params.cuttingHeight;
-}
-
-/**
- * Create a handle for the cookie cutter
- */
-function createHandle(
-  shape: THREE.Shape,
-  params: CookieCutterParams
-): THREE.Mesh | null {
-  let handleGeometry: THREE.BufferGeometry;
-
-  switch (params.handleStyle) {
-    case 'round':
-      handleGeometry = new THREE.CylinderGeometry(
-        3,
-        4,
-        params.handleHeight,
-        16
+    const centeredBounds = new THREE.Box3().setFromObject(group);
+    if (Math.abs(centeredBounds.min.y) > 1e-5) {
+      throw new CutterGenerationError(
+        'INVALID_GEOMETRY',
+        'The cutter could not be placed on the build plane.',
+        { minY: centeredBounds.min.y }
       );
-      break;
+    }
 
-    case 'chamfered':
-      handleGeometry = new THREE.CylinderGeometry(
-        2,
-        4,
-        params.handleHeight,
-        4
-      );
-      break;
+    group.userData.params = { ...params };
+    group.userData.contourCount = contours.length;
+    return group;
+  } catch (error) {
+    disposeGroup(group);
 
-    case 'rectangular':
-      handleGeometry = new THREE.BoxGeometry(
-        8,
-        params.handleHeight,
-        8
-      );
-      break;
-
-    case 'flat':
-      // Flat top lip
-      const flatShape = new THREE.Shape();
-      flatShape.moveTo(-5, -5);
-      flatShape.lineTo(5, -5);
-      flatShape.lineTo(5, 5);
-      flatShape.lineTo(-5, 5);
-      flatShape.lineTo(-5, -5);
-
-      handleGeometry = new THREE.ExtrudeGeometry(flatShape, {
-        depth: 3,
-        bevelEnabled: true,
-        bevelThickness: 0.5,
-        bevelSize: 0.5,
-        bevelSegments: 2,
-      });
-      break;
-
-    default:
-      return null;
+    if (error instanceof CutterGenerationError) throw error;
+    throw new CutterGenerationError(
+      'INVALID_GEOMETRY',
+      'The cutter geometry could not be generated safely.',
+      { stage: 'generation' }
+    );
   }
-
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffa726,
-    roughness: 0.5,
-    metalness: 0.1,
-  });
-
-  const handle = new THREE.Mesh(handleGeometry, material);
-
-  // Position handle at center (0,0) and on top of the cutter
-  // Since the cutter is now centered at 0,0 and sits at Y=0,
-  // the handle should be at Y = cuttingHeight + handleHeight/2
-  handle.position.set(
-    0,
-    params.cuttingHeight + params.handleHeight / 2,
-    0
-  );
-
-  return handle;
 }
 
 /**
- * Merge multiple meshes in a group into a single mesh
+ * Generate the same circle fixture used by the test-model button through the production pipeline.
  */
-function mergeGroupMeshes(group: THREE.Group): THREE.Mesh {
-  const geometries: THREE.BufferGeometry[] = [];
+export async function createTestCookieCutter(
+  params: Readonly<CookieCutterParams>
+): Promise<THREE.Group> {
+  const circleSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="20" fill="black" />
+  </svg>`;
 
-  group.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      const geometry = child.geometry.clone();
-      child.updateWorldMatrix(true, false);
-      geometry.applyMatrix4(child.matrixWorld);
-      geometries.push(geometry);
-    }
-  });
-
-  // Merge geometries
-  const mergedGeometry = mergeGeometries(geometries);
-
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffa726,
-    roughness: 0.5,
-    metalness: 0.1,
-    side: THREE.DoubleSide,
-  });
-
-  return new THREE.Mesh(mergedGeometry, material);
-}
-
-/**
- * Merge multiple geometries into one
- */
-function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const mergedGeometry = new THREE.BufferGeometry();
-
-  let totalVertices = 0;
-  let totalIndices = 0;
-
-  // Calculate total sizes
-  for (const geometry of geometries) {
-    totalVertices += geometry.attributes.position.count;
-    if (geometry.index) {
-      totalIndices += geometry.index.count;
-    } else {
-      totalIndices += geometry.attributes.position.count;
-    }
-  }
-
-  // Create arrays
-  const positions = new Float32Array(totalVertices * 3);
-  const normals = new Float32Array(totalVertices * 3);
-  const indices = new Uint32Array(totalIndices);
-
-  let vertexOffset = 0;
-  let indexOffset = 0;
-  let vertexBase = 0;
-
-  // Merge data
-  for (const geometry of geometries) {
-    const posAttr = geometry.attributes.position;
-    const normAttr = geometry.attributes.normal;
-
-    // Copy positions
-    positions.set(posAttr.array as Float32Array, vertexOffset * 3);
-
-    // Copy normals
-    if (normAttr) {
-      normals.set(normAttr.array as Float32Array, vertexOffset * 3);
-    }
-
-    // Copy indices
-    if (geometry.index) {
-      const indexArray = geometry.index.array;
-      for (let i = 0; i < indexArray.length; i++) {
-        indices[indexOffset + i] = indexArray[i] + vertexBase;
-      }
-      indexOffset += indexArray.length;
-    } else {
-      // Non-indexed geometry
-      for (let i = 0; i < posAttr.count; i++) {
-        indices[indexOffset + i] = vertexBase + i;
-      }
-      indexOffset += posAttr.count;
-    }
-
-    vertexBase += posAttr.count;
-    vertexOffset += posAttr.count;
-  }
-
-  // Set attributes
-  mergedGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  mergedGeometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-  mergedGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
-
-  // Compute normals if needed
-  mergedGeometry.computeVertexNormals();
-
-  return mergedGeometry;
-}
-
-/**
- * Create a simple cookie cutter from a circle (for testing)
- */
-export function createTestCookieCutter(params: CookieCutterParams): THREE.Mesh {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, 20, 0, Math.PI * 2, false);
-
-  const mesh = createCutterBody(shape, params);
-
-  // Apply rotation and positioning like in generateCookieCutter
-  mesh.rotation.x = Math.PI / 2;
-
-  // Position so cutting edge is at y=0
-  const box = new THREE.Box3().setFromObject(mesh);
-  const center = box.getCenter(new THREE.Vector3());
-  mesh.position.set(-center.x, -box.min.y, -center.z);
-
-  // Update matrix after transformations
-  mesh.updateMatrix();
-  mesh.geometry.applyMatrix4(mesh.matrix);
-  mesh.position.set(0, 0, 0);
-  mesh.rotation.set(0, 0, 0);
-  mesh.scale.set(1, 1, 1);
-  mesh.updateMatrix();
-
-  return mesh;
+  return generateCookieCutter(circleSvg, params);
 }

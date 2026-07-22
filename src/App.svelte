@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy, tick } from 'svelte';
   import FileUpload from './lib/components/ui/FileUpload.svelte';
   import ParameterPanel from './lib/components/ui/ParameterPanel.svelte';
   import PrintabilityInfo from './lib/components/ui/PrintabilityInfo.svelte';
@@ -30,328 +31,342 @@
   } from './lib/stores/cookieCutterStore';
   import { historyStore } from './lib/stores/historyStore';
   import { vectorizeImage, readFileAsText, cleanSVG } from './lib/utils/imageProcessor';
-  import { generateCookieCutter, createTestCookieCutter } from './lib/utils/cookieCutterGenerator';
+  import { generateCookieCutter } from './lib/utils/cookieCutterGenerator';
   import { generateStamp } from './lib/utils/stampGenerator';
   import { exportToSTL, estimateSTLSize, formatFileSize } from './lib/utils/stlExporter';
   import { applyMaterialToMesh, type MaterialPreset } from './lib/utils/materialManager';
   import type { SavedDesign } from './lib/utils/cloudGallery';
   import { validateCookieCutterParams } from './lib/utils/generationValidation';
+  import { disposeObject3D } from './lib/utils/disposeThree';
+  import { LatestGenerationGuard } from './lib/utils/latestGenerationGuard';
+  import type { CookieCutterParams } from './lib/types/CookieCutter';
   import type { Mesh, Group } from 'three';
   import * as THREE from 'three';
 
-  let currentMesh: Mesh | Group | null = null;
-  let fileName: string = '';
+  type ModelObject = Mesh | Group;
+  type Category =
+    | 'upload'
+    | 'params'
+    | 'shapes'
+    | 'advanced'
+    | 'ai'
+    | 'gallery'
+    | 'materials'
+    | 'preview'
+    | 'batch'
+    | 'export';
+
+  let currentMesh: ModelObject | null = null;
+  let fileName = '';
   let svgCache: string | null = null;
-  let isRestoringHistory = false; // Flag to prevent circular history updates
-  let activeCategory: 'upload' | 'params' | 'shapes' | 'advanced' | 'ai' | 'gallery' | 'materials' | 'preview' | 'batch' | 'export' = 'upload';
+  let svgRevision = 0;
+  let sourceRevision = 0;
+  let debounceTimer: number | undefined;
+  let isRestoringHistory = false;
+  let activeCategory: Category = 'upload';
   let darkMode = false;
+
+  const generationGuard = new LatestGenerationGuard<ModelObject>((stale) => {
+    disposeObject3D(stale);
+  });
 
   function toggleDarkMode() {
     darkMode = !darkMode;
     document.documentElement.classList.toggle('dark-mode', darkMode);
   }
 
-  // Handle file upload
+  function cancelPendingGeneration(): void {
+    if (debounceTimer !== undefined) {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = undefined;
+    }
+    generationGuard.invalidate();
+  }
+
+  async function replaceCurrentMesh(
+    next: ModelObject,
+    generationParams: Readonly<CookieCutterParams>
+  ): Promise<void> {
+    const previous = currentMesh;
+    currentMesh = next;
+    $model = {
+      mesh: next,
+      paths: [],
+      params: { ...generationParams }
+    };
+
+    await tick();
+    if (previous && previous !== next) disposeObject3D(previous);
+  }
+
+  async function generateRevision(
+    revision: number,
+    svgSnapshot: string,
+    paramsSnapshot: Readonly<CookieCutterParams>
+  ): Promise<void> {
+    try {
+      const next = paramsSnapshot.mode === 'stamp'
+        ? await generateStamp(svgSnapshot, { ...paramsSnapshot })
+        : await generateCookieCutter(svgSnapshot, paramsSnapshot);
+
+      if (!generationGuard.accept(revision, next)) return;
+
+      await replaceCurrentMesh(next, paramsSnapshot);
+      if (generationGuard.isCurrent(revision)) $error = null;
+    } catch (generationError) {
+      if (!generationGuard.isCurrent(revision)) return;
+      console.error('Error generating model:', generationError);
+      $error = generationError instanceof Error
+        ? generationError.message
+        : 'Failed to generate model';
+    } finally {
+      if (generationGuard.isCurrent(revision)) $isProcessing = false;
+    }
+  }
+
+  function scheduleGeneration(
+    svgSnapshot: string,
+    paramsSnapshot: Readonly<CookieCutterParams>
+  ): void {
+    if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
+
+    const revision = generationGuard.begin();
+    $isProcessing = true;
+    debounceTimer = window.setTimeout(() => {
+      debounceTimer = undefined;
+      void generateRevision(revision, svgSnapshot, paramsSnapshot);
+    }, 300);
+  }
+
+  function publishSvg(svg: string, nextFileName: string): void {
+    cancelPendingGeneration();
+    fileName = nextFileName;
+    svgRevision += 1;
+    svgCache = svg;
+    $error = null;
+    $isProcessing = true;
+    activeCategory = 'params';
+  }
+
+  $: if (svgCache && svgRevision > 0) {
+    scheduleGeneration(svgCache, { ...$params });
+  }
+
   async function handleFileUpload(event: CustomEvent<File>) {
     const file = event.detail;
+    const revision = ++sourceRevision;
+    cancelPendingGeneration();
     $uploadedFile = file;
     fileName = file.name;
     $error = null;
     $isProcessing = true;
+    let published = false;
 
     try {
-      let svgString: string;
+      const svgString = file.type === 'image/svg+xml' || file.name.endsWith('.svg')
+        ? cleanSVG(await readFileAsText(file))
+        : await vectorizeImage(file);
 
-      // Check if it's an SVG or raster image
-      if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
-        svgString = await readFileAsText(file);
-        svgString = cleanSVG(svgString);
-      } else {
-        // Vectorize raster image
-        svgString = await vectorizeImage(file);
-      }
-
-      // Store SVG in cache for parameter changes
-      svgCache = svgString;
-
-      // Generate 3D model
-      const mesh = await generateCookieCutter(svgString, $params);
-      currentMesh = mesh;
-      $model = {
-        mesh,
-        paths: [],
-        params: $params,
-      };
-
-      // Switch to params after creating model
-      activeCategory = 'params';
-    } catch (err) {
-      $error = err instanceof Error ? err.message : 'Failed to process file';
-      console.error('Error processing file:', err);
+      if (revision !== sourceRevision) return;
+      publishSvg(svgString, file.name);
+      published = true;
+    } catch (processingError) {
+      if (revision !== sourceRevision) return;
+      console.error('Error processing file:', processingError);
+      $error = processingError instanceof Error
+        ? processingError.message
+        : 'Failed to process file';
     } finally {
-      $isProcessing = false;
+      if (revision === sourceRevision && !published) $isProcessing = false;
     }
   }
 
-  let debounceTimer: number;
-
-  // Regenerate model when parameters change
-  $: if (svgCache && $params) {
-    // Debounce to avoid too many regenerations
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      regenerateModel();
-    }, 300);
-  }
-
-  async function regenerateModel() {
-    if (!svgCache) return;
-
-    $isProcessing = true;
-    try {
-      // Use appropriate generator based on mode
-      const mesh = $params.mode === 'stamp'
-        ? await generateStamp(svgCache, $params)
-        : await generateCookieCutter(svgCache, $params);
-
-      currentMesh = mesh;
-      $model = {
-        mesh,
-        paths: [],
-        params: $params,
-      };
-    } catch (err) {
-      console.error('Error regenerating model:', err);
-      $error = err instanceof Error ? err.message : 'Failed to regenerate model';
-    } finally {
-      $isProcessing = false;
-    }
-  }
-
-  // Export to STL
   function handleExport() {
     if (!currentMesh) return;
 
-    const filename = fileName.replace(/\.[^/.]+$/, '') + '.stl';
-    exportToSTL(currentMesh, filename, { binary: true, includeMetadata: false });
+    try {
+      const filename = `${fileName.replace(/\.[^/.]+$/, '') || 'cookie-cutter'}.stl`;
+      exportToSTL(currentMesh, filename, { binary: true, includeMetadata: false });
+      $error = null;
+    } catch (exportError) {
+      console.error('Error exporting STL:', exportError);
+      $error = exportError instanceof Error ? exportError.message : 'Failed to export STL';
+    }
   }
 
-  // Handle shape selection from library
-  async function handleShapeSelect(svg: string) {
-    fileName = 'shape-library.svg';
-    $error = null;
-    $isProcessing = true;
-
+  function handleShapeSelect(svg: string) {
+    sourceRevision += 1;
     try {
-      svgCache = cleanSVG(svg);
-
-      // Generate the model
-      const mesh = $params.mode === 'stamp'
-        ? await generateStamp(svgCache, $params)
-        : await generateCookieCutter(svgCache, $params);
-
-      currentMesh = mesh;
-      $model = {
-        mesh,
-        paths: [],
-        params: $params,
-      };
-
-      // Switch to params after creating model
-      activeCategory = 'params';
-    } catch (err) {
-      console.error('Error processing shape:', err);
-      $error = err instanceof Error ? err.message : 'Failed to process shape';
-    } finally {
+      publishSvg(cleanSVG(svg), 'shape-library.svg');
+    } catch (shapeError) {
+      $error = shapeError instanceof Error ? shapeError.message : 'Failed to process shape';
       $isProcessing = false;
     }
   }
 
-  // Load test model
   function loadTestModel() {
-    $isProcessing = true;
-    try {
-      // Create a simple circle SVG for the cache
-      const circleRadius = 20;
-      svgCache = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="${circleRadius}" fill="black"/>
-      </svg>`;
+    const circleSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="20" fill="black"/>
+    </svg>`;
 
-      const mesh = createTestCookieCutter($params);
-      currentMesh = mesh;
-      $model = {
-        mesh,
-        paths: [],
-        params: $params,
-      };
-      fileName = 'test-circle.stl';
-
-      // Switch to params after creating model
-      activeCategory = 'params';
-    } catch (err) {
-      $error = err instanceof Error ? err.message : 'Failed to create test model';
-    } finally {
-      $isProcessing = false;
-    }
+    sourceRevision += 1;
+    publishSvg(circleSvg, 'test-circle.stl');
   }
 
-  // Calculate estimated file size
-  $: estimatedSize = currentMesh ? formatFileSize(estimateSTLSize(currentMesh, true)) : null;
+  $: estimatedSize = currentMesh
+    ? formatFileSize(estimateSTLSize(currentMesh, true))
+    : null;
 
-  // Save to history when parameters change (but not when restoring from history)
   $: if (!isRestoringHistory && svgCache && $params) {
     historyStore.pushState({
       params: { ...$params },
       svgData: svgCache,
-      description: `Changed ${getCurrentChangeDescription()}`
+      description: 'Changed parameters'
     });
   }
 
-  function getCurrentChangeDescription(): string {
-    // Simple description based on last change
-    return 'parameters';
-  }
-
-  // Handle undo
   async function handleUndo() {
     const state = historyStore.undo();
-    if (state) {
-      isRestoringHistory = true;
+    if (!state) return;
 
-      try {
-        // Restore parameters
-        setParams(state.params);
-
-        // Restore SVG if different
-        if (state.svgData && state.svgData !== svgCache) {
-          svgCache = state.svgData;
-        }
-
-        // Regenerate model
-        await regenerateModel();
-      } catch (err) {
-        console.error('Error restoring undo state:', err);
-        $error = err instanceof Error ? err.message : 'Failed to restore undo state';
-      } finally {
-        isRestoringHistory = false;
+    isRestoringHistory = true;
+    try {
+      setParams(state.params);
+      if (state.svgData && state.svgData !== svgCache) {
+        sourceRevision += 1;
+        svgRevision += 1;
+        svgCache = state.svgData;
       }
+      await tick();
+    } catch (historyError) {
+      console.error('Error restoring undo state:', historyError);
+      $error = historyError instanceof Error
+        ? historyError.message
+        : 'Failed to restore undo state';
+    } finally {
+      isRestoringHistory = false;
     }
   }
 
-  // Handle redo
   async function handleRedo() {
     const state = historyStore.redo();
-    if (state) {
-      isRestoringHistory = true;
+    if (!state) return;
 
-      try {
-        // Restore parameters
-        setParams(state.params);
-
-        // Restore SVG if different
-        if (state.svgData && state.svgData !== svgCache) {
-          svgCache = state.svgData;
-        }
-
-        // Regenerate model
-        await regenerateModel();
-      } catch (err) {
-        console.error('Error restoring redo state:', err);
-        $error = err instanceof Error ? err.message : 'Failed to restore redo state';
-      } finally {
-        isRestoringHistory = false;
+    isRestoringHistory = true;
+    try {
+      setParams(state.params);
+      if (state.svgData && state.svgData !== svgCache) {
+        sourceRevision += 1;
+        svgRevision += 1;
+        svgCache = state.svgData;
       }
+      await tick();
+    } catch (historyError) {
+      console.error('Error restoring redo state:', historyError);
+      $error = historyError instanceof Error
+        ? historyError.message
+        : 'Failed to restore redo state';
+    } finally {
+      isRestoringHistory = false;
     }
   }
 
-  // Handle material change
-  function handleMaterialChange(event: CustomEvent<{ meshName: string; material: MaterialPreset }>) {
+  function handleMaterialChange(
+    event: CustomEvent<{ meshName: string; material: MaterialPreset }>
+  ) {
     if (!currentMesh) return;
 
     const { material } = event.detail;
-
-    // Apply material to all meshes in the group
     currentMesh.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        applyMaterialToMesh(child, material);
-      }
+      if (child instanceof THREE.Mesh) applyMaterialToMesh(child, material);
     });
   }
 
-  // Handle loading design from gallery
-  async function handleLoadFromGallery(event: CustomEvent<SavedDesign>) {
-    const design = event.detail;
-    $error = null;
-    $isProcessing = true;
-
+  function handleLoadFromGallery(event: CustomEvent<SavedDesign>) {
     try {
-      const nextFileName = design.metadata.name + '.svg';
-      const nextSvg = cleanSVG(design.svgData);
+      const design = event.detail;
       const nextParams = validateCookieCutterParams(design.params);
-      const generationParams = { ...nextParams };
-
-      const mesh = nextParams.mode === 'stamp'
-        ? await generateStamp(nextSvg, generationParams)
-        : await generateCookieCutter(nextSvg, generationParams);
+      const nextSvg = cleanSVG(design.svgData);
 
       setParams(nextParams);
-      fileName = nextFileName;
-      svgCache = nextSvg;
-      currentMesh = mesh;
-      $model = {
-        mesh,
-        paths: [],
-        params: { ...nextParams }
-      };
-    } catch (err) {
-      console.error('Error loading design:', err);
-      $error = err instanceof Error ? err.message : 'Failed to load design';
-    } finally {
+      sourceRevision += 1;
+      publishSvg(nextSvg, `${design.metadata.name}.svg`);
+    } catch (galleryError) {
+      console.error('Error loading design:', galleryError);
+      $error = galleryError instanceof Error
+        ? galleryError.message
+        : 'Failed to load design';
       $isProcessing = false;
     }
   }
 
-  // Handle batch creation
   async function handleBatchCreated(event: CustomEvent<THREE.Group>) {
-    const batchGroup = event.detail;
-    currentMesh = batchGroup;
-    $model = {
-      mesh: batchGroup,
-      paths: [],
-      params: $params
-    };
+    sourceRevision += 1;
+    cancelPendingGeneration();
+    await replaceCurrentMesh(event.detail, $params);
     fileName = 'batch-production.stl';
+    $isProcessing = false;
   }
 
-  // Handle AI processed image
-  async function handleAIProcessedImage(event: CustomEvent<Blob>) {
-    const blob = event.detail;
-    const file = new File([blob], 'ai-processed.png', { type: 'image/png' });
+  function handleDeleteObject(event: CustomEvent<THREE.Object3D>): void {
+    const object = event.detail;
+    if (!currentMesh || !object.parent) return;
 
-    // Process like a normal upload
+    let belongsToCurrentModel = false;
+    currentMesh.traverse((child) => {
+      if (child === object) belongsToCurrentModel = true;
+    });
+
+    if (belongsToCurrentModel) disposeObject3D(object);
+  }
+
+  async function handleAIProcessedImage(event: CustomEvent<Blob>) {
+    const revision = ++sourceRevision;
+    const file = new File([event.detail], 'ai-processed.png', { type: 'image/png' });
+    cancelPendingGeneration();
     $uploadedFile = file;
-    fileName = file.name;
     $error = null;
     $isProcessing = true;
+    let published = false;
 
     try {
       const svgString = await vectorizeImage(file);
-      svgCache = svgString;
-
-      const mesh = await generateCookieCutter(svgString, $params);
-      currentMesh = mesh;
-      $model = {
-        mesh,
-        paths: [],
-        params: $params
-      };
-    } catch (err) {
-      $error = err instanceof Error ? err.message : 'Failed to process AI image';
-      console.error('Error processing AI image:', err);
+      if (revision !== sourceRevision) return;
+      publishSvg(svgString, file.name);
+      published = true;
+    } catch (processingError) {
+      if (revision !== sourceRevision) return;
+      console.error('Error processing AI image:', processingError);
+      $error = processingError instanceof Error
+        ? processingError.message
+        : 'Failed to process AI image';
     } finally {
-      $isProcessing = false;
+      if (revision === sourceRevision && !published) $isProcessing = false;
     }
   }
+
+  async function startNewDesign(): Promise<void> {
+    sourceRevision += 1;
+    cancelPendingGeneration();
+    const previous = currentMesh;
+    currentMesh = null;
+    $model = null;
+    svgCache = null;
+    $uploadedFile = null;
+    $isProcessing = false;
+    $error = null;
+    activeCategory = 'upload';
+
+    await tick();
+    if (previous) disposeObject3D(previous);
+  }
+
+  onDestroy(() => {
+    sourceRevision += 1;
+    cancelPendingGeneration();
+    if (currentMesh) disposeObject3D(currentMesh);
+    currentMesh = null;
+  });
 </script>
 
 <main>
@@ -368,7 +383,7 @@
       <div class="header-actions">
         {#if $model}
           <span class="current-file">{fileName}</span>
-          <button class="btn btn-outline btn-sm" on:click={() => { $model = null; currentMesh = null; svgCache = null; $uploadedFile = null; }}>
+          <button class="btn btn-outline btn-sm" on:click={startNewDesign}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 12h18M12 3v18"/>
             </svg>
@@ -607,7 +622,11 @@
           <p class="loading-text">Processing your design...</p>
         </div>
       {:else if currentMesh}
-        <ThreeViewer mesh={currentMesh} buildPlateSize={$params.buildPlateSize} />
+        <ThreeViewer
+          mesh={currentMesh}
+          buildPlateSize={$params.buildPlateSize}
+          on:deleteObject={handleDeleteObject}
+        />
       {:else}
         <div class="empty-state">
           <div class="empty-icon">

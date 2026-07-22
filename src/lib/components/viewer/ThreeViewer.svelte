@@ -1,24 +1,29 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import * as THREE from 'three';
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
   export let mesh: THREE.Mesh | THREE.Group | null = null;
-  export let buildPlateSize: number = 200; // Default 200mm
+  export let buildPlateSize = 200;
+
+  const dispatch = createEventDispatcher<{ deleteObject: THREE.Object3D }>();
 
   let container: HTMLDivElement;
   let scene: THREE.Scene;
   let camera: THREE.PerspectiveCamera;
   let renderer: THREE.WebGLRenderer;
   let controls: OrbitControls;
-  let animationId: number;
+  let animationId: number | undefined;
   let gridHelper: THREE.GridHelper;
   let buildPlateBorder: THREE.LineSegments;
+  let axesHelper: THREE.AxesHelper;
   let raycaster: THREE.Raycaster;
   let mouse: THREE.Vector2;
-  let selectedObject: THREE.Object3D | null = null;
-  let selectionMode: boolean = false;
-  let highlightMaterial: THREE.MeshStandardMaterial;
+  let displayedMesh: THREE.Mesh | THREE.Group | null = null;
+  let selectedObject: THREE.Mesh | null = null;
+  let selectionHelper: THREE.BoxHelper | null = null;
+  let selectionMode = false;
+  let renderedBuildPlateSize = buildPlateSize;
 
   onMount(() => {
     initThree();
@@ -26,51 +31,91 @@
   });
 
   onDestroy(() => {
-    if (animationId) {
-      cancelAnimationFrame(animationId);
-    }
+    if (animationId !== undefined) cancelAnimationFrame(animationId);
+
+    clearSelection();
+    if (displayedMesh && scene) scene.remove(displayedMesh);
+    displayedMesh = null;
+
+    window.removeEventListener('resize', handleResize);
+    renderer?.domElement.removeEventListener('click', handleClick);
+    controls?.dispose();
+
+    disposeRenderable(gridHelper);
+    disposeRenderable(buildPlateBorder);
+    disposeRenderable(axesHelper);
+
     if (renderer) {
+      renderer.renderLists.dispose();
       renderer.dispose();
-    }
-    if (controls) {
-      controls.dispose();
+      renderer.forceContextLoss();
+      renderer.domElement.remove();
     }
   });
 
-  function initThree() {
-    // Scene
+  function disposeMaterial(material: THREE.Material | THREE.Material[]): void {
+    if (Array.isArray(material)) {
+      material.forEach((item) => item.dispose());
+    } else {
+      material.dispose();
+    }
+  }
+
+  function disposeRenderable(object: THREE.Object3D | undefined): void {
+    if (!object) return;
+    scene?.remove(object);
+
+    if ('geometry' in object && object.geometry instanceof THREE.BufferGeometry) {
+      object.geometry.dispose();
+    }
+    if ('material' in object) {
+      const material = object.material;
+      if (material instanceof THREE.Material || Array.isArray(material)) {
+        disposeMaterial(material as THREE.Material | THREE.Material[]);
+      }
+    }
+  }
+
+  function createBuildPlate(size: number): void {
+    gridHelper = new THREE.GridHelper(size, 20, 0x666666, 0xcccccc);
+    scene.add(gridHelper);
+
+    const plateGeometry = new THREE.PlaneGeometry(size, size);
+    const borderGeometry = new THREE.EdgesGeometry(plateGeometry);
+    plateGeometry.dispose();
+
+    buildPlateBorder = new THREE.LineSegments(
+      borderGeometry,
+      new THREE.LineBasicMaterial({ color: 0xff6b6b, linewidth: 2 })
+    );
+    buildPlateBorder.rotation.x = -Math.PI / 2;
+    buildPlateBorder.position.y = 0.1;
+    scene.add(buildPlateBorder);
+    renderedBuildPlateSize = size;
+  }
+
+  function replaceBuildPlate(): void {
+    disposeRenderable(gridHelper);
+    disposeRenderable(buildPlateBorder);
+    createBuildPlate(buildPlateSize);
+  }
+
+  function initThree(): void {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
-
-    // Raycaster for object picking
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
-    // Highlight material for selected objects
-    highlightMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff6b6b,
-      emissive: 0xff0000,
-      emissiveIntensity: 0.3,
-      transparent: true,
-      opacity: 0.8
-    });
-
-    // Camera
-    camera = new THREE.PerspectiveCamera(
-      50,
-      container.clientWidth / container.clientHeight,
-      0.1,
-      1000
-    );
+    const width = Math.max(container.clientWidth, 1);
+    const height = Math.max(container.clientHeight, 1);
+    camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
     camera.position.set(0, 50, 100);
 
-    // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
 
-    // Controls
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
@@ -78,225 +123,125 @@
     controls.minDistance = 10;
     controls.maxDistance = 500;
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
-
     const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
     directionalLight2.position.set(-1, 0.5, -1);
     scene.add(directionalLight2);
 
-    // Build plate grid - dynamic size based on parameter
-    gridHelper = new THREE.GridHelper(buildPlateSize, 20, 0x666666, 0xcccccc);
-    scene.add(gridHelper);
-
-    // Build plate border to show the limits clearly
-    const borderGeometry = new THREE.EdgesGeometry(
-      new THREE.PlaneGeometry(buildPlateSize, buildPlateSize)
-    );
-    const borderMaterial = new THREE.LineBasicMaterial({
-      color: 0xff6b6b,
-      linewidth: 2
-    });
-    buildPlateBorder = new THREE.LineSegments(borderGeometry, borderMaterial);
-    buildPlateBorder.rotation.x = -Math.PI / 2;
-    buildPlateBorder.position.y = 0.1; // Slightly above grid to be visible
-    scene.add(buildPlateBorder);
-
-    // Axes helper (smaller, less intrusive)
-    const axesHelper = new THREE.AxesHelper(30);
+    createBuildPlate(buildPlateSize);
+    axesHelper = new THREE.AxesHelper(30);
     scene.add(axesHelper);
 
-    // Handle window resize
     window.addEventListener('resize', handleResize);
-
-    // Handle mouse clicks for selection
     renderer.domElement.addEventListener('click', handleClick);
+    updateDisplayedMesh(mesh);
   }
 
-  function handleClick(event: MouseEvent) {
-    if (!selectionMode) return;
+  function handleClick(event: MouseEvent): void {
+    if (!selectionMode || !displayedMesh) return;
 
-    // Calculate mouse position in normalized device coordinates
     const rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    // Update raycaster
     raycaster.setFromCamera(mouse, camera);
 
-    // Find intersected objects (only meshes within cookieCutter group, not grid/axes)
-    const cookieCutterGroup = scene.children.find(child => child.name === 'cookieCutter');
-    if (!cookieCutterGroup) return;
+    const clickedObject = raycaster
+      .intersectObject(displayedMesh, true)
+      .map((intersection) => intersection.object)
+      .find((object): object is THREE.Mesh => object instanceof THREE.Mesh);
 
-    const intersects = raycaster.intersectObjects(
-      cookieCutterGroup.children.filter(child => child instanceof THREE.Mesh),
-      true
-    );
-
-    if (intersects.length > 0) {
-      const clickedObject = intersects[0].object;
-
-      // Toggle selection
-      if (selectedObject === clickedObject) {
-        // Deselect
-        restoreOriginalMaterial(selectedObject);
-        selectedObject = null;
-      } else {
-        // Deselect previous
-        if (selectedObject) {
-          restoreOriginalMaterial(selectedObject);
-        }
-        // Select new
-        selectedObject = clickedObject;
-        highlightObject(selectedObject);
-      }
-    } else {
-      // Click on empty space - deselect
-      if (selectedObject) {
-        restoreOriginalMaterial(selectedObject);
-        selectedObject = null;
-      }
+    if (!clickedObject) {
+      clearSelection();
+      return;
     }
+
+    if (selectedObject === clickedObject) {
+      clearSelection();
+      return;
+    }
+
+    clearSelection();
+    selectedObject = clickedObject;
+    selectionHelper = new THREE.BoxHelper(clickedObject, 0xff6b6b);
+    scene.add(selectionHelper);
   }
 
-  function highlightObject(obj: THREE.Object3D) {
-    if (obj instanceof THREE.Mesh) {
-      // Store original material
-      (obj as any).originalMaterial = obj.material;
-      obj.material = highlightMaterial;
-    }
+  function clearSelection(): void {
+    if (selectionHelper) disposeRenderable(selectionHelper);
+    selectionHelper = null;
+    selectedObject = null;
   }
 
-  function restoreOriginalMaterial(obj: THREE.Object3D) {
-    if (obj instanceof THREE.Mesh && (obj as any).originalMaterial) {
-      obj.material = (obj as any).originalMaterial;
-      delete (obj as any).originalMaterial;
-    }
+  function deleteSelected(): void {
+    if (!selectedObject) return;
+
+    const objectToDelete = selectedObject;
+    clearSelection();
+    dispatch('deleteObject', objectToDelete);
   }
 
-  function deleteSelected() {
-    if (selectedObject && selectedObject.parent) {
-      selectedObject.parent.remove(selectedObject);
-
-      // Dispose geometry and material
-      if (selectedObject instanceof THREE.Mesh) {
-        selectedObject.geometry?.dispose();
-        if (Array.isArray(selectedObject.material)) {
-          selectedObject.material.forEach(mat => mat.dispose());
-        } else {
-          selectedObject.material?.dispose();
-        }
-      }
-
-      selectedObject = null;
-    }
-  }
-
-  function toggleSelectionMode() {
+  function toggleSelectionMode(): void {
     selectionMode = !selectionMode;
-
-    // Deselect if leaving selection mode
-    if (!selectionMode && selectedObject) {
-      restoreOriginalMaterial(selectedObject);
-      selectedObject = null;
-    }
-
-    // Change cursor
-    if (renderer && renderer.domElement) {
-      renderer.domElement.style.cursor = selectionMode ? 'pointer' : 'default';
-    }
+    if (!selectionMode) clearSelection();
+    if (renderer) renderer.domElement.style.cursor = selectionMode ? 'pointer' : 'default';
   }
 
-  function handleResize() {
+  function handleResize(): void {
     if (!container || !camera || !renderer) return;
 
-    camera.aspect = container.clientWidth / container.clientHeight;
+    const width = Math.max(container.clientWidth, 1);
+    const height = Math.max(container.clientHeight, 1);
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(width, height);
   }
 
-  function animate() {
+  function animate(): void {
     animationId = requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
   }
 
-  // Update build plate when size changes
-  $: if (scene && gridHelper && buildPlateBorder) {
-    // Remove old grid and border
-    scene.remove(gridHelper);
-    scene.remove(buildPlateBorder);
-    gridHelper.geometry.dispose();
-    buildPlateBorder.geometry.dispose();
+  function fitCamera(object: THREE.Object3D): void {
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return;
 
-    // Create new grid with updated size
-    gridHelper = new THREE.GridHelper(buildPlateSize, 20, 0x666666, 0xcccccc);
-    scene.add(gridHelper);
-
-    // Create new border with updated size
-    const borderGeometry = new THREE.EdgesGeometry(
-      new THREE.PlaneGeometry(buildPlateSize, buildPlateSize)
-    );
-    const borderMaterial = new THREE.LineBasicMaterial({
-      color: 0xff6b6b,
-      linewidth: 2
-    });
-    buildPlateBorder = new THREE.LineSegments(borderGeometry, borderMaterial);
-    buildPlateBorder.rotation.x = -Math.PI / 2;
-    buildPlateBorder.position.y = 0.1;
-    scene.add(buildPlateBorder);
-  }
-
-  // Update mesh when it changes
-  $: if (scene && mesh) {
-    // Remove old mesh/group
-    const oldObject = scene.children.find(child => child.name === 'cookieCutter');
-    if (oldObject) {
-      scene.remove(oldObject);
-      // Dispose old geometry and material
-      oldObject.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry?.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach(mat => mat.dispose());
-          } else {
-            child.material?.dispose();
-          }
-        }
-      });
-    }
-
-    // Add new mesh/group
-    if (!mesh.name) {
-      mesh.name = 'cookieCutter';
-    }
-    scene.add(mesh);
-
-    // Center camera on mesh and position it better
-    const box = new THREE.Box3().setFromObject(mesh);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
+    const maxDimension = Math.max(size.x, size.y, size.z);
+    if (!Number.isFinite(maxDimension) || maxDimension <= 0) return;
 
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-    cameraZ *= 2.5; // Zoom out more for better view
-
-    // Position camera at an angle for better 3D view
+    const fieldOfView = camera.fov * (Math.PI / 180);
+    const cameraDistance = Math.abs(maxDimension / 2 / Math.tan(fieldOfView / 2)) * 2.5;
     camera.position.set(
-      center.x + cameraZ * 0.7,
-      center.y + cameraZ * 0.8,
-      center.z + cameraZ * 0.7
+      center.x + cameraDistance * 0.7,
+      center.y + cameraDistance * 0.8,
+      center.z + cameraDistance * 0.7
     );
-
     camera.lookAt(center);
     controls.target.copy(center);
     controls.update();
+  }
+
+  function updateDisplayedMesh(next: THREE.Mesh | THREE.Group | null): void {
+    if (!scene || displayedMesh === next) return;
+
+    clearSelection();
+    if (displayedMesh) scene.remove(displayedMesh);
+    displayedMesh = next;
+
+    if (displayedMesh) {
+      scene.add(displayedMesh);
+      fitCamera(displayedMesh);
+    }
+  }
+
+  $: if (scene) updateDisplayedMesh(mesh);
+  $: if (scene && gridHelper && buildPlateBorder && buildPlateSize !== renderedBuildPlateSize) {
+    replaceBuildPlate();
   }
 </script>
 

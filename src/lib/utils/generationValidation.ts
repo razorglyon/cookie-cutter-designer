@@ -260,11 +260,11 @@ export function validateCookieCutterParams(value: unknown): Readonly<CookieCutte
     );
   }
 
-  if (enableEmbossing && embossDepth <= 0) {
+  if (enableEmbossing) {
     invalidParameter(
-      'embossDepth',
-      'The embossDepth parameter must be greater than zero when embossing is enabled.',
-      embossDepth
+      'enableEmbossing',
+      'The enableEmbossing option is not available. Use Stamp mode for raised relief.',
+      enableEmbossing
     );
   }
 

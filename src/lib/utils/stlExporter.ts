@@ -1,72 +1,150 @@
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
-import { Mesh, Object3D } from 'three';
-import type { Group } from 'three';
+import * as THREE from 'three';
 import type { ExportOptions } from '../types/CookieCutter';
+import { CutterGenerationError } from './generationValidation';
+import { validatePrintableObject } from './geometryValidation';
+
+function exportFailure(
+  message: string,
+  details: Readonly<Record<string, unknown>>
+): never {
+  throw new CutterGenerationError('EXPORT_FAILED', message, details);
+}
 
 /**
- * Export a Three.js mesh or group to STL format
+ * Validate then serialize an object without touching the DOM.
  */
-export function exportToSTL(object: Mesh | Group, filename: string = 'cookie-cutter.stl', options: ExportOptions = { binary: true, includeMetadata: false }): void {
-  const exporter = new STLExporter();
+export function serializeSTL(
+  object: THREE.Object3D,
+  binary: boolean = true
+): DataView | string {
+  const report = validatePrintableObject(object);
+  if (!report.valid) {
+    exportFailure(`STL export blocked: ${report.errors[0]}`, {
+      errors: report.errors,
+      triangles: report.triangles,
+      shells: report.shells
+    });
+  }
 
-  // Create blob
-  const blob = options.binary
-    ? new Blob([exporter.parse(object, { binary: true })], {
-        type: 'application/octet-stream'
-      })
-    : new Blob([exporter.parse(object, { binary: false })], {
-        type: 'text/plain'
+  const output = new STLExporter().parse(object, { binary });
+
+  if (binary) {
+    if (!(output instanceof DataView)) {
+      exportFailure('The STL exporter returned an unexpected binary result.', {
+        triangles: report.triangles
       });
+    }
 
-  // Trigger download
+    const view = output;
+    const expectedLength = 84 + report.triangles * 50;
+    if (view.byteLength !== expectedLength || view.byteLength < 84) {
+      exportFailure('The binary STL size does not match its triangle count.', {
+        actualBytes: view.byteLength,
+        expectedBytes: expectedLength,
+        triangles: report.triangles
+      });
+    }
+
+    const serializedTriangles = view.getUint32(80, true);
+    if (serializedTriangles !== report.triangles) {
+      exportFailure('The binary STL header contains an invalid triangle count.', {
+        actual: serializedTriangles,
+        expected: report.triangles
+      });
+    }
+
+    for (let triangle = 0; triangle < serializedTriangles; triangle += 1) {
+      const start = 84 + triangle * 50;
+      for (let component = 0; component < 12; component += 1) {
+        if (!Number.isFinite(view.getFloat32(start + component * 4, true))) {
+          exportFailure('The binary STL contains a non-finite value.', {
+            triangle,
+            component
+          });
+        }
+      }
+    }
+
+    return view;
+  }
+
+  if (typeof output !== 'string') {
+    exportFailure('The STL exporter returned an unexpected text result.', {
+      triangles: report.triangles
+    });
+  }
+
+  if (/NaN|Infinity/.test(output)) {
+    exportFailure('The ASCII STL contains a non-finite value.', {
+      triangles: report.triangles
+    });
+  }
+
+  const facetCount = output.match(/\bfacet normal\b/g)?.length ?? 0;
+  if (facetCount !== report.triangles) {
+    exportFailure('The ASCII STL triangle count is inconsistent.', {
+      actual: facetCount,
+      expected: report.triangles
+    });
+  }
+
+  return output;
+}
+
+/**
+ * Validate, serialize and download a Three.js object as STL.
+ */
+export function exportToSTL(
+  object: THREE.Object3D,
+  filename: string = 'cookie-cutter.stl',
+  options: ExportOptions = { binary: true, includeMetadata: false }
+): void {
+  const serialized = serializeSTL(object, options.binary);
+  const blob =
+    serialized instanceof DataView
+      ? new Blob([serialized.buffer as ArrayBuffer], { type: 'application/octet-stream' })
+      : new Blob([serialized], { type: 'text/plain' });
+
   downloadBlob(blob, filename);
 }
 
-/**
- * Helper function to trigger file download
- */
 function downloadBlob(blob: Blob, filename: string): void {
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
+  link.href = objectUrl;
   link.download = filename;
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(link.href);
-}
 
-/**
- * Calculate estimated file size before export
- */
-export function estimateSTLSize(object: Mesh | Group, binary: boolean = true): number {
-  let totalFaces = 0;
-
-  // Traverse all meshes in the object
-  object.traverse((child) => {
-    if (child instanceof Object3D && 'geometry' in child) {
-      const mesh = child as Mesh;
-      const geometry = mesh.geometry;
-      const faceCount = geometry.index
-        ? geometry.index.count / 3
-        : geometry.attributes.position.count / 3;
-      totalFaces += faceCount;
-    }
-  });
-
-  if (binary) {
-    // Binary STL: 80 byte header + 4 bytes face count + (50 bytes per triangle)
-    return 84 + (totalFaces * 50);
-  } else {
-    // ASCII STL: rough estimate ~200 bytes per triangle
-    return totalFaces * 200;
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
   }
 }
 
 /**
- * Format file size to human readable string
+ * Calculate estimated file size before export.
  */
+export function estimateSTLSize(object: THREE.Object3D, binary: boolean = true): number {
+  let totalFaces = 0;
+
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+
+    const geometry = child.geometry;
+    const position = geometry.getAttribute('position');
+    if (!position) return;
+
+    totalFaces += geometry.index ? geometry.index.count / 3 : position.count / 3;
+  });
+
+  return binary ? 84 + totalFaces * 50 : totalFaces * 200;
+}
+
 export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }

@@ -1,15 +1,9 @@
-import {
-  ClipType,
-  EndType,
-  JoinType,
-  NativeClipperLibRequestedFormat,
-  PolyFillType,
-  loadNativeClipperLibInstanceAsync,
-  type ClipperLibWrapper,
-  type Path,
-  type ReadonlyPath,
-  type ReadonlyPaths
-} from 'js-angusj-clipper';
+import type {
+  ClipperLibWrapper,
+  Path,
+  ReadonlyPath,
+  ReadonlyPaths
+} from 'js-angusj-clipper/web/index.js';
 import type { Point2D } from '../types/CookieCutter';
 import {
   normalizeContourPoints,
@@ -34,29 +28,52 @@ const MAX_INPUT_COORDINATE = 1_000_000;
 const OFFSET_ARC_TOLERANCE = 0.05 * CLIPPER_SCALE;
 const CLEAN_DISTANCE = 0.001 * CLIPPER_SCALE;
 
-const JOIN_TYPES: Record<JoinStyle, JoinType> = {
-  miter: JoinType.Miter,
-  round: JoinType.Round,
-  square: JoinType.Square
-};
+type ClipperModule = typeof import('js-angusj-clipper/web/index.js');
 
-const FILL_TYPES: Record<FillRule, PolyFillType> = {
-  evenodd: PolyFillType.EvenOdd,
-  nonzero: PolyFillType.NonZero,
-  positive: PolyFillType.Positive,
-  negative: PolyFillType.Negative
-};
+interface ClipperRuntime {
+  readonly api: ClipperModule;
+  readonly lib: ClipperLibWrapper;
+}
 
-let clipperLibPromise: Promise<ClipperLibWrapper> | null = null;
+const JOIN_STYLES: readonly JoinStyle[] = ['miter', 'round', 'square'];
+const FILL_RULES: readonly FillRule[] = ['evenodd', 'nonzero', 'positive', 'negative'];
+let clipperRuntimePromise: Promise<ClipperRuntime> | null = null;
 
-function initClipper(): Promise<ClipperLibWrapper> {
-  if (!clipperLibPromise) {
-    clipperLibPromise = loadNativeClipperLibInstanceAsync(
-      NativeClipperLibRequestedFormat.WasmWithAsmJsFallback
-    );
+function initClipper(): Promise<ClipperRuntime> {
+  if (!clipperRuntimePromise) {
+    clipperRuntimePromise = import('js-angusj-clipper/web/index.js').then(async (api) => ({
+      api,
+      lib: await api.loadNativeClipperLibInstanceAsync(
+        api.NativeClipperLibRequestedFormat.WasmWithAsmJsFallback
+      )
+    }));
   }
 
-  return clipperLibPromise;
+  return clipperRuntimePromise;
+}
+
+function resolveJoinType(api: ClipperModule, style: JoinStyle) {
+  switch (style) {
+    case 'miter':
+      return api.JoinType.Miter;
+    case 'square':
+      return api.JoinType.Square;
+    default:
+      return api.JoinType.Round;
+  }
+}
+
+function resolveFillType(api: ClipperModule, rule: FillRule) {
+  switch (rule) {
+    case 'evenodd':
+      return api.PolyFillType.EvenOdd;
+    case 'positive':
+      return api.PolyFillType.Positive;
+    case 'negative':
+      return api.PolyFillType.Negative;
+    default:
+      return api.PolyFillType.NonZero;
+  }
 }
 
 function invalidGeometry(message: string, details: Readonly<Record<string, unknown>>): never {
@@ -242,7 +259,7 @@ export async function offsetPath(
     });
   }
 
-  if (!(joinType in JOIN_TYPES)) {
+  if (!JOIN_STYLES.includes(joinType)) {
     invalidGeometry('The offset join type is invalid.', {
       field: 'joinType'
     });
@@ -251,14 +268,14 @@ export async function offsetPath(
   const input = svgToClipperPath(points);
 
   try {
-    const clipper = await initClipper();
-    const result = clipper.offsetToPaths({
+    const { api, lib } = await initClipper();
+    const result = lib.offsetToPaths({
       delta: offsetDistance * CLIPPER_SCALE,
       offsetInputs: [
         {
           data: input,
-          joinType: JOIN_TYPES[joinType],
-          endType: EndType.ClosedPolygon
+          joinType: resolveJoinType(api, joinType),
+          endType: api.EndType.ClosedPolygon
         }
       ],
       arcTolerance: OFFSET_ARC_TOLERANCE,
@@ -278,10 +295,10 @@ export async function unionPaths(
 ): Promise<ReadonlyArray<NormalizedContour>> {
   if (paths.length === 0) return Object.freeze([]);
 
-  const clipper = await initClipper();
-  const result = clipper.clipToPaths({
-    clipType: ClipType.Union,
-    subjectFillType: PolyFillType.NonZero,
+  const { api, lib } = await initClipper();
+  const result = lib.clipToPaths({
+    clipType: api.ClipType.Union,
+    subjectFillType: api.PolyFillType.NonZero,
     subjectInputs: [{ data: svgToClipperPaths(paths), closed: true }]
   });
 
@@ -297,11 +314,11 @@ export async function differencePaths(
     return Object.freeze(subjectPaths.map(validateAndNormalizeInput));
   }
 
-  const clipper = await initClipper();
-  const result = clipper.clipToPaths({
-    clipType: ClipType.Difference,
-    subjectFillType: PolyFillType.NonZero,
-    clipFillType: PolyFillType.NonZero,
+  const { api, lib } = await initClipper();
+  const result = lib.clipToPaths({
+    clipType: api.ClipType.Difference,
+    subjectFillType: api.PolyFillType.NonZero,
+    clipFillType: api.PolyFillType.NonZero,
     subjectInputs: [{ data: svgToClipperPaths(subjectPaths), closed: true }],
     clipInputs: [{ data: svgToClipperPaths(clipPaths) }]
   });
@@ -315,11 +332,11 @@ export async function intersectPaths(
 ): Promise<ReadonlyArray<NormalizedContour>> {
   if (pathsA.length === 0 || pathsB.length === 0) return Object.freeze([]);
 
-  const clipper = await initClipper();
-  const result = clipper.clipToPaths({
-    clipType: ClipType.Intersection,
-    subjectFillType: PolyFillType.NonZero,
-    clipFillType: PolyFillType.NonZero,
+  const { api, lib } = await initClipper();
+  const result = lib.clipToPaths({
+    clipType: api.ClipType.Intersection,
+    subjectFillType: api.PolyFillType.NonZero,
+    clipFillType: api.PolyFillType.NonZero,
     subjectInputs: [{ data: svgToClipperPaths(pathsA), closed: true }],
     clipInputs: [{ data: svgToClipperPaths(pathsB) }]
   });
@@ -331,14 +348,14 @@ export async function simplifyPath(
   points: ReadonlyArray<Readonly<Point2D>>,
   fillType: FillRule = 'nonzero'
 ): Promise<ReadonlyArray<NormalizedContour>> {
-  if (!(fillType in FILL_TYPES)) {
+  if (!FILL_RULES.includes(fillType)) {
     invalidGeometry('The polygon fill rule is invalid.', { field: 'fillType' });
   }
 
-  const clipper = await initClipper();
-  const result = clipper.simplifyPolygon(
+  const { api, lib } = await initClipper();
+  const result = lib.simplifyPolygon(
     svgToClipperPath(points),
-    FILL_TYPES[fillType]
+    resolveFillType(api, fillType)
   );
 
   return normalizeOutputPaths(result);

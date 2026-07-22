@@ -215,10 +215,10 @@ describe('validateCookieCutterParams', () => {
     ).not.toThrow();
   });
 
-  it('requires a positive emboss depth only when embossing is enabled', () => {
+  it('rejects unsupported embossing instead of silently ignoring it', () => {
     expectInvalidParams(
-      { ...validParams(), enableEmbossing: true, embossDepth: 0 },
-      'embossDepth'
+      { ...validParams(), enableEmbossing: true },
+      'enableEmbossing'
     );
     expect(() =>
       validateCookieCutterParams({ ...validParams(), enableEmbossing: false, embossDepth: 0 })
@@ -412,15 +412,14 @@ describe('cookieCutterStore parameter safety', () => {
     expect(get(parameterError)).toMatch(/totalHeight.*150|150.*totalHeight/i);
   });
 
-  it('atomically restores the default emboss depth when enabling embossing from zero', () => {
+  it('preserves the snapshot when unsupported embossing is requested', () => {
     setParams({ ...validParams(), enableEmbossing: false, embossDepth: 0 });
+    const before = get(params);
 
-    expect(updateParam('enableEmbossing', true)).toBe(true);
+    expect(updateParam('enableEmbossing', true)).toBe(false);
 
-    expect(get(params)).toMatchObject({
-      enableEmbossing: true,
-      embossDepth: DEFAULT_PARAMS.embossDepth
-    });
+    expect(get(params)).toBe(before);
+    expect(get(parameterError)).toMatch(/embossing.*not available|not available.*embossing/i);
   });
 
   it('applies a valid optimizer patch atomically without fallback values', () => {

@@ -1,54 +1,66 @@
-# AGENT_CONTEXT
+# AGENT_CONTEXT — cookie-cutter-designer
 
-## Projet
+## Repo
 
-Cookie Cutter Designer, application web de création de découpoirs et tampons 3D à partir de SVG, PNG ou JPG.
-
-## Chemin et Git
-
+- GitHub : `razorglyon/cookie-cutter-designer`
 - Clone persistant : `/workspace/cookie-cutter-designer`
-- Remote : `https://github.com/razorglyon/cookie-cutter-designer.git`
-- Branche de maintenance : `fix/quality-security-baseline`
-- Ne jamais pousser sans GO explicite de Rza.
+- Branche par défaut : `main`
+- Branche courante : `fix/robust-cutter-generation`
+- Push interdit sans GO explicite de Rza.
 
 ## Stack
 
-- Svelte 5
-- TypeScript strict
-- Vite 7
-- Three.js
-- pnpm 10.33.4
-- Node.js 22.12+
+- Langages : TypeScript, Svelte
+- Frameworks : Svelte 5, Vite 7, Three.js
+- Package manager : pnpm 10.33.4
+- Runtime : Node.js 22.12+
+- TypeScript : strict
 
-## Commandes utiles
+## Commandes
 
-```sh
-pnpm install --frozen-lockfile
-pnpm audit --audit-level=moderate
-pnpm run check
-pnpm run build
-pnpm run dev
-```
-
-## État validé
-
-- Les 6 erreurs TypeScript initiales sont corrigées.
-- Les 18 avertissements Svelte/accessibilité initiaux sont corrigés.
-- L’audit pnpm est revenu de 5 vulnérabilités hautes et 12 modérées à zéro.
-- Maker.js a été retiré car aucune consommation n’existait dans `src/`.
-- Svelte, Vite, le plugin Svelte et `svelte-check` ont été mis à jour dans leurs majeures actuelles.
-- `pnpm run check` passe avec 0 erreur et 0 avertissement.
-- `pnpm run build` passe ; le bundle principal reste supérieur à 500 kB et mérite un chantier séparé.
-- Un smoke test Vite réel retourne HTTP 200 et trouve le point de montage `#app`.
-- Un smoke test runtime Clipper valide offset positif/négatif, union, différence, intersection, simplification et création de parois.
-- Les workflows Quality, Pages et CodeQL sont alignés avec Node 22 et pnpm 10.
+| Action | Commande |
+|---|---|
+| Install | `pnpm install --frozen-lockfile` |
+| Dev | `pnpm run dev` |
+| Test | `pnpm run test:run` |
+| Build | `pnpm run build` |
+| Typecheck | `pnpm run check` |
+| Audit | `pnpm audit --audit-level=moderate` |
 
 ## Architecture sensible
 
+- `src/lib/utils/contourExtraction.ts` normalise les contours SVG.
+- `src/lib/utils/cutterGeometry.ts` construit les coques du découpoir.
+- `src/lib/utils/geometryValidation.ts` vérifie les invariants imprimables en espace monde.
+- `src/lib/utils/stlExporter.ts` sépare validation, sérialisation et téléchargement STL.
+- `src/App.svelte` possède les objets Three.js générés et arbitre les révisions asynchrones.
+- `ThreeViewer.svelte` affiche les objets sans détruire les ressources appartenant au parent.
 - Utiliser Clipper.js pour les offsets et opérations booléennes.
-- Libérer les meshes Three.js remplacés.
-- Examiner tout nouvel usage de `{@html}` avec des données SVG non fiables.
-- Les fonctions Gemini utilisent une clé côté client : elle doit être restreinte et ne jamais être commitée.
+- Examiner tout nouvel usage de `{@html}` avec des SVG non fiables.
+- Les fonctions Gemini utilisent une clé côté client : ne jamais la committer et la restreindre côté fournisseur.
+
+## État actuel
+
+- Branche : `fix/robust-cutter-generation`
+- Dernière action : intégration du contrôleur de génération UI, ownership Three.js et nettoyage complet du viewer.
+- Tests : `145/145` réussis.
+- Typecheck : `0 erreur, 0 avertissement`.
+- Build : réussi ; avertissement connu pour deux chunks supérieurs à 500 kB.
+- Audit : aucune vulnérabilité connue.
+- Smoke HTTP : `200`, point de montage `#app` présent.
+- État Git : changements du dernier lot non commités.
+- À faire ensuite : revue finale du diff, puis commit local atomique après validation du périmètre.
+
+## Décisions / pièges connus
+
+- Une seule génération debouncée doit traiter upload, bibliothèque, historique et changements de paramètres.
+- Les lectures/vectorisations de source et les générations 3D utilisent des révisions séparées.
+- Tout résultat 3D obsolète est détruit immédiatement.
+- Le parent publie un nouveau modèle, attend `tick()`, puis détruit l’ancien.
+- Le viewer détache uniquement la prop affichée ; il ne détruit jamais les meshes du parent.
+- La sélection du viewer utilise un `BoxHelper` local pour ne pas remplacer les matériaux du modèle.
+- L’embossage autonome est refusé explicitement ; le mode Stamp est l’alternative prise en charge.
+- L’export STL refuse les objets vides, non finis, dégénérés ou ouverts.
 
 ## Documentation
 
@@ -56,10 +68,3 @@ pnpm run dev
 - Maintenance : `docs/MAINTENANCE.md`
 - Sécurité : `SECURITY.md`
 - Plan exécuté : `.hermes/plans/2026-07-21_181513-maintenance-versionnee-mise-a-niveau.md`
-
-## Prochaines étapes
-
-1. Effectuer la revue finale du diff contre `origin/main`.
-2. Corriger tout constat important de la revue.
-3. Présenter commits, validations et risques à Rza.
-4. Attendre un GO explicite avant tout push ou PR.

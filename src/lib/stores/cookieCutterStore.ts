@@ -133,16 +133,6 @@ function buildParamUpdate(
 ): CookieCutterParams {
   const candidate: CookieCutterParams = { ...current, ...patch };
 
-  if (
-    patch.enableEmbossing === true &&
-    hasOwnParam(patch, 'enableEmbossing') &&
-    !hasOwnParam(patch, 'embossDepth') &&
-    !current.enableEmbossing &&
-    current.embossDepth === 0
-  ) {
-    candidate.embossDepth = DEFAULT_PARAMS.embossDepth;
-  }
-
   const requiredTotalHeight = minimumTotalHeight(candidate);
   const explicitlyUpdatesTotalHeight = hasOwnParam(patch, 'totalHeight');
   const updatesTotalHeightDependency = TOTAL_HEIGHT_DEPENDENCIES.some((key) =>
