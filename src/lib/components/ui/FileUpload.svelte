@@ -77,7 +77,12 @@
   role="button"
   tabindex="0"
   on:click={triggerFileInput}
-  on:keydown={(e) => e.key === 'Enter' && triggerFileInput()}
+  on:keydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      triggerFileInput();
+    }
+  }}
   on:dragover={handleDragOver}
   on:dragleave={handleDragLeave}
   on:drop={handleDrop}
@@ -116,31 +121,31 @@
   .upload-container {
     width: 100%;
     min-height: 180px;
-    border: 2px dashed #cbd5e0;
+    border: 2px dashed var(--border-strong);
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.3s ease;
-    background-color: #f7fafc;
+    background-color: var(--surface-card);
   }
 
   .upload-container:hover {
-    border-color: #4299e1;
-    background-color: #ebf8ff;
+    border-color: var(--color-primary-500);
+    background-color: var(--surface-callout);
   }
 
   .upload-container.drag-over {
-    border-color: #3182ce;
-    background-color: #bee3f8;
+    border-color: var(--color-primary-600);
+    background-color: var(--color-primary-100);
     transform: scale(1.02);
   }
 
   .upload-content {
     text-align: center;
     padding: 1rem;
-    color: #4a5568;
+    color: var(--text-secondary);
   }
 
   .upload-content svg {
@@ -152,7 +157,7 @@
     font-size: 1.25rem;
     font-weight: 600;
     margin: 0 0 0.5rem;
-    color: #2d3748;
+    color: var(--text-primary);
   }
 
   p {
@@ -162,7 +167,7 @@
 
   .file-types {
     font-size: 0.85rem;
-    color: #718096;
+    color: var(--text-muted);
     margin-top: 0.75rem;
   }
 </style>

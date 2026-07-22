@@ -5,7 +5,7 @@
 - GitHub : `razorglyon/cookie-cutter-designer`
 - Clone persistant : `/workspace/cookie-cutter-designer`
 - Branche par défaut : `main`
-- Branche courante : `perf/split-heavy-bundles`
+- Branche courante : `fix/ux-ui-consistency`
 - Push interdit sans GO explicite de Rza.
 
 ## Stack
@@ -41,17 +41,16 @@
 
 ## État actuel
 
-- Branche : `perf/split-heavy-bundles`
-- Branche parente publiée : `fix/robust-cutter-generation` à `ffbe4e2`.
-- Dernière action : chargement différé des panneaux optionnels et isolation de Three.js dans un chunk fournisseur stable.
-- Tests : `146/146` réussis, dont un smoke test DOM des panneaux chargés dynamiquement.
+- Branche : `fix/ux-ui-consistency`, basée sur `perf/split-heavy-bundles`.
+- Dernière action : consolidation UX/UI du shell, des thèmes, de Shape Library, Parameters, History, du viewer et de Gemini.
+- Tests : `149/149` réussis, dont trois tests UX sur thème, Shape Library et sécurité perçue de Gemini.
 - Typecheck : `0 erreur, 0 avertissement`.
-- Build : réussi sans avertissement ; budgets intégrés de 200 KiB pour l'entrée et 600 KiB pour les chunks asynchrones.
-- Bundle : entrée `827,48 → 135,81 kB` ; chargement initial JS `-12,6 %`, gzip `-13,7 %`, CSS `-64,4 %`.
-- Audit : aucune vulnérabilité connue.
-- Smoke HTTP : index `200` et `36/36` assets servis.
-- État Git : optimisation prête pour un commit local séparé ; aucun push de cette branche.
-- À faire ensuite : commit local, puis demander un nouveau GO avant tout push.
+- Build : réussi ; les budgets Vite restent respectés.
+- Smoke visuel : build de production validé en clair et sombre, Shape Library → Circle → Parameters/viewer, Advanced et Gemini.
+- Accessibilité : navigation nommée avec `aria-current`, contrôles clavier, accordéons et états dynamiques explicites.
+- Sécurité : aucune clé Gemini trouvée dans les fichiers suivis ou modifiés ; la clé n'est jamais réaffichée après sauvegarde.
+- État Git : diff local vérifié, sans commit et sans push.
+- À faire ensuite : revue pré-commit par Rza, puis commit local sur demande explicite.
 
 ## Décisions / pièges connus
 
@@ -67,10 +66,17 @@
 - Three.js reste préchargé car le cœur de l'application en dépend ; il est isolé pour améliorer le cache navigateur.
 - Le runtime Clipper/WASM reste asynchrone et séparé du chargement initial.
 - Le plugin Vite `bundle-budget` bloque toute régression dépassant les budgets documentés.
+- `src/styles/theme.css` est l'unique fondation globale ; ne pas réintroduire `src/app.css`.
+- Les couleurs fonctionnelles utilisent des tokens sémantiques (`--surface-*`, `--text-*`, `--border-*`) plutôt que l'inversion des gris numériques.
+- Le fond Three.js lit `--viewer-scene` et se met à jour lorsque le thème change.
+- Shape Library est un panneau direct et émet `{ svg, name }` ; ne pas réintroduire de modale intermédiaire.
+- Les panneaux chargés dynamiquement doivent exposer chargement, erreur et relance.
+- La clé Gemini reste locale au navigateur jusqu'à suppression ; les écrans doivent expliquer les données envoyées sans afficher la clé sauvegardée.
 
 ## Documentation
 
 - Architecture : `CLAUDE.md`
 - Maintenance : `docs/MAINTENANCE.md`
 - Sécurité : `SECURITY.md`
-- Plan exécuté : `.hermes/plans/2026-07-21_181513-maintenance-versionnee-mise-a-niveau.md`
+- Plan maintenance : `.hermes/plans/2026-07-21_181513-maintenance-versionnee-mise-a-niveau.md`
+- Plan UX/UI : `.hermes/plans/2026-07-22_081456-ux-ui-consistency.md`

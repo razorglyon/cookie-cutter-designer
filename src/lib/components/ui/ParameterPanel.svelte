@@ -21,16 +21,15 @@
     </div>
   {/if}
 
-  <!-- Mode Selection -->
   <div class="param-group">
-    <h3>Mode</h3>
+    <h3>Design Type</h3>
     <div class="param-control">
-      <span class="control-label">Design Type</span>
       <div class="mode-selector">
         <button
           class="mode-btn"
           class:active={$params.mode === 'cutter'}
           on:click={() => updateParam('mode', 'cutter')}
+          aria-pressed={$params.mode === 'cutter'}
         >
           ✂️ Cutter
         </button>
@@ -38,6 +37,7 @@
           class="mode-btn"
           class:active={$params.mode === 'stamp'}
           on:click={() => updateParam('mode', 'stamp')}
+          aria-pressed={$params.mode === 'stamp'}
         >
           🔖 Stamp
         </button>
@@ -50,18 +50,19 @@
     {#if $params.mode === 'stamp'}
       <div class="param-control">
         <label for="stampDepth">
-          Stamp Depth: {$params.stampDepth.toFixed(1)}mm
+          Stamp Depth: {$params.stampDepth.toFixed(1)} mm
         </label>
         <input
           id="stampDepth"
           type="range"
+          aria-valuetext={`${$params.stampDepth.toFixed(1)} millimeters`}
           min="1.0"
           max="5.0"
           step="0.5"
           value={$params.stampDepth}
           on:input={(e) => updateParam('stampDepth', parseFloat(e.currentTarget.value))}
         />
-        <div class="param-hint">Depth of the raised relief</div>
+        <div class="param-hint">Range: 1–5 mm · Depth of the raised relief</div>
       </div>
 
       <div class="param-control">
@@ -83,50 +84,53 @@
 
     <div class="param-control">
       <label for="wallThickness">
-        Wall Thickness: {$params.wallThickness.toFixed(1)}mm
+        Wall Thickness: {$params.wallThickness.toFixed(1)} mm
       </label>
       <input
         id="wallThickness"
         type="range"
+        aria-valuetext={`${$params.wallThickness.toFixed(1)} millimeters`}
         min="0.6"
         max="2.0"
         step="0.1"
         value={$params.wallThickness}
         on:input={(e) => updateParam('wallThickness', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 0.8-1.2mm</div>
+      <div class="param-hint">Range: 0.6–2 mm · Recommended: 0.8–1.2 mm</div>
     </div>
 
     <div class="param-control">
       <label for="cuttingHeight">
-        Cutting Height: {$params.cuttingHeight.toFixed(0)}mm
+        Cutting Height: {$params.cuttingHeight.toFixed(0)} mm
       </label>
       <input
         id="cuttingHeight"
         type="range"
+        aria-valuetext={`${$params.cuttingHeight.toFixed(0)} millimeters`}
         min="8"
         max="25"
         step="1"
         value={$params.cuttingHeight}
         on:input={(e) => updateParam('cuttingHeight', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 10-15mm</div>
+      <div class="param-hint">Range: 8–25 mm · Recommended: 10–15 mm</div>
     </div>
 
     <div class="param-control">
       <label for="totalHeight">
-        Total Height: {$params.totalHeight.toFixed(0)}mm
+        Total Height: {$params.totalHeight.toFixed(0)} mm
       </label>
       <input
         id="totalHeight"
         type="range"
+        aria-valuetext={`${$params.totalHeight.toFixed(0)} millimeters`}
         min="15"
         max="40"
         step="1"
         value={$params.totalHeight}
         on:input={(e) => updateParam('totalHeight', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 15-25mm</div>
+      <div class="param-hint">Range: 15–40 mm · Recommended: 15–25 mm</div>
     </div>
 
     <div class="param-control">
@@ -136,13 +140,14 @@
       <input
         id="taperAngle"
         type="range"
+        aria-valuetext={`${$params.taperAngle.toFixed(0)} degrees`}
         min="0"
         max="15"
         step="1"
         value={$params.taperAngle}
         on:input={(e) => updateParam('taperAngle', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Recommended: 5-10°</div>
+      <div class="param-hint">Range: 0–15° · Recommended: 5–10°</div>
     </div>
 
     <div class="param-control">
@@ -152,6 +157,7 @@
       <input
         id="scale"
         type="range"
+        aria-valuetext={`${($params.scale * 100).toFixed(0)} percent`}
         min="0.5"
         max="3.0"
         step="0.1"
@@ -162,18 +168,19 @@
 
     <div class="param-control">
       <label for="buildPlateSize">
-        Build Plate Size: {$params.buildPlateSize.toFixed(0)}mm ({($params.buildPlateSize / 10).toFixed(0)}cm)
+        Build Plate Size: {$params.buildPlateSize.toFixed(0)} mm ({($params.buildPlateSize / 10).toFixed(0)} cm)
       </label>
       <input
         id="buildPlateSize"
         type="range"
+        aria-valuetext={`${$params.buildPlateSize.toFixed(0)} millimeters`}
         min="100"
         max="300"
         step="10"
         value={$params.buildPlateSize}
         on:input={(e) => updateParam('buildPlateSize', parseFloat(e.currentTarget.value))}
       />
-      <div class="param-hint">Common sizes: 150mm, 200mm, 220mm, 250mm</div>
+      <div class="param-hint">Range: 100–300 mm · Common sizes: 150, 200, 220, 250 mm</div>
     </div>
   </div>
 
@@ -196,11 +203,12 @@
     {#if $params.handleStyle !== 'none'}
       <div class="param-control">
         <label for="handleHeight">
-          Handle Height: {$params.handleHeight.toFixed(0)}mm
+          Handle Height: {$params.handleHeight.toFixed(0)} mm
         </label>
         <input
           id="handleHeight"
           type="range"
+          aria-valuetext={`${$params.handleHeight.toFixed(0)} millimeters`}
           min="3"
           max="15"
           step="1"
@@ -225,75 +233,46 @@
 
 <style>
   .parameter-panel {
-    padding: 1rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: var(--spacing-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-card);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
   }
 
   .parameter-error {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    border-left: 4px solid #dc2626;
-    border-radius: 6px;
-    background: #fef2f2;
-    color: #991b1b;
-    font-size: 0.9rem;
-    line-height: 1.4;
-  }
-
-  .mode-selector {
-    display: flex;
-    gap: 0.5rem;
-    margin: 0.5rem 0;
-  }
-
-  .mode-btn {
-    flex: 1;
-    padding: 0.75rem 1rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #4a5568;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .mode-btn:hover {
-    border-color: #cbd5e0;
-    background: #f7fafc;
-  }
-
-  .mode-btn.active {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
-    font-weight: 600;
+    gap: var(--spacing-1);
+    margin-bottom: var(--spacing-4);
+    padding: var(--spacing-3);
+    border-left: 4px solid var(--color-error);
+    border-radius: var(--radius-md);
+    background: var(--color-error-light);
+    color: var(--color-error);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
   }
 
   h2 {
-    margin: 0 0 1rem;
-    font-size: 1.25rem;
-    color: #2d3748;
-    font-weight: 600;
+    margin: 0 0 var(--spacing-4);
+    color: var(--text-primary);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
   }
 
   h3 {
-    margin: 0.75rem 0 0.5rem;
-    font-size: 1rem;
-    color: #4a5568;
-    font-weight: 600;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 0.4rem;
+    margin: var(--spacing-3) 0 var(--spacing-2);
+    padding-bottom: var(--spacing-2);
+    border-bottom: 1px solid var(--border-default);
+    color: var(--text-secondary);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
   }
 
   .param-group {
-    margin-bottom: 1rem;
+    margin-bottom: var(--spacing-4);
   }
 
   .param-group:first-of-type h3 {
@@ -301,84 +280,94 @@
   }
 
   .param-control {
-    margin-bottom: 0.9rem;
+    margin-bottom: var(--spacing-4);
   }
 
   label,
   .control-label {
     display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    color: #4a5568;
-    font-size: 0.95rem;
+    margin-bottom: var(--spacing-2);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
   }
 
+  .mode-selector {
+    display: flex;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-2);
+  }
+
+  .mode-btn {
+    min-height: var(--button-height-lg);
+    flex: 1;
+    padding: 0 var(--spacing-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-input);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  }
+
+  .mode-btn:hover {
+    border-color: var(--color-primary-400);
+    background: var(--surface-callout);
+  }
+
+  .mode-btn.active {
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
+    color: var(--color-primary-600);
+    font-weight: var(--font-weight-semibold);
+  }
 
   input[type="range"] {
     width: 100%;
     height: 6px;
-    border-radius: 3px;
-    background: #e2e8f0;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
     outline: none;
     appearance: none;
     -webkit-appearance: none;
   }
 
   input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: #4299e1;
+    background: var(--color-primary-600);
     cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  input[type="range"]::-webkit-slider-thumb:hover {
-    background: #3182ce;
+    appearance: none;
+    -webkit-appearance: none;
   }
 
   input[type="range"]::-moz-range-thumb {
     width: 18px;
     height: 18px;
-    border-radius: 50%;
-    background: #4299e1;
-    cursor: pointer;
     border: none;
-    transition: background 0.2s;
-  }
-
-  input[type="range"]::-moz-range-thumb:hover {
-    background: #3182ce;
+    border-radius: 50%;
+    background: var(--color-primary-600);
+    cursor: pointer;
   }
 
   select {
     width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
-    background: white;
-    font-size: 0.95rem;
-    color: #2d3748;
+    min-height: var(--input-height);
+    padding: 0 var(--spacing-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-input);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
     cursor: pointer;
-    transition: border-color 0.2s;
-  }
-
-  select:hover {
-    border-color: #a0aec0;
-  }
-
-  select:focus {
-    outline: none;
-    border-color: #4299e1;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
   }
 
   .param-hint {
-    margin-top: 0.25rem;
-    font-size: 0.8rem;
-    color: #718096;
-    font-style: italic;
+    margin-top: var(--spacing-1);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-normal);
   }
 </style>

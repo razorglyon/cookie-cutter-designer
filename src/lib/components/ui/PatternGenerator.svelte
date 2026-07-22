@@ -69,13 +69,19 @@
 <div class="pattern-generator">
   <div class="panel-header">
     <h3>🔄 Pattern Generator</h3>
-    <button class="toggle-btn" on:click={() => showPanel = !showPanel}>
+    <button
+      class="toggle-btn"
+      on:click={() => showPanel = !showPanel}
+      aria-label={showPanel ? 'Collapse Pattern Generator' : 'Expand Pattern Generator'}
+      aria-expanded={showPanel}
+      aria-controls="pattern-generator-content"
+    >
       {showPanel ? '▼' : '▶'}
     </button>
   </div>
 
   {#if showPanel}
-    <div class="panel-content">
+    <div class="panel-content" id="pattern-generator-content">
       <!-- Pattern Type Selection -->
       <div class="preset-section">
         <h4>Pattern Type</h4>

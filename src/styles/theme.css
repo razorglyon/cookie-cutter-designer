@@ -59,7 +59,34 @@
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
+  --color-error-light: #fef2f2;
   --color-info: #3b82f6;
+
+  /* ===== Semantic surfaces and text ===== */
+  color-scheme: light;
+  --surface-app: #f1f5f9;
+  --surface-panel: #f8fafc;
+  --surface-card: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-sidebar: #0f172a;
+  --surface-sidebar-hover: rgba(255, 255, 255, 0.1);
+  --surface-sidebar-active: rgba(59, 130, 246, 0.18);
+  --surface-viewer-start: #f8fafc;
+  --surface-viewer-end: #e2e8f0;
+  --surface-input: #ffffff;
+  --surface-muted: #f1f5f9;
+  --surface-callout: #eff6ff;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-on-brand: #ffffff;
+  --text-on-sidebar: #cbd5e1;
+  --border-default: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --focus-ring: rgba(59, 130, 246, 0.35);
+  --viewer-scene: #f0f0f0;
+  --viewer-grid-center: #64748b;
+  --viewer-grid: #cbd5e1;
 
   /* ===== Spacing ===== */
   --spacing-0: 0;
@@ -144,20 +171,8 @@
    DARK MODE THEME
    ============================================ */
 :root.dark-mode {
-  /* Colors - Gray (inverted) */
-  --color-gray-50: #0f172a;
-  --color-gray-100: #1e293b;
-  --color-gray-200: #334155;
-  --color-gray-300: #475569;
-  --color-gray-400: #64748b;
-  --color-gray-500: #94a3b8;
-  --color-gray-600: #cbd5e1;
-  --color-gray-700: #e2e8f0;
-  --color-gray-800: #f1f5f9;
-  --color-gray-900: #f8fafc;
-}
+  color-scheme: dark;
 
-html.dark-mode {
   /* Colors - Gray (inverted) */
   --color-gray-50: #0f172a;
   --color-gray-100: #1e293b;
@@ -169,6 +184,30 @@ html.dark-mode {
   --color-gray-700: #e2e8f0;
   --color-gray-800: #f1f5f9;
   --color-gray-900: #f8fafc;
+
+  --surface-app: #020617;
+  --surface-panel: #0f172a;
+  --surface-card: #1e293b;
+  --surface-elevated: #1e293b;
+  --surface-sidebar: #020617;
+  --surface-sidebar-hover: rgba(148, 163, 184, 0.14);
+  --surface-sidebar-active: rgba(96, 165, 250, 0.2);
+  --surface-viewer-start: #111827;
+  --surface-viewer-end: #0f172a;
+  --surface-input: #0f172a;
+  --surface-muted: #334155;
+  --surface-callout: #172554;
+  --text-primary: #f8fafc;
+  --text-secondary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-on-sidebar: #cbd5e1;
+  --border-default: #334155;
+  --border-strong: #475569;
+  --focus-ring: rgba(96, 165, 250, 0.45);
+  --viewer-scene: #111827;
+  --viewer-grid-center: #94a3b8;
+  --viewer-grid: #334155;
+  --color-error-light: #450a0a;
 }
 
 /* ============================================
@@ -179,7 +218,6 @@ html.dark-mode {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 html {
@@ -194,9 +232,20 @@ body {
   font-family: var(--font-family-base);
   font-size: var(--font-size-base);
   line-height: var(--line-height-normal);
-  color: var(--color-gray-900);
-  background-color: var(--color-gray-50);
+  color: var(--text-primary);
+  background-color: var(--surface-app);
   overflow: hidden;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 /* ============================================
@@ -347,6 +396,7 @@ input, select, textarea {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+  color: inherit;
 }
 
 a {
@@ -410,7 +460,7 @@ a:hover {
 }
 
 .btn-outline {
-  background: white;
+  background: var(--surface-card);
   color: var(--color-primary-600);
   border: 2px solid var(--color-primary-600);
 }
@@ -435,11 +485,12 @@ a:hover {
 .input {
   height: var(--input-height);
   padding: 0 var(--spacing-3);
-  border: 2px solid var(--color-gray-200);
+  border: 2px solid var(--border-default);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   transition: all var(--transition-fast);
-  background: white;
+  background: var(--surface-input);
+  color: var(--text-primary);
 }
 
 .input:focus {
@@ -458,7 +509,7 @@ a:hover {
    ============================================ */
 
 .card {
-  background: white;
+  background: var(--surface-card);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   padding: var(--card-padding);
@@ -481,12 +532,12 @@ a:hover {
 .card-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-gray-900);
+  color: var(--text-primary);
   margin: 0;
 }
 
 .card-body {
-  color: var(--color-gray-700);
+  color: var(--text-secondary);
 }
 
 /* ============================================
@@ -521,4 +572,15 @@ a:hover {
 .badge-error {
   background: #fee2e2;
   color: #991b1b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

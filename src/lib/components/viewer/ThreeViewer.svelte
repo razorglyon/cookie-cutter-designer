@@ -24,9 +24,12 @@
   let selectionHelper: THREE.BoxHelper | null = null;
   let selectionMode = false;
   let renderedBuildPlateSize = buildPlateSize;
+  let themeObserver: MutationObserver | undefined;
 
   onMount(() => {
     initThree();
+    themeObserver = new MutationObserver(applySceneTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     animate();
   });
 
@@ -38,6 +41,7 @@
     displayedMesh = null;
 
     window.removeEventListener('resize', handleResize);
+    themeObserver?.disconnect();
     renderer?.domElement.removeEventListener('click', handleClick);
     controls?.dispose();
 
@@ -102,7 +106,7 @@
 
   function initThree(): void {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf0f0f0);
+    applySceneTheme();
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
@@ -138,6 +142,14 @@
     window.addEventListener('resize', handleResize);
     renderer.domElement.addEventListener('click', handleClick);
     updateDisplayedMesh(mesh);
+  }
+
+  function applySceneTheme(): void {
+    if (!scene) return;
+    const background = getComputedStyle(document.documentElement)
+      .getPropertyValue('--viewer-scene')
+      .trim() || '#f0f0f0';
+    scene.background = new THREE.Color(background);
   }
 
   function handleClick(event: MouseEvent): void {
@@ -226,6 +238,10 @@
     controls.update();
   }
 
+  function fitCurrentView(): void {
+    if (displayedMesh) fitCamera(displayedMesh);
+  }
+
   function updateDisplayedMesh(next: THREE.Mesh | THREE.Group | null): void {
     if (!scene || displayedMesh === next) return;
 
@@ -255,11 +271,19 @@
       class:active={selectionMode}
       on:click={toggleSelectionMode}
       title={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
+      aria-pressed={selectionMode}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
       </svg>
-      {selectionMode ? 'Selection ON' : 'Selection OFF'}
+      {selectionMode ? 'Finish selecting' : 'Select part'}
+    </button>
+
+    <button class="control-btn" on:click={fitCurrentView} title="Fit model in view">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
+      </svg>
+      Fit view
     </button>
 
     {#if selectionMode && selectedObject}
@@ -315,47 +339,48 @@
   .control-btn {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #4a5568;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    box-shadow: var(--shadow-sm);
   }
 
   .control-btn:hover {
-    border-color: #cbd5e0;
-    background: #f7fafc;
+    border-color: var(--color-primary-400);
+    background: var(--surface-callout);
   }
 
   .control-btn.active {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
+    color: var(--color-primary-600);
   }
 
   .control-btn.delete-btn {
-    background: #fff5f5;
-    border-color: #fc8181;
-    color: #c53030;
+    background: var(--color-error-light);
+    border-color: var(--color-error);
+    color: var(--color-error);
   }
 
   .control-btn.delete-btn:hover {
-    background: #fed7d7;
-    border-color: #f56565;
+    background: var(--color-error-light);
+    border-color: var(--color-error);
   }
 
   .selection-hint {
-    padding: 0.5rem 0.75rem;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 6px;
-    font-size: 0.8rem;
-    color: #718096;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    box-shadow: var(--shadow-sm);
   }
 </style>

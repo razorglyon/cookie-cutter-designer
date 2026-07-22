@@ -30,7 +30,7 @@ describe('App lazy panels', () => {
     mountedApp = mount(App, { target });
 
     await openCategory('Advanced Creation', 'AI Image Processor');
-    await openCategory('AI Tools (Gemini)', 'Gemini AI Configuration');
+    await openCategory('AI Tools (Gemini)', 'Gemini connection');
     await openCategory('Cloud Gallery', 'Cloud Gallery');
   });
 });

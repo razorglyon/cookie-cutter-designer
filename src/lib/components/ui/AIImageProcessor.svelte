@@ -71,13 +71,19 @@
 <div class="ai-processor">
   <div class="panel-header">
     <h3>🤖 AI Image Processor</h3>
-    <button class="toggle-btn" on:click={() => showPanel = !showPanel}>
+    <button
+      class="toggle-btn"
+      on:click={() => showPanel = !showPanel}
+      aria-label={showPanel ? 'Collapse AI Image Processor' : 'Expand AI Image Processor'}
+      aria-expanded={showPanel}
+      aria-controls="ai-image-processor-content"
+    >
       {showPanel ? '▼' : '▶'}
     </button>
   </div>
 
   {#if showPanel}
-    <div class="panel-content">
+    <div class="panel-content" id="ai-image-processor-content">
       <p class="description">
         Enhance your images with AI before converting to cookie cutters.
         Perfect for photos and complex graphics.

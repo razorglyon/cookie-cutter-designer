@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import FileUpload from './lib/components/ui/FileUpload.svelte';
   import ParameterPanel from './lib/components/ui/ParameterPanel.svelte';
   import ThreeViewer from './lib/components/viewer/ThreeViewer.svelte';
@@ -51,15 +51,41 @@
   let isRestoringHistory = false;
   let activeCategory: Category = 'upload';
   let darkMode = false;
+  const THEME_STORAGE_KEY = 'cookie-cutter-theme';
 
   const generationGuard = new LatestGenerationGuard<ModelObject>((stale) => {
     disposeObject3D(stale);
   });
 
-  function toggleDarkMode() {
-    darkMode = !darkMode;
+  function applyTheme(nextDarkMode: boolean): void {
+    darkMode = nextDarkMode;
     document.documentElement.classList.toggle('dark-mode', darkMode);
   }
+
+  function toggleDarkMode() {
+    applyTheme(!darkMode);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, darkMode ? 'dark' : 'light');
+    } catch {
+      // Theme persistence is optional when storage is unavailable.
+    }
+  }
+
+  onMount(() => {
+    let prefersDark = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    try {
+      const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme === 'dark' || savedTheme === 'light') {
+        prefersDark = savedTheme === 'dark';
+      }
+    } catch {
+      // Fall back to the operating-system preference.
+    }
+
+    applyTheme(prefersDark);
+  });
 
   function cancelPendingGeneration(): void {
     if (debounceTimer !== undefined) {
@@ -180,10 +206,15 @@
     }
   }
 
-  function handleShapeSelect(svg: string) {
+  function handleShapeSelect(shape: string | { svg: string; name: string }): void {
+    const svg = typeof shape === 'string' ? shape : shape.svg;
+    const fileBaseName = typeof shape === 'string'
+      ? 'generated-shape'
+      : shape.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
     sourceRevision += 1;
     try {
-      publishSvg(cleanSVG(svg), 'shape-library.svg');
+      publishSvg(cleanSVG(svg), `${fileBaseName || 'library-shape'}.svg`);
     } catch (shapeError) {
       $error = shapeError instanceof Error ? shapeError.message : 'Failed to process shape';
       $isProcessing = false;
@@ -196,7 +227,7 @@
     </svg>`;
 
     sourceRevision += 1;
-    publishSvg(circleSvg, 'test-circle.stl');
+    publishSvg(circleSvg, 'test-circle.svg');
   }
 
   $: estimatedSize = currentMesh
@@ -347,6 +378,12 @@
     if (previous) disposeObject3D(previous);
   }
 
+  function requestNewDesign(): void {
+    if (window.confirm('Start a new design? Unsaved changes will be lost.')) {
+      void startNewDesign();
+    }
+  }
+
   onDestroy(() => {
     sourceRevision += 1;
     cancelPendingGeneration();
@@ -369,14 +406,20 @@
       <div class="header-actions">
         {#if $model}
           <span class="current-file">{fileName}</span>
-          <button class="btn btn-outline btn-sm" on:click={startNewDesign}>
+          <button class="btn btn-outline btn-sm" on:click={requestNewDesign}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 12h18M12 3v18"/>
             </svg>
             New Design
           </button>
         {/if}
-        <button class="btn btn-outline btn-sm btn-icon" on:click={toggleDarkMode} title={darkMode ? 'Light Mode' : 'Dark Mode'}>
+        <button
+          class="btn btn-outline btn-sm btn-icon"
+          on:click={toggleDarkMode}
+          title={darkMode ? 'Use light mode' : 'Use dark mode'}
+          aria-label={darkMode ? 'Use light mode' : 'Use dark mode'}
+          aria-pressed={darkMode}
+        >
           {#if darkMode}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="5"/>
@@ -408,12 +451,15 @@
           class:active={activeCategory === 'upload'}
           on:click={() => activeCategory = 'upload'}
           title="Upload"
+          aria-label="Upload design"
+          aria-current={activeCategory === 'upload' ? 'page' : undefined}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
+          <span class="nav-label" aria-hidden="true">Upload</span>
         </button>
 
         {#if $model}
@@ -422,11 +468,14 @@
             class:active={activeCategory === 'params'}
             on:click={() => activeCategory = 'params'}
             title="Parameters"
+            aria-label="Parameters"
+            aria-current={activeCategory === 'params' ? 'page' : undefined}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"/>
               <path d="M12 1v6m0 6v6"/>
             </svg>
+            <span class="nav-label" aria-hidden="true">Parameters</span>
           </button>
         {/if}
 
@@ -435,10 +484,13 @@
           class:active={activeCategory === 'shapes'}
           on:click={() => activeCategory = 'shapes'}
           title="Shape Library"
+          aria-label="Shape Library"
+          aria-current={activeCategory === 'shapes' ? 'page' : undefined}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           </svg>
+          <span class="nav-label" aria-hidden="true">Shape Library</span>
         </button>
 
         <button
@@ -446,10 +498,13 @@
           class:active={activeCategory === 'advanced'}
           on:click={() => activeCategory = 'advanced'}
           title="Advanced Creation"
+          aria-label="Advanced Creation"
+          aria-current={activeCategory === 'advanced' ? 'page' : undefined}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2v20M2 12h20"/>
           </svg>
+          <span class="nav-label" aria-hidden="true">Advanced Creation</span>
         </button>
 
         <button
@@ -457,12 +512,15 @@
           class:active={activeCategory === 'ai'}
           on:click={() => activeCategory = 'ai'}
           title="AI Tools (Gemini)"
+          aria-label="AI Tools (Gemini)"
+          aria-current={activeCategory === 'ai' ? 'page' : undefined}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
             <circle cx="9" cy="16" r="1"/>
             <circle cx="15" cy="16" r="1"/>
           </svg>
+          <span class="nav-label" aria-hidden="true">AI Tools</span>
         </button>
 
         <button
@@ -470,10 +528,13 @@
           class:active={activeCategory === 'gallery'}
           on:click={() => activeCategory = 'gallery'}
           title="Cloud Gallery"
+          aria-label="Cloud Gallery"
+          aria-current={activeCategory === 'gallery' ? 'page' : undefined}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
+          <span class="nav-label" aria-hidden="true">Cloud Gallery</span>
         </button>
 
         {#if $model}
@@ -482,10 +543,13 @@
             class:active={activeCategory === 'materials'}
             on:click={() => activeCategory = 'materials'}
             title="Materials"
+            aria-label="Materials and optimization"
+            aria-current={activeCategory === 'materials' ? 'page' : undefined}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
             </svg>
+            <span class="nav-label" aria-hidden="true">Materials</span>
           </button>
 
           <button
@@ -493,11 +557,14 @@
             class:active={activeCategory === 'preview'}
             on:click={() => activeCategory = 'preview'}
             title="Preview"
+            aria-label="Print preview"
+            aria-current={activeCategory === 'preview' ? 'page' : undefined}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
+            <span class="nav-label" aria-hidden="true">Preview</span>
           </button>
 
           <button
@@ -505,10 +572,13 @@
             class:active={activeCategory === 'batch'}
             on:click={() => activeCategory = 'batch'}
             title="Batch"
+            aria-label="Batch production"
+            aria-current={activeCategory === 'batch' ? 'page' : undefined}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M16 16h6v6M8 8H2V2"/>
             </svg>
+            <span class="nav-label" aria-hidden="true">Batch</span>
           </button>
 
           <button
@@ -516,12 +586,15 @@
             class:active={activeCategory === 'export'}
             on:click={() => activeCategory = 'export'}
             title="Export"
+            aria-label="Export design"
+            aria-current={activeCategory === 'export' ? 'page' : undefined}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
+            <span class="nav-label" aria-hidden="true">Export</span>
           </button>
         {/if}
       </nav>
@@ -565,72 +638,136 @@
           <ShapeLibrary on:selectShape={(e) => handleShapeSelect(e.detail)} />
 
         {:else if activeCategory === 'advanced'}
-          {#await import('./lib/components/ui/AIImageProcessor.svelte') then component}
+          <header class="feature-header">
+            <h2>Advanced Creation</h2>
+            <p>Create or combine shapes before applying them to the 3D model.</p>
+          </header>
+          {#await import('./lib/components/ui/AIImageProcessor.svelte')}
+            <div class="panel-loading" role="status">Loading image processor…</div>
+          {:then component}
             <component.default on:processedImage={handleAIProcessedImage} />
+          {:catch}
+            <div class="panel-load-error" role="alert">The image processor could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/BezierEditor.svelte') then component}
+          {#await import('./lib/components/ui/BezierEditor.svelte')}
+            <div class="panel-loading" role="status">Loading Bézier editor…</div>
+          {:then component}
             <component.default on:pathCreated={(e) => handleShapeSelect(e.detail)} />
+          {:catch}
+            <div class="panel-load-error" role="alert">The Bézier editor could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/PatternGenerator.svelte') then component}
+          {#await import('./lib/components/ui/PatternGenerator.svelte')}
+            <div class="panel-loading" role="status">Loading pattern generator…</div>
+          {:then component}
             <component.default on:patternCreated={(e) => handleShapeSelect(e.detail)} />
+          {:catch}
+            <div class="panel-load-error" role="alert">The pattern generator could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/BooleanOperations.svelte') then component}
+          {#await import('./lib/components/ui/BooleanOperations.svelte')}
+            <div class="panel-loading" role="status">Loading boolean operations…</div>
+          {:then component}
             <component.default on:shapeCreated={(e) => handleShapeSelect(e.detail)} />
+          {:catch}
+            <div class="panel-load-error" role="alert">Boolean operations could not be loaded.</div>
           {/await}
 
         {:else if activeCategory === 'ai'}
-          {#await import('./lib/components/ui/GeminiAPIConfig.svelte') then component}
+          <header class="feature-header">
+            <h2>AI Tools</h2>
+            <p>Connect Gemini, then use AI assistance on the current design.</p>
+          </header>
+          {#await import('./lib/components/ui/GeminiAPIConfig.svelte')}
+            <div class="panel-loading" role="status">Loading Gemini configuration…</div>
+          {:then component}
             <component.default />
+          {:catch}
+            <div class="panel-load-error" role="alert">Gemini configuration could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/AIAssistant.svelte') then component}
+          {#await import('./lib/components/ui/AIAssistant.svelte')}
+            <div class="panel-loading" role="status">Loading AI assistant…</div>
+          {:then component}
             <component.default
               params={$params}
               svgContent={svgCache}
               on:optimizedSVG={(e) => handleShapeSelect(e.detail)}
             />
+          {:catch}
+            <div class="panel-load-error" role="alert">The AI assistant could not be loaded.</div>
           {/await}
 
         {:else if activeCategory === 'gallery'}
-          {#await import('./lib/components/ui/CloudGallery.svelte') then component}
+          {#await import('./lib/components/ui/CloudGallery.svelte')}
+            <div class="panel-loading" role="status">Loading cloud gallery…</div>
+          {:then component}
             <component.default
               currentSvg={svgCache}
               currentParams={$params}
               on:loadDesign={handleLoadFromGallery}
             />
+          {:catch}
+            <div class="panel-load-error" role="alert">The cloud gallery could not be loaded.</div>
           {/await}
 
         {:else if activeCategory === 'materials' && $model}
-          {#await import('./lib/components/ui/MaterialManager.svelte') then component}
+          {#await import('./lib/components/ui/MaterialManager.svelte')}
+            <div class="panel-loading" role="status">Loading materials…</div>
+          {:then component}
             <component.default on:materialChanged={handleMaterialChange} />
+          {:catch}
+            <div class="panel-load-error" role="alert">Materials could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/OptimizationPanel.svelte') then component}
+          {#await import('./lib/components/ui/OptimizationPanel.svelte')}
+            <div class="panel-loading" role="status">Loading optimization tools…</div>
+          {:then component}
             <component.default on:applyFix={(e) => updateParams(e.detail)} />
+          {:catch}
+            <div class="panel-load-error" role="alert">Optimization tools could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/CollisionDetector.svelte') then component}
+          {#await import('./lib/components/ui/CollisionDetector.svelte')}
+            <div class="panel-loading" role="status">Loading collision detector…</div>
+          {:then component}
             <component.default mesh={currentMesh} buildPlateSize={$params.buildPlateSize} />
+          {:catch}
+            <div class="panel-load-error" role="alert">The collision detector could not be loaded.</div>
           {/await}
 
         {:else if activeCategory === 'preview' && $model}
-          {#await import('./lib/components/ui/SlicePreview.svelte') then component}
+          {#await import('./lib/components/ui/SlicePreview.svelte')}
+            <div class="panel-loading" role="status">Loading slice preview…</div>
+          {:then component}
             <component.default mesh={currentMesh} layerHeight={0.2} />
+          {:catch}
+            <div class="panel-load-error" role="alert">The slice preview could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/PrintabilityInfo.svelte') then component}
+          {#await import('./lib/components/ui/PrintabilityInfo.svelte')}
+            <div class="panel-loading" role="status">Loading printability details…</div>
+          {:then component}
             <component.default />
+          {:catch}
+            <div class="panel-load-error" role="alert">Printability details could not be loaded.</div>
           {/await}
 
         {:else if activeCategory === 'batch' && $model}
-          {#await import('./lib/components/ui/BatchMode.svelte') then component}
+          {#await import('./lib/components/ui/BatchMode.svelte')}
+            <div class="panel-loading" role="status">Loading batch mode…</div>
+          {:then component}
             <component.default
               currentSvg={svgCache}
               currentParams={$params}
               buildPlateSize={$params.buildPlateSize}
               on:batchCreated={handleBatchCreated}
             />
+          {:catch}
+            <div class="panel-load-error" role="alert">Batch mode could not be loaded.</div>
           {/await}
 
         {:else if activeCategory === 'export' && $model}
-          {#await import('./lib/components/ui/AdvancedExport.svelte') then component}
+          {#await import('./lib/components/ui/AdvancedExport.svelte')}
+            <div class="panel-loading" role="status">Loading export tools…</div>
+          {:then component}
             <component.default mesh={currentMesh} filename={fileName} params={$params} />
+          {:catch}
+            <div class="panel-load-error" role="alert">Export tools could not be loaded.</div>
           {/await}
         {/if}
       </div>
@@ -703,7 +840,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--color-gray-50);
+    background: var(--surface-app);
     flex: 1;
   }
 
@@ -739,7 +876,7 @@
 
   .logo-text h1 {
     margin: 0;
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-lg);
     font-weight: var(--font-weight-bold);
     color: white;
     line-height: 1.2;
@@ -747,7 +884,7 @@
 
   .tagline {
     margin: 0;
-    font-size: 0.65rem;
+    font-size: var(--font-size-xs);
     color: rgba(255, 255, 255, 0.85);
     font-weight: var(--font-weight-normal);
   }
@@ -803,7 +940,7 @@
     grid-template-columns: 60px 420px 1fr;
     flex: 1;
     overflow: hidden;
-    background: var(--color-gray-100);
+    background: var(--surface-app);
     gap: 0;
     width: 100%;
     min-width: 0;
@@ -813,11 +950,11 @@
      MINI SIDEBAR WITH CATEGORY ICONS
      ============================================ */
   .mini-sidebar {
-    background: linear-gradient(180deg, var(--color-gray-900) 0%, var(--color-gray-800) 100%);
+    background: var(--surface-sidebar);
     box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--color-gray-700);
+    border-right: 1px solid var(--border-strong);
     z-index: var(--z-sticky);
   }
 
@@ -837,7 +974,7 @@
     padding: var(--spacing-2);
     border: none;
     background: transparent;
-    color: var(--color-gray-400);
+    color: var(--text-on-sidebar);
     cursor: pointer;
     transition: all var(--transition-fast);
     position: relative;
@@ -847,8 +984,35 @@
     transition: all var(--transition-fast);
   }
 
+  .nav-label {
+    position: absolute;
+    left: calc(100% + var(--spacing-2));
+    top: 50%;
+    z-index: var(--z-tooltip);
+    padding: var(--spacing-1) var(--spacing-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-4px, -50%);
+    transition: opacity var(--transition-fast), transform var(--transition-fast);
+    white-space: nowrap;
+  }
+
+  .category-btn:hover .nav-label,
+  .category-btn:focus-visible .nav-label {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+
   .category-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--surface-sidebar-hover);
     color: var(--color-primary-400);
   }
 
@@ -857,7 +1021,7 @@
   }
 
   .category-btn.active {
-    background: rgba(59, 130, 246, 0.15);
+    background: var(--surface-sidebar-active);
     color: var(--color-primary-400);
   }
 
@@ -882,7 +1046,7 @@
     left: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 3px;
+    width: 4px;
     height: 60%;
     background: var(--color-primary-500);
     border-radius: 0 var(--radius-full) var(--radius-full) 0;
@@ -892,11 +1056,11 @@
      CONTENT PANEL
      ============================================ */
   .content-panel {
-    background: var(--color-gray-50);
+    background: var(--surface-panel);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid var(--color-gray-200);
+    border-right: 1px solid var(--border-default);
     min-width: 0;
   }
 
@@ -907,6 +1071,42 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-3);
+  }
+
+  .feature-header {
+    padding: var(--spacing-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .feature-header h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: var(--font-size-xl);
+    line-height: var(--line-height-tight);
+  }
+
+  .feature-header p {
+    margin: var(--spacing-1) 0 0;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+  }
+
+  .panel-loading,
+  .panel-load-error {
+    padding: var(--spacing-3);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--surface-card);
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+  }
+
+  .panel-load-error {
+    border-color: var(--color-error);
+    color: var(--color-error);
   }
 
   /* ============================================
@@ -949,9 +1149,9 @@
      ============================================ */
   .quick-start {
     padding: var(--spacing-3);
-    background: linear-gradient(135deg, var(--color-primary-50) 0%, var(--color-secondary-50) 100%);
+    background: var(--surface-card);
     border-radius: var(--radius-lg);
-    border: 2px dashed var(--color-primary-300);
+    border: 1px solid var(--border-default);
   }
 
   .btn-quick {
@@ -961,9 +1161,9 @@
     justify-content: center;
     gap: var(--spacing-2);
     padding: var(--spacing-3);
-    background: white;
-    color: var(--color-primary-700);
-    border: 2px solid var(--color-primary-500);
+    background: var(--color-primary-600);
+    color: white;
+    border: 1px solid var(--color-primary-600);
     border-radius: var(--radius-md);
     font-weight: var(--font-weight-semibold);
     font-size: var(--font-size-sm);
@@ -972,7 +1172,7 @@
   }
 
   .btn-quick:hover {
-    background: var(--color-primary-600);
+    background: var(--color-primary-700);
     color: white;
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
@@ -990,7 +1190,7 @@
      3D VIEWER PANEL
      ============================================ */
   .viewer-panel {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    background: linear-gradient(135deg, var(--surface-viewer-start) 0%, var(--surface-viewer-end) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1037,7 +1237,7 @@
     justify-content: center;
     text-align: center;
     padding: var(--spacing-12);
-    color: var(--color-gray-500);
+    color: var(--text-muted);
   }
 
   .empty-icon {
@@ -1049,13 +1249,13 @@
     margin: 0 0 var(--spacing-2);
     font-size: var(--font-size-2xl);
     font-weight: var(--font-weight-semibold);
-    color: var(--color-gray-700);
+    color: var(--text-secondary);
   }
 
   .empty-state p {
     margin: 0;
     font-size: var(--font-size-base);
-    color: var(--color-gray-500);
+    color: var(--text-muted);
   }
 
   /* ============================================
@@ -1100,6 +1300,10 @@
     .category-btn {
       height: 48px;
       min-width: 48px;
+    }
+
+    .nav-label {
+      display: none;
     }
 
     .category-btn.active::before {

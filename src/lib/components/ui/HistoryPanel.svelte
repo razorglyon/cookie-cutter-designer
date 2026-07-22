@@ -81,6 +81,8 @@
       class="control-btn info-btn"
       on:click={() => showHistory = !showHistory}
       title="Show history"
+      aria-label={`History, ${historyLength} states`}
+      aria-expanded={showHistory}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10" />
@@ -122,42 +124,45 @@
 <style>
   .history-panel {
     display: flex;
+    position: sticky;
+    bottom: 0;
+    z-index: var(--z-dropdown);
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--spacing-2);
   }
 
   .history-controls {
     display: flex;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    gap: var(--spacing-2);
+    padding: var(--spacing-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-sm);
   }
 
   .control-btn {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #4a5568;
-    cursor: pointer;
-    transition: all 0.2s;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-input);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   }
 
-  .control-btn:hover:not(.disabled) {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
+  .control-btn:hover:not(:disabled) {
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
+    color: var(--color-primary-600);
   }
 
-  .control-btn.disabled {
-    opacity: 0.4;
+  .control-btn:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
   }
 
@@ -165,86 +170,81 @@
     margin-left: auto;
   }
 
-  .btn-label {
-    font-size: 0.85rem;
-  }
-
   .history-count {
+    display: grid;
+    place-items: center;
     min-width: 1.5rem;
     height: 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #4299e1;
+    border-radius: var(--radius-full);
+    background: var(--color-primary-600);
     color: white;
-    border-radius: 50%;
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
   }
 
   .history-list {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    padding: 1rem;
     max-height: 300px;
+    padding: var(--spacing-4);
     overflow-y: auto;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-md);
   }
 
   h4 {
-    margin: 0 0 0.75rem;
-    font-size: 0.9rem;
-    color: #2d3748;
-    font-weight: 600;
+    margin: 0 0 var(--spacing-3);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
   }
 
   .history-items {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--spacing-2);
   }
 
   .history-item {
     display: flex;
     align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    border-radius: 6px;
-    transition: all 0.2s;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2);
+    border-radius: var(--radius-md);
   }
 
   .history-item:hover {
-    background: #f7fafc;
+    background: var(--surface-muted);
   }
 
   .history-item.current {
-    background: #ebf8ff;
-    border-left: 3px solid #4299e1;
+    border-left: 3px solid var(--color-primary-500);
+    background: var(--surface-callout);
   }
 
   .item-icon {
+    display: grid;
+    place-items: center;
     width: 1.5rem;
     height: 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    color: #4299e1;
+    color: var(--color-primary-500);
+    font-weight: var(--font-weight-bold);
   }
 
   .item-info {
+    min-width: 0;
     flex: 1;
   }
 
   .item-description {
-    font-size: 0.85rem;
-    color: #2d3748;
-    font-weight: 500;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
   }
 
   .item-time {
-    font-size: 0.75rem;
-    color: #a0aec0;
-    margin-top: 0.25rem;
+    margin-top: var(--spacing-1);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
   }
 </style>
