@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "generator": "stamp",
+  "success": {
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 80\"><path fill-rule=\"evenodd\" d=\"M10 10H110V70H10Z M40 30V50H80V30Z\" /></svg>",
+    "parameters": {
+      "wallThickness": 1,
+      "cuttingHeight": 12,
+      "totalHeight": 20,
+      "taperAngle": 2,
+      "targetSize": 75,
+      "sizeMode": "longest",
+      "handleStyle": "none",
+      "handleHeight": 8,
+      "enableHandle": false,
+      "enableEmbossing": false,
+      "embossDepth": 2.5,
+      "buildPlateSize": 200,
+      "mode": "stamp",
+      "stampDepth": 3,
+      "stampBase": true
+    }
+  },
+  "topology": {
+    "contours": 2,
+    "hasHoles": true
+  },
+  "expected": {
+    "dimensionsMm": {
+      "width": 75.0001220703125,
+      "depth": 49.00011444091797,
+      "height": 7.0002031326293945
+    },
+    "triangles": 76,
+    "shells": 1,
+    "signedVolumeMm3": 21291.379049632364,
+    "logicalTriangleHash": "ebbd152c2aae38eb",
+    "logicalTriangleHashAlgorithm": "fnv1a64-world-oriented-triangles-q1e4-v1"
+  },
+  "tolerance": {
+    "dimensionsMm": 0.0001,
+    "signedVolumeMm3": 0.001
+  },
+  "failure": {
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><path d=\"M10 10L10 10L10 10Z\" /></svg>",
+    "parameters": {
+      "wallThickness": 1,
+      "cuttingHeight": 12,
+      "totalHeight": 20,
+      "taperAngle": 2,
+      "targetSize": 75,
+      "sizeMode": "longest",
+      "handleStyle": "none",
+      "handleHeight": 8,
+      "enableHandle": false,
+      "enableEmbossing": false,
+      "embossDepth": 2.5,
+      "buildPlateSize": 200,
+      "mode": "stamp",
+      "stampDepth": 3,
+      "stampBase": true
+    },
+    "errorCode": "NO_VALID_CONTOURS"
+  }
+}

@@ -59,7 +59,7 @@
 ## État actuel
 
 - Branche : `feature/design-domain-foundation`, créée depuis le commit documentaire local `125c696`.
-- Dernière action : tâche 2.1 implémentée en TDD ; contrat de recette et registry lazy encore non suivis, avec `generatedArtifact.ts` adapté pour corréler les rôles au kind.
+- Dernière action : tâche 0.2 ajoutée après le commit registry `39cd1fc` ; deux fixtures JSON mesurées figent le pipeline legacy Cutter/Stamp avant leurs adaptateurs.
 - Domaine : catalogue de 11 `DesignKind`, mais seuls `cutter` et `stamp` sont constructibles ; les neuf recettes futures restent mappées vers `never`.
 - Persistance : `DesignDocumentV1` readonly et sérialisable, discriminé par `kind`; `source` conserve l’import initial normalisé et `sketch` l’état vectoriel éditable courant.
 - Runtime : `GeneratedArtifact<K>` contient l’`Object3D` Three.js et le rapport géométrique, avec rôles bornés par kind ; il ne doit jamais être sérialisé dans un projet.
@@ -70,15 +70,16 @@
 - Projet portable : enveloppe JSON exacte `{ format, version, document }`, round-trip Cutter/Stamp, refus des versions futures et import legacy via la migration V0→V1.
 - Stockage local : repository injectable avec copies défensives et validation en entrée/sortie ; adaptateur IndexedDB natif `cookie-cutter-designer` v1, store `projects`, clé `id`.
 - Registry : instance locale, loaders lazy, cache de promesse concurrente, retry après rejet, validation structurelle des modules et résolution TypeScript distributive.
-- Reviews : domaine `APPROVED`; projet portable `PASS/APPROVED`; registry `PASS/APPROVED` après revision gate runtime et générique.
-- Tests : `338/338` réussis dans 29 fichiers avec `--maxWorkers=1`.
+- Fixtures legacy : SVG avec trou, paramètres complets, dimensions monde, triangles, coques, volume signé, erreur attendue et hash FNV-1a orienté quantifié à `1e-4 mm`.
+- Reviews : domaine `APPROVED`; projet portable `PASS/APPROVED`; registry `PASS/APPROVED`; fixtures legacy `PASS/APPROVED` après correction du hash orienté.
+- Tests : `343/343` réussis dans 29 fichiers avec `--maxWorkers=1`.
 - Typecheck : `0 erreur, 0 avertissement`.
 - Smoke exports : `3/3` réussis.
 - Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et hors de cette tranche.
 - Architecture : zéro import de production interdit depuis `src/lib/domain/` vers les contrats/stores/validateurs legacy.
-- Diff : `git diff --check` réussi ; commits locaux `f8ce9c5` et `13cec32`, aucun push.
+- Diff : `git diff --check` réussi ; commits locaux `f8ce9c5`, `13cec32` et `39cd1fc`, aucun push.
 - Réserve vérification : le bridge IndexedDB est typechecké et le repository est testé par backend injecté ; aucun runtime IndexedDB n’était disponible dans Node/happy-dom et le navigateur Hermes a échoué avant navigation.
-- À faire ensuite : committer la tâche 2.1, ajouter les fixtures de compatibilité 0.2, puis adapter Cutter et Stamp au contrat sans modifier leur cœur géométrique.
+- À faire ensuite : committer les fixtures 0.2, puis adapter Cutter et Stamp au contrat en rejouant ces mêmes JSON sans modifier leur cœur géométrique.
 
 ## Décisions / pièges connus
 
@@ -96,6 +97,7 @@
 - Le registry de recettes reste une instance locale et stocke des loaders `import()` ; il ne doit importer directement ni JSCAD ni les générateurs lourds.
 - Une promesse de recette rejetée ou un module lazy invalide est retiré du cache avec garde d’identité ; un nouvel appel peut retry sans boucle automatique.
 - Les rôles d’artefact sont corrélés au kind : Cutter ne peut pas produire un rôle Stamp et inversement au niveau TypeScript.
+- Les fixtures 0.2 sont l’oracle pré-adaptateur : les tests des recettes 2.2/2.3 doivent les rejouer via l’adaptateur et obtenir les mêmes métriques, hash orienté et codes d’erreur.
 - Les dimensions sont ajustées par `width`, `height` ou `longest`, puis mesurées sur le modèle final.
 - Toujours valider l'objet source puis sa copie transformée pour la fabrication.
 - Le validateur compte les composants par adjacence de triangles, pas par nombre de meshes.
