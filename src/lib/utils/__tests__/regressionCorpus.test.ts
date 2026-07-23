@@ -1,18 +1,10 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import legacyCutterJson from '../../domain/__tests__/fixtures/legacy-cutter.json';
-import legacyStampJson from '../../domain/__tests__/fixtures/legacy-stamp.json';
 import { DEFAULT_PARAMS, type CookieCutterParams } from '../../types/CookieCutter';
 import { generateCookieCutter } from '../cookieCutterGenerator';
-import {
-  extractClosedContours,
-  type NormalizedContour,
-  type NormalizedPoint
-} from '../contourExtraction';
 import { disposeObject3D } from '../disposeThree';
 import {
   CutterGenerationError,
-  type CutterGenerationErrorCode,
   validateCookieCutterParams
 } from '../generationValidation';
 import { validatePrintableObject } from '../geometryValidation';
@@ -28,54 +20,17 @@ import {
   tinyDetailsSvg
 } from './fixtures';
 import { installSvgLoaderDomParserAdapter } from './svgDomTestSupport';
-
-interface LegacyGeometryFixture {
-  readonly schemaVersion: 1;
-  readonly generator: 'cutter' | 'stamp';
-  readonly success: {
-    readonly svg: string;
-    readonly parameters: CookieCutterParams;
-  };
-  readonly topology: {
-    readonly contours: number;
-    readonly hasHoles: boolean;
-  };
-  readonly expected: {
-    readonly dimensionsMm: {
-      readonly width: number;
-      readonly depth: number;
-      readonly height: number;
-    };
-    readonly triangles: number;
-    readonly shells: number;
-    readonly signedVolumeMm3: number;
-    readonly logicalTriangleHash: string;
-    readonly logicalTriangleHashAlgorithm: 'fnv1a64-world-oriented-triangles-q1e4-v1';
-  };
-  readonly tolerance: {
-    readonly dimensionsMm: number;
-    readonly signedVolumeMm3: number;
-  };
-  readonly failure: {
-    readonly svg: string;
-    readonly parameters: CookieCutterParams;
-    readonly errorCode: CutterGenerationErrorCode;
-  };
-}
-
-type QuantizedVertex = [number, number, number];
-type QuantizedTriangle = [QuantizedVertex, QuantizedVertex, QuantizedVertex];
-
-const LEGACY_HASH_ALGORITHM = 'fnv1a64-world-oriented-triangles-q1e4-v1' as const;
-const WORLD_QUANTIZATION = 10_000;
-const FNV1A_64_OFFSET = 0xcbf29ce484222325n;
-const FNV1A_64_PRIME = 0x100000001b3n;
-const FNV1A_64_MASK = 0xffffffffffffffffn;
-// Cette suite capture volontairement le pipeline pré-adaptateur ; les tests recettes 2.2/2.3 doivent rejouer ces JSON via leurs adaptateurs.
-const legacyFixtures = [
-  legacyCutterJson as unknown as LegacyGeometryFixture,
-  legacyStampJson as unknown as LegacyGeometryFixture
-] as const;
+import {
+  fnv1a64,
+  inspectSvgTopology,
+  LEGACY_HASH_ALGORITHM,
+  legacyFixtures,
+  logicalTriangleHash,
+  normalizeOrientedTriangle,
+  type LegacyGeometryFixture,
+  type QuantizedTriangle,
+  type QuantizedVertex
+} from './legacyGeometryFixtureSupport';
 
 let restoreDomParser: (() => void) | undefined;
 
@@ -93,111 +48,6 @@ const cutterParams = {
   handleStyle: 'none' as const,
   taperAngle: 2
 };
-
-function pointInPolygon(point: NormalizedPoint, polygon: NormalizedContour): boolean {
-  let inside = false;
-
-  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
-    const currentPoint = polygon[index];
-    const previousPoint = polygon[previous];
-    const crosses =
-      currentPoint.y > point.y !== previousPoint.y > point.y &&
-      point.x <
-        ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) /
-          (previousPoint.y - currentPoint.y) +
-          currentPoint.x;
-
-    if (crosses) inside = !inside;
-  }
-
-  return inside;
-}
-
-function hasGeometricallyNestedHole(contours: ReadonlyArray<NormalizedContour>): boolean {
-  return contours.some(
-    (contour, contourIndex) =>
-      contours.reduce(
-        (depth, candidate, candidateIndex) =>
-          candidateIndex !== contourIndex && pointInPolygon(contour[0], candidate)
-            ? depth + 1
-            : depth,
-        0
-      ) %
-        2 ===
-      1
-  );
-}
-
-function compareQuantizedVertices(first: QuantizedVertex, second: QuantizedVertex): number {
-  return first[0] - second[0] || first[1] - second[1] || first[2] - second[2];
-}
-
-function compareQuantizedTriangles(first: QuantizedTriangle, second: QuantizedTriangle): number {
-  for (let vertex = 0; vertex < 3; vertex += 1) {
-    const comparison = compareQuantizedVertices(first[vertex], second[vertex]);
-    if (comparison !== 0) return comparison;
-  }
-  return 0;
-}
-
-function normalizeOrientedTriangle(triangle: QuantizedTriangle): QuantizedTriangle {
-  const cyclicRotations: QuantizedTriangle[] = [
-    triangle,
-    [triangle[1], triangle[2], triangle[0]],
-    [triangle[2], triangle[0], triangle[1]]
-  ];
-
-  return cyclicRotations.reduce((minimum, rotation) =>
-    compareQuantizedTriangles(rotation, minimum) < 0 ? rotation : minimum
-  );
-}
-
-function quantizedWorldVertex(
-  position: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
-  index: number,
-  matrixWorld: THREE.Matrix4
-): QuantizedVertex {
-  const vertex = new THREE.Vector3().fromBufferAttribute(position, index).applyMatrix4(matrixWorld);
-  return [
-    Math.round(vertex.x * WORLD_QUANTIZATION),
-    Math.round(vertex.y * WORLD_QUANTIZATION),
-    Math.round(vertex.z * WORLD_QUANTIZATION)
-  ];
-}
-
-function fnv1a64(serialized: string): string {
-  let hash = FNV1A_64_OFFSET;
-  for (const byte of new TextEncoder().encode(serialized)) {
-    hash ^= BigInt(byte);
-    hash = (hash * FNV1A_64_PRIME) & FNV1A_64_MASK;
-  }
-  return hash.toString(16).padStart(16, '0');
-}
-
-function logicalTriangleHash(object: THREE.Object3D): string {
-  const triangles: QuantizedTriangle[] = [];
-  object.updateMatrixWorld(true);
-
-  object.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return;
-    const position = child.geometry.getAttribute('position');
-    const index = child.geometry.getIndex();
-    if (!position) throw new Error('Expected a printable position attribute.');
-
-    const elementCount = index ? index.count : position.count;
-    for (let item = 0; item < elementCount; item += 3) {
-      const vertices = [
-        quantizedWorldVertex(position, index ? index.getX(item) : item, child.matrixWorld),
-        quantizedWorldVertex(position, index ? index.getX(item + 1) : item + 1, child.matrixWorld),
-        quantizedWorldVertex(position, index ? index.getX(item + 2) : item + 2, child.matrixWorld)
-      ] as QuantizedTriangle;
-      triangles.push(normalizeOrientedTriangle(vertices));
-    }
-  });
-
-  triangles.sort(compareQuantizedTriangles);
-  return fnv1a64(JSON.stringify(triangles));
-}
 
 async function generateLegacyObject(
   generator: LegacyGeometryFixture['generator'],
@@ -337,11 +187,7 @@ describe('manufacturing regression corpus', () => {
       expect(parameters).toEqual(fixture.success.parameters);
       expect(parameters.mode).toBe(fixture.generator);
 
-      const contours = extractClosedContours(fixture.success.svg);
-      expect({
-        contours: contours.length,
-        hasHoles: hasGeometricallyNestedHole(contours)
-      }).toEqual(fixture.topology);
+      expect(inspectSvgTopology(fixture.success.svg)).toEqual(fixture.topology);
 
       let object: THREE.Object3D | undefined;
       try {
