@@ -53,11 +53,12 @@
 - `src/lib/utils/batchProcessor.ts` — batch mesuré, atomique, annulable et nettoyé en rollback.
 - `src/lib/utils/__tests__/` — corpus, smoke exports et benchmark inclus.
 - `src/lib/domain/` — contrats persistants V1, validation runtime stricte, sûreté SVG et migration du format projet legacy.
+- `src/lib/projects/` — codec JSON portable, compatibilité legacy, repository validé et adaptateur IndexedDB natif.
 
 ## État actuel
 
 - Branche : `feature/design-domain-foundation`, créée depuis le commit documentaire local `125c696`.
-- Dernière action : première tranche P0 du plan produit implémentée en TDD dans `src/lib/domain/` ; 13 nouveaux fichiers encore non suivis, aucun fichier legacy modifié.
+- Dernière action : tâche 1.3 implémentée en TDD dans `src/lib/projects/` après le commit domaine local `f8ce9c5` ; quatre nouveaux fichiers projet encore non suivis, aucun fichier legacy modifié.
 - Domaine : catalogue de 11 `DesignKind`, mais seuls `cutter` et `stamp` sont constructibles ; les neuf recettes futures restent mappées vers `never`.
 - Persistance : `DesignDocumentV1` readonly et sérialisable, discriminé par `kind`; `source` conserve l’import initial normalisé et `sketch` l’état vectoriel éditable courant.
 - Runtime : `GeneratedArtifact` contient l’`Object3D` Three.js et le rapport géométrique ; il ne doit jamais être sérialisé dans un projet.
@@ -65,14 +66,17 @@
 - Validation : parseur `unknown` strict, clés exactes, dates ISO, nombres bornés, invariants Cutter/Stamp, recettes non implémentées rejetées et objets reconstruits sans mutation.
 - SVG : politique allowlist géométrique ; XML bien formé et racine `<svg>` obligatoires ; styles inline, ressources externes, événements, namespaces étrangers et contenu actif refusés.
 - Migration : vrai `ProjectData` legacy `1.0.0` vers V1, conversion `scale → targetSize`, sources SVG/PNG/JPEG, UUID par défaut avec factory injectable et avertissements explicites pour `thumbnail`/`notes` non représentables.
-- Reviews : conformité migration `PASS`, intégration `PASS`, review finale qualité `APPROVED` après découplage du schéma, remplacement du hash FNV et durcissement SVG.
-- Tests : `301/301` réussis dans 26 fichiers avec `--maxWorkers=1`.
+- Projet portable : enveloppe JSON exacte `{ format, version, document }`, round-trip Cutter/Stamp, refus des versions futures et import legacy via la migration V0→V1.
+- Stockage local : repository injectable avec copies défensives et validation en entrée/sortie ; adaptateur IndexedDB natif `cookie-cutter-designer` v1, store `projects`, clé `id`.
+- Reviews : domaine `APPROVED`; conformité projet `PASS`; qualité projet `APPROVED` après correction du retry IndexedDB et des diagnostics codec.
+- Tests : `323/323` réussis dans 28 fichiers avec `--maxWorkers=1`.
 - Typecheck : `0 erreur, 0 avertissement`.
 - Smoke exports : `3/3` réussis.
 - Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et hors de cette tranche.
 - Architecture : zéro import de production interdit depuis `src/lib/domain/` vers les contrats/stores/validateurs legacy.
-- Diff : `git diff --check` réussi ; aucun commit d’implémentation ni push.
-- À faire ensuite : présenter les 13 fichiers à Rza, créer un commit local après validation, puis intégrer un registry de recettes et des adaptateurs domaine ↔ stores/générateurs sans modifier directement le schéma V1.
+- Diff : `git diff --check` réussi ; commit domaine local `f8ce9c5`, aucun push.
+- Réserve vérification : le bridge IndexedDB est typechecké et le repository est testé par backend injecté ; aucun runtime IndexedDB n’était disponible dans Node/happy-dom et le navigateur Hermes a échoué avant navigation.
+- À faire ensuite : committer la tâche 1.3, puis commencer la phase 2 avec le contrat de recette et le registry, sans modifier directement le schéma V1.
 
 ## Décisions / pièges connus
 
@@ -84,6 +88,9 @@
 - Le schéma persistant V1 doit rester découplé des règles de génération : toute évolution incompatible exige une nouvelle version et une migration explicite.
 - Un SVG n’entre dans `DesignDocumentV1` qu’après validation allowlist ; normaliser en amont les métadonnées Illustrator/Inkscape non prises en charge plutôt que d’assouplir silencieusement cette frontière.
 - La migration V0→V1 utilise `crypto.randomUUID()` pour éviter l’écrasement de deux imports identiques ; une factory injectable permet à l’adaptateur de contrôler l’identité.
+- Le codec projet reste pur : les APIs `File`, téléchargement et UI appartiennent aux adaptateurs, pas à `projectCodec.ts`.
+- Toute donnée lue depuis IndexedDB repasse par `parseDesignDocumentV1`; un enregistrement corrompu doit échouer explicitement, jamais être ignoré.
+- Une ouverture IndexedDB rejetée est retirée du cache pour permettre un retry au prochain appel ; aucun retry automatique en boucle.
 - Les dimensions sont ajustées par `width`, `height` ou `longest`, puis mesurées sur le modèle final.
 - Toujours valider l'objet source puis sa copie transformée pour la fabrication.
 - Le validateur compte les composants par adjacence de triangles, pas par nombre de meshes.
