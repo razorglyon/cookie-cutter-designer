@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "name": "Emporte-pièce étoile classique",
+  "createdAt": "2024-03-14T09:26:53.000Z",
+  "modifiedAt": "2024-03-16T15:45:12.000Z",
+  "svgData": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><path d=\"M50 4 61 36 95 36 68 56 78 89 50 69 22 89 32 56 5 36 39 36Z\"/></svg>",
+  "parameters": {
+    "wallThickness": 1,
+    "cuttingHeight": 12,
+    "totalHeight": 20,
+    "taperAngle": 7,
+    "scale": 1.2,
+    "handleStyle": "round",
+    "handleHeight": 8,
+    "enableHandle": true,
+    "enableEmbossing": false,
+    "embossDepth": 2.5,
+    "buildPlateSize": 200,
+    "mode": "cutter",
+    "stampDepth": 3,
+    "stampBase": true
+  },
+  "thumbnail": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+  "metadata": {
+    "originalFileName": "etoile-classique.svg",
+    "fileType": "svg",
+    "notes": "Recette familiale, pointes légèrement arrondies."
+  }
+}

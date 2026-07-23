@@ -5,7 +5,7 @@
 - GitHub : `razorglyon/cookie-cutter-designer`
 - Clone persistant : `/workspace/cookie-cutter-designer`
 - Branche par défaut : `main`
-- Branche courante de référence : `main`
+- Branche courante de référence : `feature/design-domain-foundation`
 - Dernière consolidation : PR #35 (pipeline/heatmap), PR #37 (`@tsconfig/svelte`) et PR #40 (dépendances cœur)
 - Push interdit sans GO explicite de Rza.
 
@@ -52,40 +52,38 @@
 - `src/lib/utils/slicer.ts` — intersections géométriques de couches, pas du slicing d'impression.
 - `src/lib/utils/batchProcessor.ts` — batch mesuré, atomique, annulable et nettoyé en rollback.
 - `src/lib/utils/__tests__/` — corpus, smoke exports et benchmark inclus.
+- `src/lib/domain/` — contrats persistants V1, validation runtime stricte, sûreté SVG et migration du format projet legacy.
 
 ## État actuel
 
-- Branche : `docs/cookiecad-product-spec`.
-- Dernière action : audit public de Cookiecad Designer V6 et rédaction d’un dossier produit complet dans `docs/product/` : analyse concurrentielle, PRD, matrice d’écarts et plan d’implémentation Codex.
-- Documentation : sources officielles et limites d’observation consignées ; Premium documenté sans compte, abonnement ni contournement de paywall.
-- Périmètre produit confirmé : application personnelle, sans compte, abonnement, paiement, paywall, backend métier ni bibliothèque cloud ; persistance locale via IndexedDB, presets et fichiers projet JSON.
-- Idéation complémentaire retenue sans l’attribuer à Cookiecad : plume/Bézier, primitives, grille et snapping, transformations, calques, texte vectorisé, exports séparés, SVG, capture viewport, PWA locale et benchmark 10 000 points.
-- Validation de cette branche : `git diff --check` réussi et structure des quatre documents vérifiée ; aucun test applicatif relancé, car seules des modifications Markdown et ce contexte ont été réalisés.
-- À faire ensuite : faire relire le PRD et le plan par Rza/Codex, ajuster les priorités P0–P3, puis committer localement après validation.
-- Base consolidée précédente : intégration de Three.js `0.185.1`, `@types/node` `24.13.3` et `happy-dom` `20.11.1` après la fusion du pipeline print-ready et de la heatmap.
-- Heatmap : mesure par triangle entre contours opposés pendant la génération, propagée après fusion body/poignée dans `geometry.userData`, puis appliquée sur une copie non indexée réservée au viewer.
-- Rendu : bleu sous la cible, vert à la cible, orange au maximum mesuré; capots horizontaux neutres et couleurs lissées entre sommets latéraux partagés.
-- UI : toggle décoché par défaut, désactivé en mode Stamp, légende accessible `Target / Min / Max` en millimètres et restauration du matériau monochrome après désactivation.
-- Stamp : répare uniquement les minuscules trous triangulaires fermés, horizontaux et situés sur le capot supérieur (`≤ 0,01 mm²`, maximum 8), puis relance les validations JSCAD et indépendantes.
-- JSCAD : `@jscad/modeling` mis à jour de `2.12.6` à `2.13.0`; la mise à jour seule ne corrige pas le Heart, confirmé par un test rouge sans la réparation locale.
-- Régression Heart : forme intégrée à `75 mm`, relief `5 mm`, poignée ronde `8 mm`, hauteur finale `17 mm`, une mesh, un shell et export STL validé.
-- Responsive : header compact, navigation horizontale tactile, panneaux sans largeur desktop résiduelle, historique placé en haut, sliders 44 px et overlays 3D adaptés aux écrans étroits.
-- Tests : `216/216` réussis dans 22 fichiers avec `--maxWorkers=1` et Three.js `0.185.1`.
+- Branche : `feature/design-domain-foundation`, créée depuis le commit documentaire local `125c696`.
+- Dernière action : première tranche P0 du plan produit implémentée en TDD dans `src/lib/domain/` ; 13 nouveaux fichiers encore non suivis, aucun fichier legacy modifié.
+- Domaine : catalogue de 11 `DesignKind`, mais seuls `cutter` et `stamp` sont constructibles ; les neuf recettes futures restent mappées vers `never`.
+- Persistance : `DesignDocumentV1` readonly et sérialisable, discriminé par `kind`; `source` conserve l’import initial normalisé et `sketch` l’état vectoriel éditable courant.
+- Runtime : `GeneratedArtifact` contient l’`Object3D` Three.js et le rapport géométrique ; il ne doit jamais être sérialisé dans un projet.
+- Paramètres V1 : DTO, valeurs par défaut et limites figés dans `domain`, sans dépendance de production vers `CookieCutterParams`, les stores ou `generationValidation`.
+- Validation : parseur `unknown` strict, clés exactes, dates ISO, nombres bornés, invariants Cutter/Stamp, recettes non implémentées rejetées et objets reconstruits sans mutation.
+- SVG : politique allowlist géométrique ; XML bien formé et racine `<svg>` obligatoires ; styles inline, ressources externes, événements, namespaces étrangers et contenu actif refusés.
+- Migration : vrai `ProjectData` legacy `1.0.0` vers V1, conversion `scale → targetSize`, sources SVG/PNG/JPEG, UUID par défaut avec factory injectable et avertissements explicites pour `thumbnail`/`notes` non représentables.
+- Reviews : conformité migration `PASS`, intégration `PASS`, review finale qualité `APPROVED` après découplage du schéma, remplacement du hash FNV et durcissement SVG.
+- Tests : `301/301` réussis dans 26 fichiers avec `--maxWorkers=1`.
 - Typecheck : `0 erreur, 0 avertissement`.
-- Smoke exports : `3/3` réussis ; STL, OBJ et 3MF générés et validés.
-- Build : réussi en 14,50 s ; chunk d’entrée `138,97 kB`, sous la limite `200 KiB`.
-- Diff : `git diff --check` réussi.
-- Validation visuelle : Circle et Star validés en Cutter; dégradé latéral lissé, capots neutres, thèmes sombre/clair, 20 bascules successives, option désactivée en Stamp. Camofox ne redimensionne pas son viewport (`1860×992`), donc pas de nouvelle capture mobile spécifique à la heatmap.
-- Preview mobile privé : Tailscale Serve configuré en userspace sur `cookie-cutter-dev.tail218fe6.ts.net`; accès limité au tailnet.
-- Audit : aucune vulnérabilité connue au niveau `moderate` lors du dernier contrôle.
-- État Git : `main` consolidé via PR avec checks `validate` et GitGuardian réussis.
-- À faire ensuite : surveiller les prochains rapports Dependabot et traiter uniquement les mises à jour recréées depuis le manifeste courant.
+- Smoke exports : `3/3` réussis.
+- Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et hors de cette tranche.
+- Architecture : zéro import de production interdit depuis `src/lib/domain/` vers les contrats/stores/validateurs legacy.
+- Diff : `git diff --check` réussi ; aucun commit d’implémentation ni push.
+- À faire ensuite : présenter les 13 fichiers à Rza, créer un commit local après validation, puis intégrer un registry de recettes et des adaptateurs domaine ↔ stores/générateurs sans modifier directement le schéma V1.
 
 ## Décisions / pièges connus
 
 - Unité logique : millimètre. STL ne stocke pas l'unité ; les coordonnées restent exprimées en mm.
 - Scène Three.js : Y-up. Exports slicer : Z-up, modèle posé à `Z = 0`.
 - `targetSize` remplace l'ancien facteur abstrait `scale`; migration historique : `scale: 1` devient 75 mm.
+- `DesignDocument.kind` est l’unique discriminant métier ; `parameters.mode` reste uniquement un champ de compatibilité V1 avec le pipeline actuel.
+- `DesignKind` expose le catalogue produit complet, mais un kind futur reste `never` tant que son vrai contrat et son pipeline n’existent pas.
+- Le schéma persistant V1 doit rester découplé des règles de génération : toute évolution incompatible exige une nouvelle version et une migration explicite.
+- Un SVG n’entre dans `DesignDocumentV1` qu’après validation allowlist ; normaliser en amont les métadonnées Illustrator/Inkscape non prises en charge plutôt que d’assouplir silencieusement cette frontière.
+- La migration V0→V1 utilise `crypto.randomUUID()` pour éviter l’écrasement de deux imports identiques ; une factory injectable permet à l’adaptateur de contrôler l’identité.
 - Les dimensions sont ajustées par `width`, `height` ou `longest`, puis mesurées sur le modèle final.
 - Toujours valider l'objet source puis sa copie transformée pour la fabrication.
 - Le validateur compte les composants par adjacence de triangles, pas par nombre de meshes.
@@ -119,3 +117,7 @@
 - Maintenance : `docs/MAINTENANCE.md`
 - Sécurité : `SECURITY.md`
 - Plan UX/UI : `.hermes/plans/2026-07-22_081456-ux-ui-consistency.md`
+- Analyse Cookiecad : `docs/product/COOKIECAD_V6_ANALYSIS.md`
+- PRD personnel local-first : `docs/product/COOKIE_CUTTER_DESIGNER_PRD.md`
+- Matrice d’écarts : `docs/product/FEATURE_GAP_MATRIX.md`
+- Plan d’implémentation : `docs/product/CODEX_IMPLEMENTATION_PLAN.md`
