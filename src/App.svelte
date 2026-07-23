@@ -13,7 +13,8 @@
     error,
     params,
     setParams,
-    updateParams
+    updateParams,
+    publishGenerationState
   } from './lib/stores/cookieCutterStore';
   import { historyStore } from './lib/stores/historyStore';
   import {
@@ -22,12 +23,18 @@
     cleanSVG,
     terminateImageProcessor
   } from './lib/utils/imageProcessor';
-  import { generateCookieCutter } from './lib/utils/cookieCutterGenerator';
   import { exportToSTL, estimateSTLSize, formatFileSize } from './lib/utils/stlExporter';
   import { applyMaterialToMesh, type MaterialPreset } from './lib/utils/materialManager';
   import type { SavedDesign } from './lib/utils/cloudGallery';
   import { disposeObject3D } from './lib/utils/disposeThree';
-  import { LatestGenerationGuard } from './lib/utils/latestGenerationGuard';
+  import { createGenerationOrchestrator } from './lib/generation/generationOrchestrator';
+  import { RecipeRegistry } from './lib/generation/recipeRegistry';
+  import {
+    isGenerationPending,
+    type GenerationResult,
+    type GenerationState,
+    type ImplementedDesignDocument
+  } from './lib/generation/generationState';
   import type { CookieCutterParams } from './lib/types/CookieCutter';
   import type { Mesh, Group } from 'three';
   import * as THREE from 'three';
@@ -51,16 +58,32 @@
   let svgCache: string | null = null;
   let svgRevision = 0;
   let sourceRevision = 0;
-  let debounceTimer: number | undefined;
   let isRestoringHistory = false;
   let activeCategory: Category = 'upload';
   let darkMode = false;
   let vectorizationController: AbortController | null = null;
   const THEME_STORAGE_KEY = 'cookie-cutter-theme';
+  let localDesignCounter = 0;
+  let designIdentity = createDesignIdentity();
+  let publishedGenerationResult: GenerationResult | null = null;
+  const pendingExternalDisposals = new Set<ModelObject>();
+  const disposedExternalObjects = new WeakSet<THREE.Object3D>();
 
-  const generationGuard = new LatestGenerationGuard<ModelObject>((stale) => {
-    disposeObject3D(stale);
+  const recipeRegistry = new RecipeRegistry();
+  recipeRegistry.register('cutter', async () =>
+    (await import('./lib/generation/recipes/cutterRecipe')).cutterRecipe
+  );
+  recipeRegistry.register('stamp', async () =>
+    (await import('./lib/generation/recipes/stampRecipe')).stampRecipe
+  );
+
+  const generationOrchestrator = createGenerationOrchestrator({
+    registry: recipeRegistry,
+    debounceMs: 300,
+    onStateChange: handleGenerationStateChange,
+    afterResultChange: completeGenerationPublication
   });
+  publishGenerationState(generationOrchestrator.getState());
 
   function applyTheme(nextDarkMode: boolean): void {
     darkMode = nextDarkMode;
@@ -97,12 +120,111 @@
     applyTheme(prefersDark);
   });
 
-  function cancelPendingGeneration(): void {
-    if (debounceTimer !== undefined) {
-      window.clearTimeout(debounceTimer);
-      debounceTimer = undefined;
+  function createDesignIdentity(): Readonly<{ id: string; createdAt: string }> {
+    localDesignCounter += 1;
+    const createdAt = new Date().toISOString();
+    const id = typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `local-design-${createdAt}-${localDesignCounter}`;
+    return Object.freeze({ id, createdAt });
+  }
+
+  function createGenerationDocument(
+    svgSnapshot: string,
+    paramsSnapshot: Readonly<CookieCutterParams>
+  ): ImplementedDesignDocument {
+    const updatedAt = new Date().toISOString();
+    const sourceFileName = fileName || 'untitled.svg';
+    const name = sourceFileName.replace(/\.[^/.]+$/, '') || 'Untitled design';
+    const common = {
+      schemaVersion: 1 as const,
+      id: designIdentity.id,
+      name,
+      source: {
+        type: 'svg' as const,
+        fileName: sourceFileName,
+        svg: svgSnapshot
+      },
+      sketch: {
+        svg: svgSnapshot,
+        revision: svgRevision
+      },
+      viewport: {
+        showGrid: true,
+        showAxes: false,
+        showWallThickness: false
+      },
+      createdAt: designIdentity.createdAt,
+      updatedAt
+    };
+
+    return paramsSnapshot.mode === 'stamp'
+      ? {
+          ...common,
+          kind: 'stamp',
+          parameters: { ...paramsSnapshot, mode: 'stamp' }
+        }
+      : {
+          ...common,
+          kind: 'cutter',
+          parameters: { ...paramsSnapshot, mode: 'cutter' }
+        };
+  }
+
+  function isModelObject(object: THREE.Object3D): object is ModelObject {
+    return object instanceof THREE.Mesh || object instanceof THREE.Group;
+  }
+
+  function disposeExternalObject(object: ModelObject): void {
+    if (disposedExternalObjects.has(object)) return;
+    disposedExternalObjects.add(object);
+    disposeObject3D(object);
+  }
+
+  function handleGenerationStateChange(state: GenerationState): void {
+    publishGenerationState(state);
+    $isProcessing = isGenerationPending(state);
+    $error = state.error?.message ?? null;
+
+    if (state.result === publishedGenerationResult) return;
+
+    const previousMesh = currentMesh;
+    const previousGeneratedObject = publishedGenerationResult?.artifacts[0].object ?? null;
+    const nextObject = state.result?.artifacts[0].object ?? null;
+    const nextMesh = nextObject !== null && isModelObject(nextObject) ? nextObject : null;
+
+    publishedGenerationResult = state.result;
+    currentMesh = nextMesh;
+    $model = nextMesh && state.result
+      ? {
+          mesh: nextMesh,
+          paths: [],
+          params: { ...state.result.document.parameters }
+        }
+      : null;
+
+    if (nextObject !== null && nextMesh === null) {
+      $error = 'Le résultat généré ne peut pas être affiché dans le viewer.';
     }
-    generationGuard.invalidate();
+
+    if (
+      previousMesh
+      && previousMesh !== previousGeneratedObject
+      && previousMesh !== nextMesh
+    ) {
+      pendingExternalDisposals.add(previousMesh);
+    }
+  }
+
+  async function completeGenerationPublication(): Promise<void> {
+    const externalObjects = [...pendingExternalDisposals];
+    pendingExternalDisposals.clear();
+    await tick();
+    for (const object of externalObjects) disposeExternalObject(object);
+  }
+
+  function cancelPendingGeneration(): void {
+    generationOrchestrator.cancel();
   }
 
   async function replaceCurrentMesh(
@@ -118,54 +240,21 @@
     };
 
     await tick();
-    if (previous && previous !== next) disposeObject3D(previous);
-  }
-
-  async function generateRevision(
-    revision: number,
-    svgSnapshot: string,
-    paramsSnapshot: Readonly<CookieCutterParams>
-  ): Promise<void> {
-    try {
-      let next: ModelObject;
-      if (paramsSnapshot.mode === 'stamp') {
-        const { generateStamp } = await import('./lib/utils/stampGenerator');
-        next = await generateStamp(svgSnapshot, { ...paramsSnapshot });
-      } else {
-        next = await generateCookieCutter(svgSnapshot, paramsSnapshot);
-      }
-
-      if (!generationGuard.accept(revision, next)) return;
-
-      await replaceCurrentMesh(next, paramsSnapshot);
-      if (generationGuard.isCurrent(revision)) $error = null;
-    } catch (generationError) {
-      if (!generationGuard.isCurrent(revision)) return;
-      console.error('Error generating model:', generationError);
-      $error = generationError instanceof Error
-        ? generationError.message
-        : 'Failed to generate model';
-    } finally {
-      if (generationGuard.isCurrent(revision)) $isProcessing = false;
-    }
+    if (previous && previous !== next) disposeExternalObject(previous);
   }
 
   function scheduleGeneration(
     svgSnapshot: string,
     paramsSnapshot: Readonly<CookieCutterParams>
   ): void {
-    if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
-
-    const revision = generationGuard.begin();
-    $isProcessing = true;
-    debounceTimer = window.setTimeout(() => {
-      debounceTimer = undefined;
-      void generateRevision(revision, svgSnapshot, paramsSnapshot);
-    }, 300);
+    generationOrchestrator.schedule(
+      createGenerationDocument(svgSnapshot, paramsSnapshot)
+    );
   }
 
   function publishSvg(svg: string, nextFileName: string): void {
     cancelPendingGeneration();
+    designIdentity = createDesignIdentity();
     fileName = nextFileName;
     svgRevision += 1;
     svgCache = svg;
@@ -336,9 +425,14 @@
   }
 
   async function handleBatchCreated(event: CustomEvent<THREE.Group>) {
-    sourceRevision += 1;
-    cancelPendingGeneration();
-    await replaceCurrentMesh(event.detail, $params);
+    const batch = event.detail;
+    const revision = ++sourceRevision;
+    await generationOrchestrator.clear();
+    if (revision !== sourceRevision) {
+      disposeExternalObject(batch);
+      return;
+    }
+    await replaceCurrentMesh(batch, $params);
     fileName = 'batch-production.stl';
     $isProcessing = false;
   }
@@ -382,18 +476,23 @@
 
   async function startNewDesign(): Promise<void> {
     sourceRevision += 1;
-    cancelPendingGeneration();
-    const previous = currentMesh;
+    vectorizationController?.abort();
+    const generatedObject = publishedGenerationResult?.artifacts[0].object ?? null;
+    const externalObject = currentMesh && currentMesh !== generatedObject ? currentMesh : null;
+
+    await generationOrchestrator.clear();
     currentMesh = null;
     $model = null;
     svgCache = null;
+    svgRevision = 0;
     $uploadedFile = null;
     $isProcessing = false;
     $error = null;
     activeCategory = 'upload';
+    designIdentity = createDesignIdentity();
 
     await tick();
-    if (previous) disposeObject3D(previous);
+    if (externalObject) disposeExternalObject(externalObject);
   }
 
   function requestNewDesign(): void {
@@ -406,9 +505,19 @@
     sourceRevision += 1;
     vectorizationController?.abort();
     terminateImageProcessor();
-    cancelPendingGeneration();
-    if (currentMesh) disposeObject3D(currentMesh);
+    const generatedObject = publishedGenerationResult?.artifacts[0].object ?? null;
+    const externalObjects = new Set<ModelObject>(pendingExternalDisposals);
+    if (currentMesh && currentMesh !== generatedObject) externalObjects.add(currentMesh);
+    pendingExternalDisposals.clear();
     currentMesh = null;
+    $model = null;
+    $isProcessing = false;
+    const generationDisposal = generationOrchestrator.dispose();
+    void (async () => {
+      await tick();
+      for (const object of externalObjects) disposeExternalObject(object);
+      await generationDisposal;
+    })();
   });
 </script>
 

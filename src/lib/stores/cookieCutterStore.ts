@@ -2,6 +2,11 @@ import { writable, derived, get, readonly, type Readable } from 'svelte/store';
 import type { CookieCutterParams, CookieCutterModel, PrintabilityCheck } from '../types/CookieCutter';
 import { DEFAULT_PARAMS } from '../types/CookieCutter';
 import {
+  createInitialGenerationState,
+  freezeGenerationState,
+  type GenerationState
+} from '../generation/generationState';
+import {
   CutterGenerationError,
   GENERATION_LIMITS,
   validateCookieCutterParams
@@ -41,6 +46,14 @@ export const pathData = writable<string | null>(null);
 
 // 3D model store
 export const model = writable<CookieCutterModel | null>(null);
+
+// Atomic generation lifecycle snapshot. Legacy UI stores remain during the incremental cutover.
+const generationStateStore = writable<GenerationState>(createInitialGenerationState());
+export const generationState: Readable<GenerationState> = readonly(generationStateStore);
+
+export function publishGenerationState(state: GenerationState): void {
+  generationStateStore.set(freezeGenerationState(state));
+}
 
 // Loading state
 export const isProcessing = writable<boolean>(false);

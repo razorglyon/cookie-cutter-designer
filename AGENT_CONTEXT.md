@@ -35,7 +35,7 @@
 
 ## Structure
 
-- `src/App.svelte` — orchestration, révisions asynchrones, import dynamique du Stamp, dimensions finales.
+- `src/App.svelte` — frontière UI de l’orchestrateur, sources Cutter/Stamp/Batch, publication du modèle et lifecycle Three.js.
 - `src/lib/utils/contourExtraction.ts` — extraction et normalisation des contours SVG.
 - `src/lib/utils/cutterGeometry.ts` — offsets et coque fermée du cutter.
 - `src/lib/utils/cookieCutterGenerator.ts` — taille physique, génération et validation du cutter.
@@ -54,12 +54,12 @@
 - `src/lib/utils/__tests__/` — corpus, smoke exports et benchmark inclus.
 - `src/lib/domain/` — contrats persistants V1, validation runtime stricte, sûreté SVG et migration du format projet legacy.
 - `src/lib/projects/` — codec JSON portable, compatibilité legacy, repository validé et adaptateur IndexedDB natif.
-- `src/lib/generation/` — contrat de recette typé, registry lazy local et adaptateurs de génération par kind.
+- `src/lib/generation/` — recettes typées, registry lazy et orchestrateur annulable à snapshots atomiques par révision.
 
 ## État actuel
 
 - Branche : `feature/design-domain-foundation`, créée depuis le commit documentaire local `125c696`.
-- Dernière action : tâche 2.3 implémentée en TDD ; `stampRecipe` adapte le document V1 vers le générateur legacy, exige une coque unique et rejoue exactement la fixture Stamp.
+- Dernière action : tâche 2.4 implémentée en TDD, approuvée et validée ; `GenerationOrchestrator` remplace le chemin Cutter/Stamp direct de `App.svelte` et centralise debounce, révision, annulation, dernier résultat valide et ownership Three.js.
 - Domaine : catalogue de 11 `DesignKind`, mais seuls `cutter` et `stamp` sont constructibles ; les neuf recettes futures restent mappées vers `never`.
 - Persistance : `DesignDocumentV1` readonly et sérialisable, discriminé par `kind`; `source` conserve l’import initial normalisé et `sketch` l’état vectoriel éditable courant.
 - Runtime : `GeneratedArtifact<K>` contient l’`Object3D` Three.js et le rapport géométrique, avec rôles bornés par kind ; il ne doit jamais être sérialisé dans un projet.
@@ -73,15 +73,15 @@
 - Fixtures legacy : SVG avec trou, paramètres complets, dimensions monde, triangles, coques, volume signé, erreur attendue et hash FNV-1a orienté quantifié à `1e-4 mm`.
 - Recette Cutter : validation unknown structurée, priorité d’annulation, validation d’imprimabilité finale et transfert explicite de l’ownership Three.js dans un unique artefact `role: cutter`.
 - Recette Stamp : mêmes garanties d’adaptation et d’ownership, validation finale `requireSingleShell: true`, fixture exacte et Heart maximal avec handle rond toujours manifold.
-- Reviews : domaine `APPROVED`; projet portable `PASS/APPROVED`; registry `PASS/APPROVED`; fixtures legacy `PASS/APPROVED`; recettes Cutter et Stamp `PASS/APPROVED`.
-- Tests : `368/368` réussis dans 31 fichiers avec `--maxWorkers=1`.
+- Reviews : domaine, projet portable, registry, fixtures, recettes, orchestrateur, état/store et intégration App/Batch `APPROVED`.
+- Tests : `409/409` réussis dans 35 fichiers avec un fork unique et `GOMAXPROCS=2`.
 - Typecheck : `0 erreur, 0 avertissement`.
-- Smoke exports : `3/3` réussis.
+- Smoke exports : `3/3` réussis ; smoke HTTP du bundle : `200`, point de montage et assets Vite vérifiés.
 - Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et hors de cette tranche.
 - Architecture : zéro import de production interdit depuis `src/lib/domain/` vers les contrats/stores/validateurs legacy.
-- Diff : `git diff --check` réussi ; commits locaux `f8ce9c5`, `13cec32`, `39cd1fc`, `4c6f172` et `e21e757`, aucun push.
+- Diff : `git diff --check` et scan de secrets réussis ; tâche 2.4 commitée localement avec `add atomic generation orchestration`, aucun push.
 - Réserve vérification : le bridge IndexedDB est typechecké et le repository est testé par backend injecté ; aucun runtime IndexedDB n’était disponible dans Node/happy-dom et le navigateur Hermes a échoué avant navigation.
-- À faire ensuite : committer la recette Stamp 2.3, puis extraire l’orchestrateur 2.4 avec révision, annulation, publication atomique, dernier résultat valide et disposal unique.
+- À faire ensuite : démarrer le store document de la tâche 3.1.
 
 ## Décisions / pièges connus
 
@@ -102,6 +102,11 @@
 - Les fixtures 0.2 sont l’oracle pré-adaptateur : les tests des recettes 2.2/2.3 doivent les rejouer via l’adaptateur et obtenir les mêmes métriques, hash orienté et codes d’erreur.
 - Ownership d’une recette : avant retour réussi, elle possède l’`Object3D`; après retour, le caller le possède ; toute erreur ou annulation après génération impose un disposal unique avant propagation intacte de l’erreur.
 - Stamp impose une validation finale à coque unique ; son adaptateur reste hors des entrypoints et doit être atteint par un loader `import()` afin que `stampGenerator` et JSCAD restent dans leur chunk lazy.
+- `GenerationState` est une union discriminée corrélée au `kind`; ses DTO sont clonés et gelés profondément, mais l’identité mutable de chaque `Object3D` est volontairement préservée.
+- L’orchestrateur publie le nouveau snapshot avant la barrière UI et avant le disposal du résultat remplacé ; un échec conserve le dernier résultat valide.
+- Les callbacks synchrones de barrière/disposal peuvent rappeler `clear()` ou `dispose()` sans cycle : l’opération réelle est lancée, mais le callback reçoit une promesse non bloquante tandis que les callers externes attendent le drainage complet.
+- Toute mutation publique engagée porte un jeton monotone : une réentrée plus récente gagne sans republier un état obsolète ni orpheliner un timer scheduler.
+- Un Batch externe utilise sa propre révision de source ; au démontage, le store et les références UI sont vidés avant tout disposal Three.js.
 - Les dimensions sont ajustées par `width`, `height` ou `longest`, puis mesurées sur le modèle final.
 - Toujours valider l'objet source puis sa copie transformée pour la fabrication.
 - Le validateur compte les composants par adjacence de triangles, pas par nombre de meshes.
