@@ -59,7 +59,7 @@
 ## État actuel
 
 - Branche : `feature/design-domain-foundation`, créée depuis le commit documentaire local `125c696`.
-- Dernière action : tâche 2.2 implémentée en TDD ; `cutterRecipe` adapte le document V1 vers le générateur legacy sans modifier sa géométrie et rejoue exactement la fixture Cutter.
+- Dernière action : tâche 2.3 implémentée en TDD ; `stampRecipe` adapte le document V1 vers le générateur legacy, exige une coque unique et rejoue exactement la fixture Stamp.
 - Domaine : catalogue de 11 `DesignKind`, mais seuls `cutter` et `stamp` sont constructibles ; les neuf recettes futures restent mappées vers `never`.
 - Persistance : `DesignDocumentV1` readonly et sérialisable, discriminé par `kind`; `source` conserve l’import initial normalisé et `sketch` l’état vectoriel éditable courant.
 - Runtime : `GeneratedArtifact<K>` contient l’`Object3D` Three.js et le rapport géométrique, avec rôles bornés par kind ; il ne doit jamais être sérialisé dans un projet.
@@ -72,15 +72,16 @@
 - Registry : instance locale, loaders lazy, cache de promesse concurrente, retry après rejet, validation structurelle des modules et résolution TypeScript distributive.
 - Fixtures legacy : SVG avec trou, paramètres complets, dimensions monde, triangles, coques, volume signé, erreur attendue et hash FNV-1a orienté quantifié à `1e-4 mm`.
 - Recette Cutter : validation unknown structurée, priorité d’annulation, validation d’imprimabilité finale et transfert explicite de l’ownership Three.js dans un unique artefact `role: cutter`.
-- Reviews : domaine `APPROVED`; projet portable `PASS/APPROVED`; registry `PASS/APPROVED`; fixtures legacy `PASS/APPROVED`; recette Cutter `PASS/APPROVED` après renforcement des preuves de disposal et propagation d’erreur.
-- Tests : `355/355` réussis dans 30 fichiers avec `--maxWorkers=1`.
+- Recette Stamp : mêmes garanties d’adaptation et d’ownership, validation finale `requireSingleShell: true`, fixture exacte et Heart maximal avec handle rond toujours manifold.
+- Reviews : domaine `APPROVED`; projet portable `PASS/APPROVED`; registry `PASS/APPROVED`; fixtures legacy `PASS/APPROVED`; recettes Cutter et Stamp `PASS/APPROVED`.
+- Tests : `368/368` réussis dans 31 fichiers avec `--maxWorkers=1`.
 - Typecheck : `0 erreur, 0 avertissement`.
 - Smoke exports : `3/3` réussis.
 - Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et hors de cette tranche.
 - Architecture : zéro import de production interdit depuis `src/lib/domain/` vers les contrats/stores/validateurs legacy.
-- Diff : `git diff --check` réussi ; commits locaux `f8ce9c5`, `13cec32`, `39cd1fc` et `4c6f172`, aucun push.
+- Diff : `git diff --check` réussi ; commits locaux `f8ce9c5`, `13cec32`, `39cd1fc`, `4c6f172` et `e21e757`, aucun push.
 - Réserve vérification : le bridge IndexedDB est typechecké et le repository est testé par backend injecté ; aucun runtime IndexedDB n’était disponible dans Node/happy-dom et le navigateur Hermes a échoué avant navigation.
-- À faire ensuite : committer la recette Cutter 2.2, puis adapter Stamp au contrat en rejouant sa fixture sans modifier son cœur géométrique ni son chargement JSCAD dynamique.
+- À faire ensuite : committer la recette Stamp 2.3, puis extraire l’orchestrateur 2.4 avec révision, annulation, publication atomique, dernier résultat valide et disposal unique.
 
 ## Décisions / pièges connus
 
@@ -100,6 +101,7 @@
 - Les rôles d’artefact sont corrélés au kind : Cutter ne peut pas produire un rôle Stamp et inversement au niveau TypeScript.
 - Les fixtures 0.2 sont l’oracle pré-adaptateur : les tests des recettes 2.2/2.3 doivent les rejouer via l’adaptateur et obtenir les mêmes métriques, hash orienté et codes d’erreur.
 - Ownership d’une recette : avant retour réussi, elle possède l’`Object3D`; après retour, le caller le possède ; toute erreur ou annulation après génération impose un disposal unique avant propagation intacte de l’erreur.
+- Stamp impose une validation finale à coque unique ; son adaptateur reste hors des entrypoints et doit être atteint par un loader `import()` afin que `stampGenerator` et JSCAD restent dans leur chunk lazy.
 - Les dimensions sont ajustées par `width`, `height` ou `longest`, puis mesurées sur le modèle final.
 - Toujours valider l'objet source puis sa copie transformée pour la fabrication.
 - Le validateur compte les composants par adjacence de triangles, pas par nombre de meshes.
