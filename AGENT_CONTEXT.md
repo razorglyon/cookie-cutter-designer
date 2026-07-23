@@ -55,8 +55,14 @@
 
 ## État actuel
 
-- Branche : `main`.
-- Dernière action : intégration de Three.js `0.185.1`, `@types/node` `24.13.3` et `happy-dom` `20.11.1` après la fusion du pipeline print-ready et de la heatmap.
+- Branche : `docs/cookiecad-product-spec`.
+- Dernière action : audit public de Cookiecad Designer V6 et rédaction d’un dossier produit complet dans `docs/product/` : analyse concurrentielle, PRD, matrice d’écarts et plan d’implémentation Codex.
+- Documentation : sources officielles et limites d’observation consignées ; Premium documenté sans compte, abonnement ni contournement de paywall.
+- Périmètre produit confirmé : application personnelle, sans compte, abonnement, paiement, paywall, backend métier ni bibliothèque cloud ; persistance locale via IndexedDB, presets et fichiers projet JSON.
+- Idéation complémentaire retenue sans l’attribuer à Cookiecad : plume/Bézier, primitives, grille et snapping, transformations, calques, texte vectorisé, exports séparés, SVG, capture viewport, PWA locale et benchmark 10 000 points.
+- Validation de cette branche : `git diff --check` réussi et structure des quatre documents vérifiée ; aucun test applicatif relancé, car seules des modifications Markdown et ce contexte ont été réalisés.
+- À faire ensuite : faire relire le PRD et le plan par Rza/Codex, ajuster les priorités P0–P3, puis committer localement après validation.
+- Base consolidée précédente : intégration de Three.js `0.185.1`, `@types/node` `24.13.3` et `happy-dom` `20.11.1` après la fusion du pipeline print-ready et de la heatmap.
 - Heatmap : mesure par triangle entre contours opposés pendant la génération, propagée après fusion body/poignée dans `geometry.userData`, puis appliquée sur une copie non indexée réservée au viewer.
 - Rendu : bleu sous la cible, vert à la cible, orange au maximum mesuré; capots horizontaux neutres et couleurs lissées entre sommets latéraux partagés.
 - UI : toggle décoché par défaut, désactivé en mode Stamp, légende accessible `Target / Min / Max` en millimètres et restauration du matériau monochrome après désactivation.
