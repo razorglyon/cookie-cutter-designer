@@ -61,7 +61,20 @@ export const isProcessing = writable<boolean>(false);
 
 // Error state
 export const error = writable<string | null>(null);
-export const parameterError = writable<string | null>(null);
+export interface ParameterIssue {
+  readonly message: string;
+  readonly field: string | null;
+}
+
+export const parameterIssue = writable<ParameterIssue | null>(null);
+export const parameterError: Readable<string | null> = derived(
+  parameterIssue,
+  ($parameterIssue) => $parameterIssue?.message ?? null
+);
+export const parameterErrorField: Readable<string | null> = derived(
+  parameterIssue,
+  ($parameterIssue) => $parameterIssue?.field ?? null
+);
 
 // Printability check
 export const printability = derived(
@@ -212,11 +225,15 @@ export function updateParams(patch: Partial<CookieCutterParams>): boolean {
     const candidate = buildParamUpdate(current, patch);
     const validated = validateCookieCutterParams(candidate);
     paramsStore.set(validated);
-    parameterError.set(null);
+    parameterIssue.set(null);
     return true;
   } catch (validationError) {
     if (validationError instanceof CutterGenerationError) {
-      parameterError.set(validationError.message);
+      const field = validationError.details?.field;
+      parameterIssue.set({
+        message: validationError.message,
+        field: typeof field === 'string' ? field : null
+      });
       return false;
     }
 
@@ -228,11 +245,11 @@ export function updateParams(patch: Partial<CookieCutterParams>): boolean {
 export function setParams(value: unknown) {
   const validated = validateCookieCutterParams(migrateLegacyCookieCutterParams(value));
   paramsStore.set(validated);
-  parameterError.set(null);
+  parameterIssue.set(null);
 }
 
 /** @deprecated Replace or create a complete versioned document instead. */
 export function resetParams() {
   paramsStore.set(createDefaultParams());
-  parameterError.set(null);
+  parameterIssue.set(null);
 }

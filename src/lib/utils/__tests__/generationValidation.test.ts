@@ -4,6 +4,7 @@ import {
   checkPrintability,
   error,
   parameterError,
+  parameterIssue,
   params,
   printability,
   migrateLegacyCookieCutterParams,
@@ -302,7 +303,7 @@ describe('cookieCutterStore parameter safety', () => {
   beforeEach(() => {
     resetParams();
     error.set(null);
-    parameterError.set(null);
+    parameterIssue.set(null);
   });
 
   it('exposes params through a read-only store contract', () => {
@@ -360,6 +361,10 @@ describe('cookieCutterStore parameter safety', () => {
     expect(result).toBe(false);
     expect(get(params)).toBe(before);
     expect(get(parameterError)).toMatch(/targetSize/i);
+    expect(get(parameterIssue)).toMatchObject({
+      field: 'targetSize',
+      message: expect.stringMatching(/targetSize/i)
+    });
     expect(get(error)).toBe('Generation failed');
   });
 
@@ -462,7 +467,7 @@ describe('cookieCutterStore parameter safety', () => {
 
   it('applies a valid optimizer patch atomically without fallback values', () => {
     const before = get(params);
-    parameterError.set('Previous parameter error');
+    parameterIssue.set({ message: 'Previous parameter error', field: null });
 
     expect(updateParams({ wallThickness: 1.2, taperAngle: 9 })).toBe(true);
 
@@ -512,7 +517,7 @@ describe('cookieCutterStore parameter safety', () => {
 
   it('resets to a fresh default snapshot without sharing DEFAULT_PARAMS', () => {
     setParams({ ...validParams(), targetSize: 80 });
-    parameterError.set('Previous parameter error');
+    parameterIssue.set({ message: 'Previous parameter error', field: null });
 
     resetParams();
     const firstReset = get(params);
@@ -528,7 +533,7 @@ describe('cookieCutterStore parameter safety', () => {
   });
 
   it('clears a stale parameter error after setParams succeeds', () => {
-    parameterError.set('Previous parameter error');
+    parameterIssue.set({ message: 'Previous parameter error', field: null });
 
     setParams(validParams());
 
