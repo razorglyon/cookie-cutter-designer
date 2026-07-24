@@ -59,7 +59,7 @@
 ## État actuel
 
 - Branche : `feature/design-domain-foundation`, créée depuis le commit documentaire local `125c696`.
-- Dernière action : tâche 2.4 implémentée en TDD, approuvée et validée ; `GenerationOrchestrator` remplace le chemin Cutter/Stamp direct de `App.svelte` et centralise debounce, révision, annulation, dernier résultat valide et ownership Three.js.
+- Dernière action : recette runtime navigateur du refactor 2.4 exécutée ; `GenerationOrchestrator` remplace le chemin Cutter/Stamp direct de `App.svelte` et centralise debounce, révision, annulation, dernier résultat valide et ownership Three.js.
 - Domaine : catalogue de 11 `DesignKind`, mais seuls `cutter` et `stamp` sont constructibles ; les neuf recettes futures restent mappées vers `never`.
 - Persistance : `DesignDocumentV1` readonly et sérialisable, discriminé par `kind`; `source` conserve l’import initial normalisé et `sketch` l’état vectoriel éditable courant.
 - Runtime : `GeneratedArtifact<K>` contient l’`Object3D` Three.js et le rapport géométrique, avec rôles bornés par kind ; il ne doit jamais être sérialisé dans un projet.
@@ -74,13 +74,14 @@
 - Recette Cutter : validation unknown structurée, priorité d’annulation, validation d’imprimabilité finale et transfert explicite de l’ownership Three.js dans un unique artefact `role: cutter`.
 - Recette Stamp : mêmes garanties d’adaptation et d’ownership, validation finale `requireSingleShell: true`, fixture exacte et Heart maximal avec handle rond toujours manifold.
 - Reviews : domaine, projet portable, registry, fixtures, recettes, orchestrateur, état/store et intégration App/Batch `APPROVED`.
-- Tests : `409/409` réussis dans 35 fichiers avec un fork unique et `GOMAXPROCS=2`.
+- Tests : `409/409` réussis dans 35 fichiers avec `--maxWorkers=1`, dont intégration App Cutter/Stamp, lazy loading et rejet des générations obsolètes.
 - Typecheck : `0 erreur, 0 avertissement`.
 - Smoke exports : `3/3` réussis ; smoke HTTP du bundle : `200`, point de montage et assets Vite vérifiés.
-- Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et hors de cette tranche.
+- Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et non bloquant.
+- Runtime Chromium — observation ponctuelle de cette session, non archivée dans le dépôt : IndexedDB natif exercé (`save/get/list/delete`, tri, fermeture/réouverture et persistance), WebGL 2 SwiftShader disponible, recettes Cutter et Stamp exécutées avec une coque imprimable (`576` et `804` triangles).
+- Limite navigateur du sandbox — observation ponctuelle de cette session : sous saturation `pids.max=256`, Chrome a signalé `net::ERR_INSUFFICIENT_RESOURCES` sur des chunks lazy ; les processus temporaires ont ensuite été nettoyés. Le parcours UI complet du build jusqu’au canvas n’a pas pu être certifié dans ce sandbox ; ne pas transformer ce signal environnemental en modification du registry sans reproduction hors saturation.
 - Architecture : zéro import de production interdit depuis `src/lib/domain/` vers les contrats/stores/validateurs legacy.
-- Diff : `git diff --check` et scan de secrets réussis ; tâche 2.4 commitée localement avec `add atomic generation orchestration`, aucun push.
-- Réserve vérification : le bridge IndexedDB est typechecké et le repository est testé par backend injecté ; aucun runtime IndexedDB n’était disponible dans Node/happy-dom et le navigateur Hermes a échoué avant navigation.
+- Diff : `git diff --check` et scan de secrets réussis avant la recette ; tâche 2.4 commitée localement avec `add atomic generation orchestration`, aucun push.
 - À faire ensuite : démarrer le store document de la tâche 3.1.
 
 ## Décisions / pièges connus
