@@ -55,11 +55,12 @@
 - `src/lib/domain/` — contrats persistants V1, validation runtime stricte, sûreté SVG et migration du format projet legacy.
 - `src/lib/projects/` — codec JSON portable, compatibilité legacy, repository validé et adaptateur IndexedDB natif.
 - `src/lib/generation/` — recettes typées, registry lazy et orchestrateur annulable à snapshots atomiques par révision.
+- `src/lib/stores/designDocumentStore.ts` — store readonly du document V1, mutations typées, validation atomique et snapshots gelés.
 
 ## État actuel
 
 - Branche : `feature/design-domain-foundation`, créée depuis le commit documentaire local `125c696`.
-- Dernière action : recette runtime navigateur du refactor 2.4 exécutée ; `GenerationOrchestrator` remplace le chemin Cutter/Stamp direct de `App.svelte` et centralise debounce, révision, annulation, dernier résultat valide et ownership Three.js.
+- Dernière action : tâche 3.1 implémentée en TDD ; `DesignDocumentStore` devient la frontière readonly des mutations documentaires tandis que `cookieCutterStore` reste le bridge legacy déprécié pendant la migration UI.
 - Domaine : catalogue de 11 `DesignKind`, mais seuls `cutter` et `stamp` sont constructibles ; les neuf recettes futures restent mappées vers `never`.
 - Persistance : `DesignDocumentV1` readonly et sérialisable, discriminé par `kind`; `source` conserve l’import initial normalisé et `sketch` l’état vectoriel éditable courant.
 - Runtime : `GeneratedArtifact<K>` contient l’`Object3D` Three.js et le rapport géométrique, avec rôles bornés par kind ; il ne doit jamais être sérialisé dans un projet.
@@ -73,16 +74,16 @@
 - Fixtures legacy : SVG avec trou, paramètres complets, dimensions monde, triangles, coques, volume signé, erreur attendue et hash FNV-1a orienté quantifié à `1e-4 mm`.
 - Recette Cutter : validation unknown structurée, priorité d’annulation, validation d’imprimabilité finale et transfert explicite de l’ownership Three.js dans un unique artefact `role: cutter`.
 - Recette Stamp : mêmes garanties d’adaptation et d’ownership, validation finale `requireSingleShell: true`, fixture exacte et Heart maximal avec handle rond toujours manifold.
-- Reviews : domaine, projet portable, registry, fixtures, recettes, orchestrateur, état/store et intégration App/Batch `APPROVED`.
-- Tests : `409/409` réussis dans 35 fichiers avec `--maxWorkers=1`, dont intégration App Cutter/Stamp, lazy loading et rejet des générations obsolètes.
+- Reviews : domaine, projet portable, registry, fixtures, recettes, orchestrateur, état/store et intégration App/Batch `APPROVED` ; conformité 3.1 `PASS` et qualité finale `APPROVED` après correction des tests temporels.
+- Tests : `418/418` réussis dans 36 fichiers avec `--maxWorkers=1`, dont 9 tests du store document, intégration App Cutter/Stamp, lazy loading et rejet des générations obsolètes.
 - Typecheck : `0 erreur, 0 avertissement`.
 - Smoke exports : `3/3` réussis ; smoke HTTP du bundle : `200`, point de montage et assets Vite vérifiés.
 - Build : réussi ; warning existant sur le chunk `three-vendor` à `605,79 kB`, inchangé et non bloquant.
 - Runtime Chromium — observation ponctuelle de cette session, non archivée dans le dépôt : IndexedDB natif exercé (`save/get/list/delete`, tri, fermeture/réouverture et persistance), WebGL 2 SwiftShader disponible, recettes Cutter et Stamp exécutées avec une coque imprimable (`576` et `804` triangles).
 - Limite navigateur du sandbox — observation ponctuelle de cette session : sous saturation `pids.max=256`, Chrome a signalé `net::ERR_INSUFFICIENT_RESOURCES` sur des chunks lazy ; les processus temporaires ont ensuite été nettoyés. Le parcours UI complet du build jusqu’au canvas n’a pas pu être certifié dans ce sandbox ; ne pas transformer ce signal environnemental en modification du registry sans reproduction hors saturation.
 - Architecture : zéro import de production interdit depuis `src/lib/domain/` vers les contrats/stores/validateurs legacy.
-- Diff : `git diff --check` et scan de secrets réussis avant la recette ; tâche 2.4 commitée localement avec `add atomic generation orchestration`, aucun push.
-- À faire ensuite : démarrer le store document de la tâche 3.1.
+- Diff : `git diff --check`, scan de secrets et scan des marqueurs de production réussis ; tâche 3.1 commitée localement avec `add versioned design document store`, aucun push.
+- À faire ensuite : démarrer la tâche 3.2 sur le panneau de paramètres.
 
 ## Décisions / pièges connus
 
@@ -108,6 +109,8 @@
 - Les callbacks synchrones de barrière/disposal peuvent rappeler `clear()` ou `dispose()` sans cycle : l’opération réelle est lancée, mais le callback reçoit une promesse non bloquante tandis que les callers externes attendent le drainage complet.
 - Toute mutation publique engagée porte un jeton monotone : une réentrée plus récente gagne sans republier un état obsolète ni orpheliner un timer scheduler.
 - Un Batch externe utilise sa propre révision de source ; au démontage, le store et les références UI sont vidés avant tout disposal Three.js.
+- Le store document ne publie qu'après `parseDesignDocumentV1`; chaque snapshot et ses sous-objets persistants sont gelés, et aucune méthode `set` publique ne contourne les mutations dédiées.
+- Une mutation document conserve un `updatedAt` monotone injecté pour les tests ; un changement Cutter/Stamp remplace entièrement les paramètres par les defaults corrélés au nouveau kind.
 - Les dimensions sont ajustées par `width`, `height` ou `longest`, puis mesurées sur le modèle final.
 - Toujours valider l'objet source puis sa copie transformée pour la fabrication.
 - Le validateur compte les composants par adjacence de triangles, pas par nombre de meshes.

@@ -34,8 +34,9 @@ export function migrateLegacyCookieCutterParams(value: unknown): unknown {
   };
 }
 
-// Parameters store
+// Legacy parameter bridge kept during the incremental document-store cutover.
 const paramsStore = writable<Readonly<CookieCutterParams>>(createDefaultParams());
+/** @deprecated Use a DesignDocumentStore for new document-driven workflows. */
 export const params: Readable<Readonly<CookieCutterParams>> = readonly(paramsStore);
 
 // Uploaded file store
@@ -194,7 +195,8 @@ function buildParamUpdate(
   return candidate;
 }
 
-// Helper functions to update params
+// Helper functions to update legacy params.
+/** @deprecated Use DesignDocumentStore.updateParameters instead. */
 export function updateParam<K extends keyof CookieCutterParams>(
   key: K,
   value: CookieCutterParams[K]
@@ -202,6 +204,7 @@ export function updateParam<K extends keyof CookieCutterParams>(
   return updateParams({ [key]: value } as Partial<CookieCutterParams>);
 }
 
+/** @deprecated Use DesignDocumentStore.updateParameters instead. */
 export function updateParams(patch: Partial<CookieCutterParams>): boolean {
   const current = get(paramsStore);
 
@@ -221,12 +224,14 @@ export function updateParams(patch: Partial<CookieCutterParams>): boolean {
   }
 }
 
+/** @deprecated Use DesignDocumentStore.replace instead. */
 export function setParams(value: unknown) {
   const validated = validateCookieCutterParams(migrateLegacyCookieCutterParams(value));
   paramsStore.set(validated);
   parameterError.set(null);
 }
 
+/** @deprecated Replace or create a complete versioned document instead. */
 export function resetParams() {
   paramsStore.set(createDefaultParams());
   parameterError.set(null);
