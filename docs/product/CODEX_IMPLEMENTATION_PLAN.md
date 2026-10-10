@@ -12,6 +12,12 @@
 
 ## Règles d’exécution
 
+### Synchronisation avec le chantier REA — 2026-10-10
+
+La bibliothèque locale et le raccordement du document canonique ont été avancés avant le catalogue et les recettes supplémentaires, selon `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`. Lot 1 intégré au commit source `141b774`, conformité PASS et qualité APPROVED ; validations et limites dans `docs/LOCAL_PROJECT_WORKFLOW_VALIDATION.md`. Ce n'est pas une clôture de toutes les phases de ce document : autosauvegarde, atelier raccordé, presets, ponts, profils et multi-cutter restent à livrer par lots séparés.
+
+Pour ce chantier uniquement, le GO Discord `1558257545167114381` autorise commits, push et PR réversibles. Les règles générales ci-dessous restent applicables aux autres chantiers. PR #57 reste brouillon et empilée sur #41, CI distante à vérifier, aucune fusion ni production sans « GO merge ».
+
 - Branche dédiée, jamais `main`.
 - Un commit local cohérent par tâche ou petit groupe de tâches.
 - Aucun push sans validation humaine.
