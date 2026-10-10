@@ -11,6 +11,7 @@ import {
   type HandleStyle
 } from '../../types/CookieCutter';
 import { circleSvg, openPathSvg } from './fixtures';
+import rasterCircle from './fixtures/raster-circle.ccd.json';
 import { installSvgLoaderDomParserAdapter } from './svgDomTestSupport';
 
 const closedSquareSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
@@ -98,6 +99,19 @@ afterAll(() => {
 });
 
 describe('generateCookieCutter', () => {
+  it('generates the exact saved antialiased raster circle with its round handle', async () => {
+    const group = await generateCookieCutter(
+      rasterCircle.document.sketch.svg,
+      params(rasterCircle.document.parameters as CookieCutterParams)
+    );
+    expect(meshes(group).length).toBeGreaterThan(0);
+    for (const mesh of meshes(group)) expectWatertight(mesh);
+    const box = new THREE.Box3().setFromObject(group);
+    expect(box.min.y).toBeCloseTo(0, 5);
+    expect(box.max.y).toBeCloseTo(20, 5);
+    const size = box.getSize(new THREE.Vector3());
+    expect(Math.max(size.x, size.z)).toBeCloseTo(75, 1);
+  });
   it('builds a centered watertight production mesh with an integrated handle', async () => {
     const group = await generateCookieCutter(circleSvg, params());
     const box = new THREE.Box3().setFromObject(group);

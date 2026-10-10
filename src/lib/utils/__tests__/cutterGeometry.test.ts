@@ -1,5 +1,13 @@
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { extractClosedContours } from '../contourExtraction';
+import { offsetPath } from '../pathOperations';
+import rasterCircle from './fixtures/raster-circle.ccd.json';
+import { installSvgLoaderDomParserAdapter } from './svgDomTestSupport';
+
+let restoreDomParser: (() => void) | undefined;
+beforeAll(() => { restoreDomParser = installSvgLoaderDomParserAdapter(); });
+afterAll(() => { restoreDomParser?.(); });
 import { createTaperedWallGeometry } from '../cutterGeometry';
 import { CutterGenerationError } from '../generationValidation';
 import {
@@ -10,7 +18,8 @@ import {
   concavePoints,
   duplicatePoints,
   squarePoints,
-  starPoints
+  starPoints,
+  tinyDetailsSvg
 } from './fixtures';
 
 const dumbbellPoints = [
@@ -80,6 +89,7 @@ function expectValidClosedGeometry(geometry: THREE.BufferGeometry): void {
   expect(wallThicknesses).toHaveLength((indices?.count ?? 0) / 3);
 
   const edgeCounts = new Map<string, number>();
+  const edgeDirections = new Map<string, number>();
   for (let item = 0; item < (indices?.count ?? 0); item += 3) {
     const triangle = [
       indices!.getX(item),
@@ -93,6 +103,7 @@ function expectValidClosedGeometry(geometry: THREE.BufferGeometry): void {
       const second = triangle[(edge + 1) % 3];
       const key = first < second ? `${first}:${second}` : `${second}:${first}`;
       edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+      edgeDirections.set(key, (edgeDirections.get(key) ?? 0) + (first < second ? 1 : -1));
     }
   }
 
@@ -113,6 +124,7 @@ function expectValidClosedGeometry(geometry: THREE.BufferGeometry): void {
     };
   });
   expect(invalidEdges, JSON.stringify(invalidEdgeDetails)).toEqual([]);
+  expect([...edgeDirections.values()].every((direction) => direction === 0)).toBe(true);
   expect(geometry.boundingBox).not.toBeNull();
   expect(geometry.boundingSphere?.radius).toBeGreaterThan(0);
 }
@@ -166,6 +178,92 @@ async function expectGenerationError(
 }
 
 describe('createTaperedWallGeometry', () => {
+  it('preserves every original offset vertex and edge for the saved raster circle', async () => {
+    const sourceContour = extractClosedContours(rasterCircle.document.sketch.svg)[0];
+    // This scale makes Clipper retain 149 bottom inner vertices but 147 top
+    // inner vertices. The exact production size/parameters are covered by the
+    // generator regression; here we specifically exercise unequal boundaries.
+    const contour = sourceContour.map(({ x, y }) => ({ x: x * 0.75, y: y * 0.75 }));
+    const options = { ...baseOptions, taperAngle: 7 };
+    const topWidth = 0.5 + Math.tan(7 * Math.PI / 180) * 12;
+    const layers = await Promise.all([
+      offsetPath(contour, 0.5, 'miter'), offsetPath(contour, -0.5, 'miter'),
+      offsetPath(contour, topWidth, 'miter'), offsetPath(contour, -topWidth, 'miter')
+    ]);
+    expect(layers[1][0].length).not.toBe(layers[3][0].length);
+    const geometry = await createTaperedWallGeometry(contour, options);
+    expectValidClosedGeometry(geometry);
+    const positions = geometry.getAttribute('position');
+    expect(positions.count).toBe(layers.flat().reduce((sum, ring) => sum + ring.length, 0));
+    const edges = new Set<string>();
+    const index = geometry.getIndex()!;
+    for (let item = 0; item < index.count; item += 3) {
+      for (let edge = 0; edge < 3; edge += 1) {
+        const first = index.getX(item + edge);
+        const second = index.getX(item + (edge + 1) % 3);
+        edges.add(first < second ? `${first}:${second}` : `${second}:${first}`);
+      }
+    }
+    for (let layer = 0; layer < layers.length; layer += 1) {
+      const height = layer < 2 ? 0 : 12;
+      for (const ring of layers[layer]) {
+        const vertices = ring.map((point) => {
+          for (let vertex = 0; vertex < positions.count; vertex += 1) {
+            if (positions.getY(vertex) === height &&
+                Math.abs(positions.getX(vertex) - point.x) < 1e-5 &&
+                Math.abs(positions.getZ(vertex) - point.y) < 1e-5) return vertex;
+          }
+          throw new Error('An original boundary vertex was lost');
+        });
+        for (let vertex = 0; vertex < vertices.length; vertex += 1) {
+          const first = vertices[vertex];
+          const second = vertices[(vertex + 1) % vertices.length];
+          expect(edges.has(first < second ? `${first}:${second}` : `${second}:${first}`)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it.each(['round', 'square', 'miter'] as const)(
+    'lofts unequal edge sequences with %s joins', async (joinStyle) => {
+      const geometry = await createTaperedWallGeometry(concavePoints, {
+        ...baseOptions, taperAngle: 7, joinStyle
+      });
+      expectValidClosedGeometry(geometry);
+    }
+  );
+
+  it('keeps the shallow notch closed when only offset vertex counts change', async () => {
+    // Match the physical scale range used when fitting the 90-unit artwork
+    // to a 75 mm cutter; the outward top offset closes the shallow notch.
+    const contour = extractClosedContours(tinyDetailsSvg)[0]
+      .map(({ x, y }) => ({ x: x * 0.8, y: y * 0.8 }));
+    const topWidth = 0.5 + Math.tan(2 * Math.PI / 180) * 12;
+    const layers = await Promise.all([
+      offsetPath(contour, 0.5, 'miter'), offsetPath(contour, -0.5, 'miter'),
+      offsetPath(contour, topWidth, 'miter'), offsetPath(contour, -topWidth, 'miter')
+    ]);
+    expect(layers.map((rings) => rings.length)).toEqual([1, 1, 1, 1]);
+    expect([0, 1].some((ring) => layers[ring][0].length !== layers[ring + 2][0].length)).toBe(true);
+    const geometry = await createTaperedWallGeometry(contour, { ...baseOptions, taperAngle: 2 });
+    try {
+      expectValidClosedGeometry(geometry);
+    } finally {
+      geometry.dispose();
+    }
+  });
+
+  it('still rejects an actual inner component split between layers', async () => {
+    const error = await expectGenerationError(
+      () => createTaperedWallGeometry(dumbbellPoints, {
+        ...baseOptions, wallThickness: 0.4, taperAngle: 3
+      }), 'OFFSET_FAILED'
+    );
+    expect(error.details).toMatchObject({
+      context: 'inner-rings', bottomComponents: 1, topComponents: 2
+    });
+  });
+
   it('builds a closed finite square wall at the requested height', async () => {
     const geometry = await createTaperedWallGeometry(squarePoints, baseOptions);
 

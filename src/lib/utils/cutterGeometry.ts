@@ -30,7 +30,7 @@ interface RegionPair {
   readonly top: PolygonRegion;
 }
 
-interface SampledLoopPair {
+interface PreparedLoopPair {
   readonly bottom: NormalizedContour;
   readonly top: NormalizedContour;
 }
@@ -252,22 +252,10 @@ function rotateToStableStart(contour: NormalizedContour): NormalizedContour {
   return Object.freeze(rotated);
 }
 
-function sampleLoopPair(
+function prepareLoopPair(
   bottom: NormalizedContour,
   top: NormalizedContour
-): SampledLoopPair {
-  if (bottom.length !== top.length) {
-    throw generationError(
-      'OFFSET_FAILED',
-      'The polygon offset changes vertex topology between height layers.',
-      {
-        context: 'loop-vertices',
-        bottomVertices: bottom.length,
-        topVertices: top.length
-      }
-    );
-  }
-
+): PreparedLoopPair {
   return Object.freeze({
     bottom: rotateToStableStart(bottom),
     top: rotateToStableStart(top)
@@ -276,7 +264,7 @@ function sampleLoopPair(
 
 function addLoopPair(
   positions: THREE.Vector3[],
-  pair: SampledLoopPair,
+  pair: PreparedLoopPair,
   bottomHeight: number,
   topHeight: number
 ): IndexedLoopPair {
@@ -458,6 +446,18 @@ function addCap(
   }
 }
 
+/** Parameter values at original edge ends, including the closing edge at 1. */
+function loopEdgeProgress(points: NormalizedContour): readonly number[] {
+  const progress = [0];
+  for (let index = 0; index < points.length; index += 1) {
+    progress.push(progress[index] + Math.sqrt(distanceSquared(
+      points[index], points[(index + 1) % points.length]
+    )));
+  }
+  const perimeter = progress[points.length];
+  return progress.map((value) => value / perimeter);
+}
+
 function addLoopSides(
   indices: number[],
   triangleThicknesses: number[],
@@ -467,46 +467,99 @@ function addLoopSides(
   oppositeBottom: ReadonlyArray<NormalizedContour>,
   oppositeTop: ReadonlyArray<NormalizedContour>
 ): void {
-  for (let index = 0; index < loop.bottomIndices.length; index += 1) {
-    const next = (index + 1) % loop.bottomIndices.length;
-    const bottomCurrent = loop.bottomIndices[index];
-    const bottomNext = loop.bottomIndices[next];
-    const topCurrent = loop.topIndices[index];
-    const topNext = loop.topIndices[next];
-    const edgeX = positions[bottomNext].x - positions[bottomCurrent].x;
-    const edgeZ = positions[bottomNext].z - positions[bottomCurrent].z;
+  // Preserve the historical diagonals, triangle order and thickness metadata
+  // whenever offsets retain the same number of vertices.
+  if (loop.bottomIndices.length === loop.topIndices.length) {
+    for (let index = 0; index < loop.bottomIndices.length; index += 1) {
+      const next = (index + 1) % loop.bottomIndices.length;
+      const bottomCurrent = loop.bottomIndices[index];
+      const bottomNext = loop.bottomIndices[next];
+      const topCurrent = loop.topIndices[index];
+      const topNext = loop.topIndices[next];
+      const edgeX = positions[bottomNext].x - positions[bottomCurrent].x;
+      const edgeZ = positions[bottomNext].z - positions[bottomCurrent].z;
+      const desiredNormal = inner
+        ? new THREE.Vector3(-edgeZ, 0, edgeX)
+        : new THREE.Vector3(edgeZ, 0, -edgeX);
+      const bottomThickness = distanceToContours(
+        edgeMidpoint(loop.bottomPoints, index),
+        oppositeBottom
+      );
+      const topThickness = distanceToContours(
+        edgeMidpoint(loop.topPoints, index),
+        oppositeTop
+      );
+
+      addOrientedTriangle(
+        indices,
+        triangleThicknesses,
+        positions,
+        bottomCurrent,
+        bottomNext,
+        topNext,
+        desiredNormal,
+        (bottomThickness * 2 + topThickness) / 3
+      );
+      addOrientedTriangle(
+        indices,
+        triangleThicknesses,
+        positions,
+        bottomCurrent,
+        topNext,
+        topCurrent,
+        desiredNormal,
+        (bottomThickness + topThickness * 2) / 3
+      );
+    }
+    return;
+  }
+
+  // Merge the cyclic edge sequences by normalized perimeter progress.
+  // No resampling: every original vertex and boundary edge is retained,
+  // so caps and adjacent height segments share their exact boundaries.
+  const bottomProgress = loopEdgeProgress(loop.bottomPoints);
+  const topProgress = loopEdgeProgress(loop.topPoints);
+  let bottom = 0;
+  let top = 0;
+  while (bottom < loop.bottomIndices.length || top < loop.topIndices.length) {
+    const advanceBottom = bottom < loop.bottomIndices.length &&
+      (top === loop.topIndices.length || bottomProgress[bottom + 1] <= topProgress[top + 1]);
+    const points = advanceBottom ? loop.bottomPoints : loop.topPoints;
+    const edge = advanceBottom ? bottom : top;
+    const current = points[edge % points.length];
+    const next = points[(edge + 1) % points.length];
+    const edgeX = next.x - current.x;
+    const edgeZ = next.y - current.y;
     const desiredNormal = inner
       ? new THREE.Vector3(-edgeZ, 0, edgeX)
       : new THREE.Vector3(edgeZ, 0, -edgeX);
-    const bottomThickness = distanceToContours(
-      edgeMidpoint(loop.bottomPoints, index),
-      oppositeBottom
+    const bottomCurrent = loop.bottomIndices[bottom % loop.bottomIndices.length];
+    const topCurrent = loop.topIndices[top % loop.topIndices.length];
+    const boundaryThickness = distanceToContours(
+      edgeMidpoint(points, edge % points.length),
+      advanceBottom ? oppositeBottom : oppositeTop
     );
-    const topThickness = distanceToContours(
-      edgeMidpoint(loop.topPoints, index),
-      oppositeTop
+    const oppositeThickness = distanceToContours(
+      advanceBottom
+        ? loop.topPoints[top % loop.topPoints.length]
+        : loop.bottomPoints[bottom % loop.bottomPoints.length],
+      advanceBottom ? oppositeTop : oppositeBottom
     );
-
-    addOrientedTriangle(
-      indices,
-      triangleThicknesses,
-      positions,
-      bottomCurrent,
-      bottomNext,
-      topNext,
-      desiredNormal,
-      (bottomThickness * 2 + topThickness) / 3
-    );
-    addOrientedTriangle(
-      indices,
-      triangleThicknesses,
-      positions,
-      bottomCurrent,
-      topNext,
-      topCurrent,
-      desiredNormal,
-      (bottomThickness + topThickness * 2) / 3
-    );
+    if (advanceBottom) {
+      addOrientedTriangle(
+        indices, triangleThicknesses, positions,
+        bottomCurrent, loop.bottomIndices[(bottom + 1) % loop.bottomIndices.length], topCurrent,
+        desiredNormal, (boundaryThickness * 2 + oppositeThickness) / 3
+      );
+      bottom += 1;
+    } else {
+      addOrientedTriangle(
+        indices, triangleThicknesses, positions,
+        bottomCurrent, loop.topIndices[(top + 1) % loop.topIndices.length], topCurrent,
+        desiredNormal, (boundaryThickness * 2 + oppositeThickness) / 3
+      );
+      top += 1;
+    }
   }
 }
 
@@ -522,7 +575,7 @@ function addRegionPair(
 ): void {
   const outerLoop = addLoopPair(
     positions,
-    sampleLoopPair(pair.bottom.outer, pair.top.outer),
+    prepareLoopPair(pair.bottom.outer, pair.top.outer),
     bottomHeight,
     topHeight
   );
@@ -532,7 +585,7 @@ function addRegionPair(
     'inner-rings'
   );
   const holeLoops = holePairs.map(([bottom, top]) =>
-    addLoopPair(positions, sampleLoopPair(bottom, top), bottomHeight, topHeight)
+    addLoopPair(positions, prepareLoopPair(bottom, top), bottomHeight, topHeight)
   );
   const bottomThicknessByIndex = new Map<number, number>();
   const topThicknessByIndex = new Map<number, number>();

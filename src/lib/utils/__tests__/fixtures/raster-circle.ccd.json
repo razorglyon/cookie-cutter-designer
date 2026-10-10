@@ -1,0 +1,44 @@
+{
+  "format": "cookie-cutter-designer-project",
+  "version": 1,
+  "document": {
+    "schemaVersion": 1,
+    "id": "3c3e08b2-ce25-4d13-9ab2-f032cbc3ebf7",
+    "name": "circle",
+    "source": {
+      "type": "raster",
+      "fileName": "circle.png",
+      "mimeType": "image/png",
+      "vectorizedSvg": "<svg viewBox=\"0 0 96 96\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" desc=\"Created with imagetracer.js version 0.2.1\" ><path fill=\"rgb(2,2,2)\" stroke=\"rgb(2,2,2)\" stroke-width=\"1\" opacity=\"1\" d=\"M 43.5 20 Q 62.4 19.6 70 30.5 Q 77 37.5 76 52.5 Q 73.6 64.1 65.5 70 Q 58.4 76.4 44.5 76 Q 31.6 73.4 25 64.5 L 20 52.5 L 20 43.5 Q 22.8 32.3 30.5 26 L 43.5 20 Z \" /><path fill=\"rgb(254,254,254)\" stroke=\"rgb(254,254,254)\" stroke-width=\"1\" opacity=\"1\" d=\"M 0 0 L 96 0 L 96 96 L 0 96 L 0 0 Z M 44 20 L 31 26 Q 23 32 20 44 L 20 53 L 25 65 Q 32 73 45 76 Q 58 76 66 70 Q 74 64 76 53 Q 77 38 70 31 Q 62 20 44 20 Z \" /></svg>"
+    },
+    "sketch": {
+      "svg": "<svg viewBox=\"0 0 96 96\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" desc=\"Created with imagetracer.js version 0.2.1\" ><path fill=\"rgb(2,2,2)\" stroke=\"rgb(2,2,2)\" stroke-width=\"1\" opacity=\"1\" d=\"M 43.5 20 Q 62.4 19.6 70 30.5 Q 77 37.5 76 52.5 Q 73.6 64.1 65.5 70 Q 58.4 76.4 44.5 76 Q 31.6 73.4 25 64.5 L 20 52.5 L 20 43.5 Q 22.8 32.3 30.5 26 L 43.5 20 Z \" /><path fill=\"rgb(254,254,254)\" stroke=\"rgb(254,254,254)\" stroke-width=\"1\" opacity=\"1\" d=\"M 0 0 L 96 0 L 96 96 L 0 96 L 0 0 Z M 44 20 L 31 26 Q 23 32 20 44 L 20 53 L 25 65 Q 32 73 45 76 Q 58 76 66 70 Q 74 64 76 53 Q 77 38 70 31 Q 62 20 44 20 Z \" /></svg>",
+      "revision": 0
+    },
+    "viewport": {
+      "showGrid": true,
+      "showAxes": false,
+      "showWallThickness": false
+    },
+    "createdAt": "2026-10-10T14:36:31.517Z",
+    "updatedAt": "2026-10-10T14:36:31.517Z",
+    "kind": "cutter",
+    "parameters": {
+      "wallThickness": 1,
+      "cuttingHeight": 12,
+      "totalHeight": 20,
+      "taperAngle": 7,
+      "targetSize": 75,
+      "sizeMode": "longest",
+      "handleStyle": "round",
+      "handleHeight": 8,
+      "enableHandle": true,
+      "enableEmbossing": false,
+      "embossDepth": 2.5,
+      "buildPlateSize": 200,
+      "stampDepth": 3,
+      "stampBase": true,
+      "mode": "cutter"
+    }
+  }
+}
