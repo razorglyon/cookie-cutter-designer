@@ -1092,12 +1092,19 @@
           {:catch}
             <div class="panel-load-error" role="alert">The image processor could not be loaded.</div>
           {/await}
-          {#await import('./lib/components/ui/BezierEditor.svelte')}
-            <div class="panel-loading" role="status">Loading Bézier editor…</div>
+          <HistoryPanel on:undo={handleUndo} on:redo={handleRedo} />
+          {#await import('./lib/components/ui/SketchWorkspace.svelte')}
+            <div class="panel-loading" role="status">Loading sketch workshop…</div>
           {:then component}
-            <component.default on:pathCreated={(e) => handleShapeSelect(e.detail)} />
+            {#if unavailableReason === null}
+              {#key $session?.id}
+                <component.default {session} />
+              {/key}
+            {:else}
+              <p role="status">Open a project to edit its sketch.</p>
+            {/if}
           {:catch}
-            <div class="panel-load-error" role="alert">The Bézier editor could not be loaded.</div>
+            <div class="panel-load-error" role="alert">The sketch workshop could not be loaded.</div>
           {/await}
           {#await import('./lib/components/ui/PatternGenerator.svelte')}
             <div class="panel-loading" role="status">Loading pattern generator…</div>

@@ -1,0 +1,45 @@
+// @vitest-environment happy-dom
+import { mount, unmount, tick } from 'svelte';
+import { get } from 'svelte/store';
+import { afterEach, expect, it, vi } from 'vitest';
+import App from '../App.svelte';
+import { createDesignSessionStore } from '../lib/stores/designSessionStore';
+import { createDesignDocument } from '../lib/projects/createDesignDocument';
+import { createProjectStorage } from '../lib/projects/projectStorage';
+import { historyStore } from '../lib/stores/historyStore';
+import { generationState, setParams } from '../lib/stores/cookieCutterStore';
+import { DEFAULT_PARAMS } from '../lib/types/CookieCutter';
+import { encodeProject, decodeProject } from '../lib/projects/projectCodec';
+import type { DesignDocument } from '../lib/domain/designDocument';
+vi.mock('../lib/components/viewer/ThreeViewer.svelte', async () => import('./fixtures/ThreeViewerStub.svelte'));
+let app: ReturnType<typeof mount> | undefined;
+afterEach(async () => { if (app) await unmount(app); app = undefined; document.body.innerHTML = ''; setParams({ ...DEFAULT_PARAMS }); });
+function click(name: string) { const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === name || b.textContent?.trim() === name); expect(button).toBeDefined(); button!.click(); }
+it('integrates current sketch, one-step history, fresh generation, save and reload without replacing source', async () => {
+ const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M10 10 L90 10 L90 90 L10 90 Z"/></svg>';
+ const initial = createDesignDocument({ name: 'Current project', kind: 'cutter', source: { type: 'svg', fileName: 'original.svg', svg } });
+ const session = createDesignSessionStore(initial); const baseline = session.getDocument()!; const epoch = session.getSessionEpoch();
+ const records = new Map<string, DesignDocument>();
+ const storage = createProjectStorage({ put: async document => { records.set(document.id, document); }, get: async id => records.get(id), getAll: async () => [...records.values()], delete: async id => { records.delete(id); } });
+ app = mount(App, { target: document.body.appendChild(document.createElement('div')), props: { projectSession: session, projectStorage: storage } });
+ await vi.waitFor(() => expect(get(generationState).phase).toBe('ready'), { timeout: 10000 });
+ click('Advanced Creation'); await vi.waitFor(() => expect(document.querySelector('.sketch-workspace')).not.toBeNull(), { timeout: 10000 });
+ expect(session.getDocument()).toBe(baseline); const length = historyStore.getLength();
+ const point = document.querySelector('.sketch-workspace circle')!;
+ point.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await tick();
+ const changed = session.getDocument()!;
+ expect(changed.sketch.svg).toContain('M11 10'); expect(changed.source).toEqual(baseline.source);
+ expect(changed.id).toBe(baseline.id); expect(changed.name).toBe(baseline.name); expect(changed.parameters).toEqual(baseline.parameters);
+ expect(session.getSessionEpoch()).toBe(epoch); expect(historyStore.getLength()).toBe(length + 1);
+ expect(get(generationState).phase).not.toBe('ready');
+ click('Undo'); await tick(); expect(session.getDocument()).toEqual(baseline);
+ click('Redo'); await tick(); expect(session.getDocument()).toEqual(changed);
+ await vi.waitFor(() => expect(get(generationState).result?.document).toEqual(changed), { timeout: 10000 });
+ click('Local projects'); await tick(); click('Save project'); await vi.waitFor(() => expect(records.get(changed.id)).toEqual(changed));
+ const portable = encodeProject(records.get(changed.id)!);
+ expect(decodeProject(portable).document).toEqual(changed);
+ session.clear(); await tick(); click('Local projects');
+ await vi.waitFor(() => expect([...document.querySelectorAll('button')].some(b => b.getAttribute('aria-label') === 'Open Current project')).toBe(true));
+ click('Open Current project'); await vi.waitFor(() => expect(session.getDocument()).toEqual(changed));
+ await vi.waitFor(() => expect(get(generationState).result?.document).toEqual(changed), { timeout: 10000 });
+}, 30000);

@@ -3,6 +3,10 @@
 > Référence produit : `COOKIE_CUTTER_DESIGNER_PRD.md`
 > Benchmark : `COOKIECAD_V6_ANALYSIS.md`
 
+## État local du lot 3 — 2026-10-10
+
+Cette matrice conserve des écarts historiques du benchmark ; les lignes non actualisées ne sont pas une attestation du produit courant. Les fondations/projets/récupération/import ont été consolidés avant le lot 3. Atelier minimal validé sur diff local `feature/sketch-workspace`, base `8037df8`, **non commité/non publié** : 988 tests, check 0/0, smoke 3/3, build et Chromium desktop/mobile. Détails, provenance et limites : `../SKETCH_WORKSPACE_VALIDATION.md`. Aucun engagement de parité complète ni nouvelle recette métier.
+
 ## Légende
 
 - **Solide** : implémenté, intégré et couvert par tests significatifs.
@@ -38,7 +42,7 @@
 | Erreurs structurées | Oui | Oui | Solide | P0 | Uniformiser |
 | Annulation traitement | Oui/non documenté | Oui | Solide | P0 | Conserver |
 | Rejet résultats obsolètes | Non documenté | Oui | Solide | P0 | Conserver |
-| Éditeur 2D intégré | Oui | Composants Path/Bezier présents | Partiel | P1 | Intégrer sur un document 2D commun |
+| Éditeur 2D intégré | Oui | Atelier canonique local validé ; M/L/C/Q/Z bornés | Partiel | P1 | Pas de plume complète, primitives/calques/snapping ; voir preuve lot 3 |
 | Restore original | Oui | Historique partiel | Partiel | P1 | Snapshot source immuable |
 | Autosauvegarde | Oui | Non | Absent | P2 | Local-first |
 
@@ -97,12 +101,12 @@
 
 | Capacité | Dépôt actuel | État | Action |
 |---|---|---|---|
-| Path editor | Composant existant | Partiel | Brancher au document source |
-| Bezier editor | Composant existant | Partiel | Fusionner avec Path editor |
+| Path editor | Atelier local branché au sketch canonique, source préservée | Partiel | Sélection, déplacement, topology linéaire, undo/redo validés ; non publié |
+| Bezier editor | Contrôles C/Q éditables sans polygonisation dans le même atelier | Partiel | Création plume complète et commandes SVG supplémentaires hors tranche |
 | Outil plume | Non intégré comme flux principal | Partiel | Ajouter segments et Bézier |
 | Primitives 2D | ShapeLibrary différente d’un éditeur | Partiel | Rectangle, ellipse, polygone, étoile |
 | Grille et snapping | Non vérifiés | Absent | Grille, points, axes et centres |
-| Transformations numériques | Non vérifiées | Absent | Rotation, échelle, miroir, translation |
+| Transformations numériques | X/Y d’un point, miroir horizontal et rotation 90° du path locaux | Partiel | Rotation/échelle libres et translation globale non livrées |
 | Calques 2D | Composant existant | Partiel | Visibilité, verrouillage et ordre |
 | Boolean operations | Utilitaire/composant existant | Partiel | Définir garanties et tests |
 | Pattern generator | Existant | Partiel | Réutiliser pour Stencil/Multi |
