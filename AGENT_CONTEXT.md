@@ -3,7 +3,7 @@
 ## Dépôt et autorisations
 
 - Dépôt : `razorglyon/cookie-cutter-designer` ; clone `/workspace/cookie-cutter-designer`.
-- Branche de travail : `feature/local-project-workflow` ; branche par défaut `main` (ne pas modifier directement).
+- Branche de travail : `fix/dependency-audit`, depuis `feature/local-project-workflow` / `317ea35` ; branche par défaut `main` (ne pas modifier directement).
 - PR #57 en brouillon, base `feature/design-domain-foundation` / PR #41. Ne pas fusionner les PR empilées hors ordre.
 - GO Discord `1558257545167114381` autorise tout le plan REA, commits, push et PR organisés. **Aucune fusion ni production sans « GO merge ».**
 - Publications : compte `razorglyon` explicitement sélectionné par sous-processus, sans changer le compte global `gh` (`bot-rza`, READ sur ce dépôt). Aucun token dans les fichiers/logs.
@@ -52,6 +52,14 @@ TMP isolé obligatoire, sortie vide/échec = arrêt. Mesurer la limite PID réel
 - Les prédicats `waitForFunction` du harness Playwright 1.58.2 doivent être synchrones : précharger les imports avec `evaluate`. Une Promise truthy n'est pas une attente métier. Une nouvelle optimisation Vite lazy peut recharger la page : préserver l'échec puis rejouer après diagnostic, sans compter cet essai comme réussi.
 
 ## Reprise et suite
+
+### Correctif de dépendances autorisé et en validation
+
+- GO « Oui » de Rza, message `1558438205903212658`, pour un lot séparé avant recovery. Plan `.hermes/plans/2026-10-10-dependency-audit-remediation.md`.
+- Baseline actuelle audit12 : 5 high / 6 moderate / 1 low. Patch de la PR #47 Vitest4.1.11 réutilisé ; son SHA2bd47a8 a été installé frozen/audité dans le worktree détaché `/workspace/cookie-cutter-designer-security-pr47` : il laisse10 avis. PR #43 devalue5.9.0 insuffisante, pas reprise.
+- Diff correctif limité à package.json et pnpm-lock.yaml : Vitest4.1.11, devalue5.9.4, PostCSS8.5.29, nanoid3.3.20, source-map-js1.2.2 et transitives de la famille Vitest. Aucun override ni majeure, aucune modification de src/CI/config. Résolutions des packages inchangés et integrities nouvelles vérifiées.
+- Audit après **0 avis connus**, installation frozenOK ; **830 tests/55 fichiers**, check0/0, smoke3, buildOK. Chromium13 étapes réussi, observation ponctuelle hors dépôt dans `commands/native-app-1791631667132/report.json`. Deux essais antérieurs ont subi les reloads Vite de réoptimisation du lockfile/lazy imports (fflate/OBJExporter puis imagetracer), logs conservés ; pas comptés comme succès.
+- Revue indépendante à terminer avant commit/publication. Aucun commit correctif ni PR sécurité encore publié à ce checkpoint ; PR #57 est publiée au head317ea35 et son Quality38044892881 reste en échec d'audit. Un audit local zéro ne modifie pas cette CI historique. Aucune fusion autorisée.
 
 1. Vérifier status/remotes, fetch et divergence avant toute nouvelle modification. Relire PR #57 et CI de son head exact ; aucune fusion implicite.
 2. Les lots suivants ne sont **pas réalisés** : brouillon de récupération distinct, import fluide, atelier 2D, presets de vectorisation, ponts, profils de paroi et multi-cutter. Détail et dépendances dans `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`.
