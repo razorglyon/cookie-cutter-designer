@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import FileUpload from './lib/components/ui/FileUpload.svelte';
+
+  import { importImage, clipboardImageFiles, isEditablePasteTarget, selectSingleImage } from './lib/import/imageImport';
   import ParameterPanel from './lib/components/ui/ParameterPanel.svelte';
   import ThreeViewer from './lib/components/viewer/ThreeViewer.svelte';
   import ShapeLibrary from './lib/components/ui/ShapeLibrary.svelte';
@@ -33,8 +35,6 @@
   import type { DesignDocument, ViewportPreferences, DesignSource } from './lib/domain/designDocument';
   import { historyStore } from './lib/stores/historyStore';
   import {
-    vectorizeImage,
-    readFileAsText,
     cleanSVG,
     terminateImageProcessor
   } from './lib/utils/imageProcessor';
@@ -74,8 +74,19 @@
   let sourceRevision = 0;
   let restoringHistory: { key: string; epoch: number } | null = null;
   let activeCategory: Category = 'upload';
+  let StartScreen: typeof import('./lib/components/ui/StartScreen.svelte').default | null = null;
+  let startScreenError: string | null = null;
+  onMount(() => {
+    void import('./lib/components/ui/StartScreen.svelte').then(module => {
+      if (alive) StartScreen = module.default;
+    }).catch(cause => {
+      if (alive) startScreenError = String(cause);
+    });
+  });
   let darkMode = false;
   let vectorizationController: AbortController | null = null;
+  let importPending = false;
+  let importError: string | null = null;
   const THEME_STORAGE_KEY = 'cookie-cutter-theme';
   let publishedGenerationResult: GenerationResult | null = null;
   let scheduledProjectEpoch = -1;
@@ -272,6 +283,9 @@
     session, storage: projectStorage, assertRepresentable,
     createId: () => crypto.randomUUID(),
     captureTransitionValidity: () => {
+      // A competing project transition owns the source immediately, not only
+      // after its asynchronous read/dirty confirmation has completed.
+      if (vectorizationController !== null) cancelImageImport();
       const revision = sourceRevision;
       const epoch = session.getSessionEpoch();
       const recoveryValidity = recoveryTransitionValidity;
@@ -312,9 +326,8 @@
       setParams
     },
     invalidateSource: () => {
-      sourceRevision += 1;
-      vectorizationController?.abort();
-      vectorizationController = null;
+      cancelImageImport();
+      importError = null;
       unavailableReason = null;
       externalExport = null;
       $uploadedFile = null;
@@ -382,6 +395,8 @@
   }
   async function resumeRecovery(expected: ProjectRecoveryEnvelope): Promise<void> {
     if (!alive || recoveryBusy || recoveryWorkflowBusy()) return;
+    cancelImageImport();
+    importError = null;
     recoveryBusy = true;
     const sequence = ++recoveryActionSequence;
     const revision = sourceRevision, epoch = session.getSessionEpoch(), document = session.getDocument();
@@ -499,26 +514,56 @@
     }
   }
 
+  function cancelImageImport(): void {
+    sourceRevision += 1;
+    vectorizationController?.abort();
+    vectorizationController = null;
+    importPending = false;
+  }
+
+  function rejectImageImport(message: string): void {
+    cancelImageImport();
+    importError = message;
+  }
+
+  function handlePaste(event: ClipboardEvent): void {
+    if (!alive || event.defaultPrevented || isEditablePasteTarget(event.target) || !event.clipboardData) return;
+    const files = clipboardImageFiles(event.clipboardData);
+    if (!files.length) return; // Never interpret text, HTML or SVG clipboard strings.
+    event.preventDefault();
+    try {
+      const file = selectSingleImage(files);
+      if (file) void handleFileUpload(new CustomEvent('upload', { detail: file }));
+    } catch (cause) {
+      rejectImageImport(cause instanceof Error ? cause.message : 'Could not read clipboard image.');
+    }
+  }
+
   async function handleFileUpload(event: CustomEvent<File>) {
     const file = event.detail;
-    const revision = ++sourceRevision;
+    cancelImageImport();
+    const revision = sourceRevision;
     const epoch = session.getSessionEpoch();
-    vectorizationController?.abort();
     const controller = new AbortController();
     vectorizationController = controller;
-    const current = () => alive && revision === sourceRevision && epoch === session.getSessionEpoch();
+    importError = null;
+    $error = null;
+    importPending = true;
+    const current = () => alive && !controller.signal.aborted && revision === sourceRevision && epoch === session.getSessionEpoch();
     // Keep all operation data local until the guarded session replacement.
     try {
-      const isSvg = file.type === 'image/svg+xml' || file.name.endsWith('.svg');
-      const svg = isSvg ? cleanSVG(await readFileAsText(file)) : await vectorizeImage(file, controller.signal);
+      const { svg, source } = await importImage(file, controller.signal);
       if (!current()) return;
-      const source: DesignSource = isSvg ? { type: 'svg', fileName: file.name, svg }
-        : { type: 'raster', fileName: file.name, mimeType: file.type as 'image/png' | 'image/jpeg' | 'image/webp', vectorizedSvg: svg };
+      importPending = false; // The dirty-document dialog now owns cancellation.
+      vectorizationController = null;
       await publishSvg(svg, file.name, $params, source);
     } catch (cause) {
-      if (current()) $error = cause instanceof Error ? cause.message : 'Failed to process file';
+      if (current()) importError = cause instanceof Error ? cause.message : 'Failed to process file';
     } finally {
-      if (vectorizationController === controller) vectorizationController = null;
+      if (vectorizationController === controller) {
+        vectorizationController = null;
+        importPending = false;
+      }
     }
   }
 
@@ -542,7 +587,8 @@
       ? 'generated-shape'
       : shape.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-    sourceRevision += 1;
+    cancelImageImport();
+    importError = null;
     try {
       void publishSvg(cleanSVG(svg), `${fileBaseName || 'library-shape'}.svg`);
     } catch (shapeError) {
@@ -556,7 +602,8 @@
       <circle cx="50" cy="50" r="20" fill="black"/>
     </svg>`;
 
-    sourceRevision += 1;
+    cancelImageImport();
+    importError = null;
     void publishSvg(circleSvg, 'test-circle.svg');
   }
 
@@ -593,7 +640,8 @@
       const design = event.detail;
       const nextSvg = cleanSVG(design.svgData);
 
-      sourceRevision += 1;
+      cancelImageImport();
+      importError = null;
       void publishSvg(nextSvg, `${design.metadata.name}.svg`, design.params);
     } catch (galleryError) {
       console.error('Error loading design:', galleryError);
@@ -606,7 +654,8 @@
 
   function captureBatchOperationValidity(): () => boolean {
     // Reserve at producer start, never date an old result as a new source request.
-    const revision = ++sourceRevision;
+    cancelImageImport();
+    const revision = sourceRevision;
     const epoch = session.getSessionEpoch();
     const geometry = () => {
       const document = session.getDocument();
@@ -672,7 +721,8 @@
   // deletion listener: even stale/programmatic events cannot dispose owner assets.
 
   function captureAIOperationValidity(): () => boolean {
-    const revision = ++sourceRevision;
+    cancelImageImport();
+    const revision = sourceRevision;
     const epoch = session.getSessionEpoch();
     const geometry = () => {
       const document = session.getDocument();
@@ -703,7 +753,7 @@
     const file = new File([event.detail], 'ai-processed.png', { type: 'image/png' });
     void handleFileUpload(new CustomEvent('upload', { detail: file }));
   }
-  function requestNewDesign(): void { void workflow.startNew(); }
+  function requestNewDesign(): void { cancelImageImport(); importError = null; void workflow.startNew(); }
   async function confirmDelete(document: DesignDocument): Promise<boolean> {
     return await ask('Delete local project', `Delete ${document.name} from this browser?`, [
       { id: 'cancel', label: 'Cancel' }, { id: 'delete', label: 'Delete project', destructive: true }
@@ -745,6 +795,8 @@
     })().catch(cause => console.error('Project cleanup failed:', cause));
   });
 </script>
+
+<svelte:window on:paste={handlePaste} />
 
 {#if confirmation}
   {#key confirmation}
@@ -972,8 +1024,8 @@
 
     <!-- Content Panel -->
     <div class="content-panel">
-      {#if $error}
-        <div class="alert alert-error">
+      {#if importError || $error}
+        <div class="alert alert-error" role="alert">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="8" x2="12" y2="12"/>
@@ -981,17 +1033,35 @@
           </svg>
           <div>
             <strong>Error</strong>
-            <p>{$error}</p>
+            <p>{importError ?? $error}</p>
           </div>
         </div>
       {/if}
 
       <div class="panel-content">
+        {#if importPending}
+          <div class="image-import-progress">
+            <p role="status" aria-live="polite">Importing image…</p>
+            <button type="button" class="btn" on:click={cancelImageImport}>Cancel image import</button>
+          </div>
+        {/if}
         {#if activeCategory === 'projects'}
           <ProjectManager {session} {workflow} {unavailableReason} />
           <LocalProjectLibrary {workflow} onConfirmDelete={confirmDelete} />
         {:else if activeCategory === 'upload'}
-          <FileUpload on:upload={handleFileUpload} />
+          {#if $session === null}
+            {#if StartScreen}
+              <svelte:component this={StartScreen} on:upload={handleFileUpload} on:reject={e => rejectImageImport(e.detail)}
+                on:shapes={() => activeCategory = 'shapes'} on:projects={() => activeCategory = 'projects'} />
+            {:else}
+              {#if startScreenError}
+                <p role="alert">Could not load the start screen: {startScreenError}</p>
+              {/if}
+              <FileUpload on:upload={handleFileUpload} on:reject={e => rejectImageImport(e.detail)} />
+            {/if}
+          {:else}
+            <FileUpload on:upload={handleFileUpload} on:reject={e => rejectImageImport(e.detail)} />
+          {/if}
           {#if !$model}
             <div class="quick-start">
               <button class="btn-quick" on:click={loadTestModel}>

@@ -3,7 +3,9 @@
 ## Dépôt et autorisations
 
 - Dépôt : `razorglyon/cookie-cutter-designer` ; clone `/workspace/cookie-cutter-designer`.
-- Branche de travail : `feature/local-project-recovery`, depuis `72fc457` / PR #58 ; branche par défaut `main` (ne pas modifier directement).
+- Branche de travail : `feature/unified-image-import`, depuis recovery `1f3afd0` / PR #59 ; branche par défaut `main` (ne pas modifier directement).
+- Lot 2 import terminé localement, revues PASS/APPROVED, 965 tests/63 fichiers, check0/0, smoke3, build/audit réussis. Chromium : 12 PASS et un échec additionnel de génération cercle anticrénelé, attribution non établie ; budget entry final non garanti. Détail : `docs/UNIFIED_IMAGE_IMPORT_VALIDATION.md`. Publication/CI encore à faire, aucune fusion/production.
+- Pause demandée après lot2 pour redémarrage du service ; ne pas démarrer lot3 avant cette pause. Toutes commandes git/gh préfixées `env -u GITHUB_TOKEN -u GH_TOKEN` jusqu'au redémarrage confirmé ; aucune configuration/hosts.yml à modifier. Identité API `razorglyon` vérifiée avec ce préfixe dans cette session.
 - PR #57 en brouillon, base `feature/design-domain-foundation` / PR #41. Ne pas fusionner les PR empilées hors ordre.
 - GO Discord `1558257545167114381` autorise tout le plan REA, commits, push et PR organisés. **Aucune fusion ni production sans « GO merge ».**
 - Publications : compte `razorglyon` explicitement sélectionné par sous-processus, sans changer le compte global `gh` (`bot-rza`, READ sur ce dépôt). Aucun token dans les fichiers/logs.
