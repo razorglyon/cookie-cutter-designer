@@ -5,8 +5,8 @@
 - Dépôt : `razorglyon/cookie-cutter-designer` ; clone `/workspace/cookie-cutter-designer`.
 - `main` est la branche principale ; toujours créer une branche dédiée depuis son SHA distant vérifié pour la suite. Ne pas reprendre les anciennes branches fusionnées en squash.
 - Fondations, projets locaux, correctif de dépendances, récupération et import intégrés par #62 au commit `867c102`. Quality, CodeQL et déploiement Pages réussis sur ce SHA ; site et assets HTTP 200. #41/#57/#58/#59 fermées comme remplacées, #47 Vitest déjà intégrée. Branches conservées.
-- Maintenance compatible : branche `chore/consolidate-compatible-dependencies` depuis ce main, versions @types/node 24.19.1, @types/three 0.185.4, happy-dom 20.14.5 regroupées. Installation frozen, audit sans avis connus, check 0/0, 965 tests/63 fichiers et build réussis localement. Relire la PR et le SHA distant pour connaître l’état de publication/fusion de cette maintenance.
-- Deux mises à jour laissées distinctes : #61 Svelte/Vite, build refusé par budget entry 201.2 KiB >200 KiB ; #56 Three.js, budget vendor 601.6 KiB >600 KiB. Ne pas fusionner leurs CI rouges ni augmenter les budgets pour contourner ces échecs. Optimisation à traiter séparément.
+- Maintenance compatible #63 intégrée : @types/node 24.19.1, @types/three 0.185.4, happy-dom 20.14.5 ; main `3c30739`, Quality/CodeQL/Pages réussis, #45/#52/#60 remplacées.
+- Correctif `fix/dependency-bundle-budgets` : Svelte 5.57.2, svelte-check 4.7.6, Vite 7.3.7, Three.js 0.186.1 regroupés pour remplacer #61/#56 après intégration vérifiée. Séparer runtime Svelte et addons Three.js du moteur ; pas de changement métier. Seuils inchangés (200/600 KiB), comptage UTF-8 après preload Vite. Local : 968 tests/64 fichiers, check 0/0, build/audit réussis, smoke Chromium sur dist réussi. Détail et limites : `docs/DEPENDENCY_BUNDLE_BUDGETS.md`. Relire GitHub pour confirmer fusion/déploiement, jamais les déduire de cette note.
 - Rza autorise la remise en état et les fusions validées, sans bypass ni suppression de branches. Les contrôles distants doivent toujours être relus sur le HEAD exact.
 - Ne pas commencer un lot suivant implicitement. Feuille de route : `.hermes/plans/2026-10-09_214154-rea-product-improvements.md` ; prochains lots produit : atelier 2D, presets, ponts, profils de paroi, multi-cutter.
 
@@ -51,7 +51,7 @@ TMP isolé obligatoire ; sortie vide/échec = arrêt. Sérialiser les validation
 
 - `docs/LOCAL_PROJECT_WORKFLOW_VALIDATION.md`, `docs/LOCAL_PROJECT_RECOVERY_VALIDATION.md`, `docs/UNIFIED_IMAGE_IMPORT_VALIDATION.md` : commandes, recette antérieure et limites.
 - Cercle raster anticrénelé : génération 3D peut refuser `The polygon offset changes vertex topology between height layers.` Attribution au lot 2 non établie. Ne pas promettre toute image imprimable.
-- Budget final du bundle initial non certifié malgré le build réussi ; warning chunk Three.js >600 kB connu.
+- Budgets JS contrôlés sur octets finaux, après preload Vite : 200 KiB entry, 600 KiB autres chunks. Le découpage runtime/addons améliore la taille par fichier et la réutilisation cache, sans garantir une baisse du total téléchargé.
 - Pas de garantie du dernier geste avant transaction lors d’un crash, ni undo/raster original après reload. Pas de certification device, lecteur d’écran, presse-papiers OS ou impression physique.
 - Les scripts/rapports navigateur hors dépôt sont des observations ponctuelles, pas des preuves de production. Une CI verte ne remplace pas la recette utilisateur.
 
