@@ -3,10 +3,11 @@
 ## Dépôt et état de consolidation
 
 - Dépôt : `razorglyon/cookie-cutter-designer` ; clone `/workspace/cookie-cutter-designer`.
-- Branche actuelle : `feature/unified-image-import`. `main` est la branche principale ; toujours créer une branche dédiée pour la suite.
-- Fondations, projets locaux, correctif de dépendances, récupération et import réunis dans la PR #62, désormais basée sur `main`. Les têtes #41/#57/#58/#59 sont des ancêtres vérifiés du snapshot applicatif `6bb7d68`.
-- Rza a autorisé la consolidation et la fusion avec CI verte, sans bypass, puis la fermeture des PR remplacées après preuve du contenu intégré. À l’écriture de ce checkpoint, fusion et déploiement ne sont pas encore réalisés : relire GitHub pour connaître leur résultat, ne pas déduire la livraison de cette note.
-- Snapshot applicatif : 965 tests/63 fichiers, check 0 erreur/0 warning, build réussi rejoués localement ; Quality distant (installation frozen, audit, check, tests, build) réussi. Un changement documentaire déclenche maintenant les contrôles de PR contre `main`.
+- `main` est la branche principale ; toujours créer une branche dédiée depuis son SHA distant vérifié pour la suite. Ne pas reprendre les anciennes branches fusionnées en squash.
+- Fondations, projets locaux, correctif de dépendances, récupération et import intégrés par #62 au commit `867c102`. Quality, CodeQL et déploiement Pages réussis sur ce SHA ; site et assets HTTP 200. #41/#57/#58/#59 fermées comme remplacées, #47 Vitest déjà intégrée. Branches conservées.
+- Maintenance compatible : branche `chore/consolidate-compatible-dependencies` depuis ce main, versions @types/node 24.19.1, @types/three 0.185.4, happy-dom 20.14.5 regroupées. Installation frozen, audit sans avis connus, check 0/0, 965 tests/63 fichiers et build réussis localement. Relire la PR et le SHA distant pour connaître l’état de publication/fusion de cette maintenance.
+- Deux mises à jour laissées distinctes : #61 Svelte/Vite, build refusé par budget entry 201.2 KiB >200 KiB ; #56 Three.js, budget vendor 601.6 KiB >600 KiB. Ne pas fusionner leurs CI rouges ni augmenter les budgets pour contourner ces échecs. Optimisation à traiter séparément.
+- Rza autorise la remise en état et les fusions validées, sans bypass ni suppression de branches. Les contrôles distants doivent toujours être relus sur le HEAD exact.
 - Ne pas commencer un lot suivant implicitement. Feuille de route : `.hermes/plans/2026-10-09_214154-rea-product-improvements.md` ; prochains lots produit : atelier 2D, presets, ponts, profils de paroi, multi-cutter.
 
 ## Auth et publication
