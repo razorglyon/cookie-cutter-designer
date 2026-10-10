@@ -2,26 +2,10 @@ import {
   terminateWorkers,
   vectorizeImageInWorker
 } from './workerManager';
-import type { VectorizationOptions } from './imageWorkerProtocol';
+import { tracingOptions, DEFAULT_TRACING_PRESET, type TracingPresetId } from '../import/tracingPresets';
 
 export const MAX_RASTER_PIXELS = 16_000_000;
 export const MAX_RASTER_DIMENSION = 8192;
-
-const COOKIE_CUTTER_TRACE_OPTIONS: VectorizationOptions = Object.freeze({
-  ltres: 1,
-  qtres: 1,
-  pathomit: 8,
-  colorsampling: 0,
-  numberofcolors: 2,
-  mincolorratio: 0,
-  colorquantcycles: 3,
-  blurradius: 0,
-  blurdelta: 20,
-  scale: 1,
-  roundcoords: 1,
-  viewbox: true,
-  desc: false
-});
 
 function cancellationError(): DOMException {
   return new DOMException('Image vectorization was cancelled.', 'AbortError');
@@ -99,13 +83,13 @@ function decodeWithImageElement(file: File, signal?: AbortSignal): Promise<Image
 }
 
 /** Decode on the UI thread, then transfer pixels to the vectorization Worker. */
-export async function vectorizeImage(file: File, signal?: AbortSignal): Promise<string> {
+export async function vectorizeImage(file: File, signal?: AbortSignal, preset: TracingPresetId = DEFAULT_TRACING_PRESET): Promise<string> {
   if (signal?.aborted) throw cancellationError();
   const imageData = typeof createImageBitmap === 'function'
     ? await decodeWithImageBitmap(file, signal)
     : await decodeWithImageElement(file, signal);
   if (signal?.aborted) throw cancellationError();
-  return vectorizeImageInWorker(imageData, COOKIE_CUTTER_TRACE_OPTIONS, signal);
+  return vectorizeImageInWorker(imageData, tracingOptions(preset), signal);
 }
 
 export function terminateImageProcessor(): void {

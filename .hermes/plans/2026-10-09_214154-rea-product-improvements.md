@@ -99,7 +99,9 @@ Fichiers proposés : `src/lib/sketch/sketchCommands.ts`, `src/lib/sketch/__tests
 
 ### Lot 4 — Préréglages de vectorisation
 
-**Dépendance :** lot 2 ; intégrer à l’atelier après lot 3.
+**État local 2026-10-10 :** implémenté sur `feature/tracing-presets`, non commité/non publié. 995 tests/68 fichiers, check 0/0, smoke 3/3, build, corpus Worker et recette Chromium réussis avec limites explicitement documentées dans `docs/TRACING_PRESETS_VALIDATION.md`. Corpus original procédural, pas de photographie ; undo/annulation tardive couverts par tests App à Worker simulé. Pas de changement V1.
+
+**Dépendance :** lot 2 ; intégré à l’atelier après lot 3.
 
 Fichiers existants : `src/lib/utils/imageProcessor.ts`, `src/lib/utils/imageWorkerProtocol.ts`, `src/workers/` ; identifier le worker exact lors du détail du lot.
 
