@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import {
     processImageWithAI,
     getAIPresets,
@@ -11,11 +11,31 @@
     processedImage: Blob;
   }>();
 
+  export let captureOperationValidity: (() => (() => boolean)) | undefined = undefined;
+  export let onProcessedImage: ((blob: Blob, validity: () => boolean) => void) | undefined = undefined;
+  let alive = true;
+  let sequence = 0;
+  let resultOperation: { current: () => boolean; validity: () => boolean } | null = null;
+  onDestroy(() => { alive = false; sequence++; });
+  function invalidate() { sequence++; processing = false; result = null; resultOperation = null; }
   let showPanel = false;
   let processing = false;
   let selectedFile: File | null = null;
   let selectedPreset: string = 'simple';
   let result: ProcessingResult | null = null;
+
+  // The preview owns a separate DOM canvas; never replace the producer's pixels.
+  function renderPreview(canvas: HTMLCanvasElement, processed: ProcessingResult) {
+    function draw(value: ProcessingResult): void {
+      if (!alive || value !== result || !resultOperation?.current()) return;
+      // One owner sets dimensions before drawing; no later attribute update erases pixels.
+      canvas.width = value.processedSize.width;
+      canvas.height = value.processedSize.height;
+      canvas.getContext('2d')?.drawImage(value.processedCanvas, 0, 0, canvas.width, canvas.height);
+    }
+    draw(processed);
+    return { update: draw };
+  }
 
   const presets = getAIPresets();
 
@@ -32,35 +52,53 @@
 
     if (!file) return;
 
+    invalidate();
     selectedFile = file;
-    result = null;
   }
 
   async function processImage() {
     if (!selectedFile) return;
 
+    const token = ++sequence;
+    const file = selectedFile;
+    const local = () => alive && token === sequence && selectedFile === file;
+    let validity: () => boolean;
+    try { validity = captureOperationValidity ? captureOperationValidity() : () => true; } catch { return; }
+    const current = () => {
+      if (!local()) return false;
+      try { return validity() === true && local(); } catch { return false; }
+    };
+    if (!current()) return;
     processing = true;
+    result = null;
+    resultOperation = null;
     try {
-      result = await processImageWithAI(selectedFile, options);
+      const processed = await processImageWithAI(file, { ...options });
+      if (!current()) return;
+      resultOperation = { current, validity };
+      result = processed;
     } catch (error) {
-      console.error('Error processing image:', error);
+      if (current()) console.error('Error processing image:', error);
     } finally {
-      processing = false;
+      if (local()) processing = false;
     }
   }
 
   async function useProcessedImage() {
-    if (!result) return;
+    const operation = resultOperation;
+    if (!result || !operation?.current()) return;
 
-    // Convert canvas to blob
+    // The delayed canvas callback retains the processing start context, not use-time context.
     result.processedCanvas.toBlob((blob) => {
-      if (blob) {
-        dispatch('processedImage', blob);
+      if (blob && operation.current()) {
+        if (onProcessedImage) onProcessedImage(blob, operation.validity);
+        else dispatch('processedImage', blob);
       }
     }, 'image/png');
   }
 
   function resetProcessor() {
+    invalidate();
     selectedFile = null;
     result = null;
     selectedPreset = 'simple';
@@ -180,9 +218,7 @@
             <div class="preview-item">
               <strong>Processed Image:</strong>
               <canvas
-                bind:this={result.processedCanvas}
-                width={result.processedSize.width}
-                height={result.processedSize.height}
+                use:renderPreview={result}
                 style="max-width: 100%; border: 1px solid #e2e8f0; border-radius: 4px;"
               ></canvas>
             </div>

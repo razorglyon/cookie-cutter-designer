@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
+  import { disposeObject3D } from '../../utils/disposeThree';
   import type { Group } from 'three';
   import type { CookieCutterParams } from '../../types/CookieCutter';
   import {
@@ -14,6 +15,11 @@
   export let currentSvg: string | null;
   export let currentParams: CookieCutterParams;
   export let buildPlateSize: number;
+  // Capture before production. Predicate must return strictly true; exceptions fail closed.
+  export let captureOperationValidity: (() => (() => boolean)) | undefined = undefined;
+  // Optional contextual handoff. Ownership transfers synchronously on invocation;
+  // without it the existing batchCreated event still carries the Group unchanged.
+  export let onBatchCreated: ((mesh: Group, isCurrent: () => boolean, params?: Readonly<CookieCutterParams>) => void) | undefined = undefined;
 
   const dispatch = createEventDispatcher<{
     batchCreated: Group;
@@ -24,6 +30,15 @@
   let layout: BatchLayout = { type: 'grid', spacing: 20, columns: 3 };
   let processing = false;
   let batchController: AbortController | null = null;
+  let alive = true;
+  let operation = 0;
+  onDestroy(() => {
+    alive = false;
+    operation += 1;
+    const controller = batchController;
+    batchController = null;
+    controller?.abort();
+  });
   let completedItems = 0;
   let batchStatus: string | null = null;
 
@@ -65,20 +80,52 @@
     }
     if (batchItems.length === 0) return;
 
-    processing = true;
-    completedItems = 0;
-    batchStatus = null;
+    if (!alive) return;
+    // The exact detached, immutable recipe used by production owns its metadata.
+    // Live input and panel edits during an await cannot rewrite this recipe.
+    const items = Object.freeze(batchItems.map(item => Object.freeze({
+      ...item, params: Object.freeze({ ...item.params })
+    })));
+    const capturedLayout = Object.freeze({ ...layout });
+    const capturedPlateSize = buildPlateSize;
+    const firstParams = items[0].params;
+    const keys = Object.keys(firstParams) as (keyof CookieCutterParams)[];
+    const commonParams = items.every(item => Object.keys(item.params).length === keys.length
+      && keys.every(key => item.params[key] === firstParams[key])) ? firstParams : undefined;
+    const token = ++operation;
     const controller = new AbortController();
     batchController = controller;
+    processing = true;
+    let context: () => boolean = () => true;
+    let owned: Group | null = null;
+    const localCurrent = () => alive && token === operation && batchController === controller;
+    const current = () => {
+      if (!localCurrent()) return false;
+      try { return context() === true && localCurrent(); }
+      catch { return false; }
+    };
     try {
-      const result = await createBatch(batchItems, layout, buildPlateSize, {
+      context = captureOperationValidity ? captureOperationValidity() : () => true;
+      if (typeof context !== 'function' || !current() || controller.signal.aborted) return;
+      completedItems = 0;
+      batchStatus = null;
+      const receiver = onBatchCreated;
+      const result = await createBatch(items, capturedLayout, capturedPlateSize, {
         signal: controller.signal,
-        onProgress: (completed) => { completedItems = completed; }
+        onProgress: (completed) => {
+          if (current() && !controller.signal.aborted) completedItems = completed;
+        }
       });
+      owned = result.mesh;
+      if (!current() || controller.signal.aborted) return;
       batchStatus = `${result.report.succeeded} items · ${result.totalDimensions.width.toFixed(1)} × ${result.totalDimensions.height.toFixed(1)} mm`;
-      dispatch('batchCreated', result.mesh);
+      // No await between validity and handoff. After handoff only the receiver disposes.
+      owned = null;
+      if (receiver) receiver(result.mesh, context, commonParams);
+      else dispatch('batchCreated', result.mesh);
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (!current()) return;
+      if (controller.signal.aborted) {
         batchStatus = 'Cancelled — no partial batch was kept.';
       } else if (error instanceof BatchGenerationError) {
         batchStatus = error.failures.map((failure) => `${failure.name}: ${failure.message}`).join(' · ');
@@ -86,8 +133,10 @@
         batchStatus = error instanceof Error ? error.message : 'Batch generation failed.';
       }
     } finally {
-      if (batchController === controller) batchController = null;
-      processing = false;
+      // Release only this producer's local lock, even when its external context expired.
+      // Never touch a newer producer's UI/controller or a destroyed component.
+      if (localCurrent()) { batchController = null; processing = false; }
+      if (owned) disposeObject3D(owned);
     }
   }
 

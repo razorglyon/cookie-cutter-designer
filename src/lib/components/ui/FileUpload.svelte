@@ -1,80 +1,40 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { IMAGE_ACCEPT, selectSingleImage } from '../../import/imageImport';
 
-  const dispatch = createEventDispatcher<{ upload: File }>();
-
+  const dispatch = createEventDispatcher<{ upload: File; reject: string }>();
   let dragOver = false;
   let fileInput: HTMLInputElement;
 
-  const acceptedTypes = [
-    'image/svg+xml',
-    'image/png',
-    'image/jpeg',
-    'image/jpg',
-    '.svg'
-  ];
-
-  function handleDragOver(e: DragEvent) {
-    e.preventDefault();
-    dragOver = true;
+  function handleDragOver(e: DragEvent) { e.preventDefault(); dragOver = true; }
+  function handleDragLeave(e: DragEvent) { e.preventDefault(); dragOver = false; }
+  function select(files: ArrayLike<File>): void {
+    try {
+      const file = selectSingleImage(files);
+      // Validation belongs to the common App pipeline, not this input surface.
+      if (file) dispatch('upload', file);
+    } catch (cause) {
+      dispatch('reject', cause instanceof Error ? cause.message : 'Could not select image.');
+    }
   }
-
-  function handleDragLeave(e: DragEvent) {
-    e.preventDefault();
-    dragOver = false;
-  }
-
   function handleDrop(e: DragEvent) {
-    e.preventDefault();
-    dragOver = false;
-
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      handleFile(files[0]);
-    }
+    e.preventDefault(); dragOver = false;
+    if (e.dataTransfer?.files) select(e.dataTransfer.files);
   }
-
   function handleFileSelect(e: Event) {
-    const target = e.target as HTMLInputElement;
-    const files = target.files;
-    if (files && files.length > 0) {
-      handleFile(files[0]);
-    }
+    if (!(e.currentTarget instanceof HTMLInputElement)) return;
+    const target = e.currentTarget;
+    try { if (target.files) select(target.files); }
+    finally { target.value = ''; }
   }
-
-  function handleFile(file: File) {
-    // Validate file type
-    const isValid = acceptedTypes.some(type => {
-      if (type.startsWith('.')) {
-        return file.name.toLowerCase().endsWith(type);
-      }
-      return file.type === type;
-    });
-
-    if (!isValid) {
-      alert('Please upload a valid SVG, PNG, or JPG file');
-      return;
-    }
-
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert('File size must be less than 10MB');
-      return;
-    }
-
-    dispatch('upload', file);
-  }
-
-  function triggerFileInput() {
-    fileInput.click();
-  }
+  function triggerFileInput() { fileInput.click(); }
 </script>
 
 <div
   class="upload-container"
   class:drag-over={dragOver}
   role="button"
+  aria-label="Import image"
   tabindex="0"
   on:click={triggerFileInput}
   on:keydown={(e) => {
@@ -90,7 +50,9 @@
   <input
     bind:this={fileInput}
     type="file"
-    accept=".svg,image/svg+xml,image/png,image/jpeg"
+    accept={IMAGE_ACCEPT}
+    aria-label="Image file"
+    on:click|stopPropagation
     on:change={handleFileSelect}
     style="display: none"
   />
@@ -112,8 +74,8 @@
     </svg>
 
     <h3>Upload Your Design</h3>
-    <p>Drag and drop or click to browse</p>
-    <p class="file-types">Supported: SVG, PNG, JPG (max 10MB)</p>
+    <p>Drag and drop, paste an image, or click to browse</p>
+    <p class="file-types">Supported: SVG, PNG, JPEG, WebP (max 10 MiB)</p>
   </div>
 </div>
 

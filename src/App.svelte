@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import FileUpload from './lib/components/ui/FileUpload.svelte';
+
+  import { importImage, clipboardImageFiles, isEditablePasteTarget, selectSingleImage } from './lib/import/imageImport';
   import ParameterPanel from './lib/components/ui/ParameterPanel.svelte';
   import ThreeViewer from './lib/components/viewer/ThreeViewer.svelte';
   import ShapeLibrary from './lib/components/ui/ShapeLibrary.svelte';
@@ -13,21 +15,40 @@
     error,
     params,
     setParams,
-    updateParams
+    updateParams,
+    publishGenerationState,
+    generationState
   } from './lib/stores/cookieCutterStore';
+  import ProjectManager from './lib/components/ui/ProjectManager.svelte';
+  import RecoveryPanel from './lib/components/ui/RecoveryPanel.svelte';
+  import { createProjectRecovery } from './lib/projects/projectRecovery';
+  import { canonicalProjectRecoverySnapshot, createIndexedDbProjectRecoveryStorage, type ProjectRecoveryStorage, type ProjectRecoveryEnvelope } from './lib/projects/projectRecoveryStorage';
+  import { encodeProject } from './lib/projects/projectCodec';
+  import LocalProjectLibrary from './lib/components/library/LocalProjectLibrary.svelte';
+  import ProjectConfirmDialog from './lib/components/ui/ProjectConfirmDialog.svelte';
+  import { createDesignSessionStore, type DesignSessionStore } from './lib/stores/designSessionStore';
+  import { createIndexedDbProjectStorage, type ProjectStorage } from './lib/projects/projectStorage';
+  import { createProjectWorkflow } from './lib/projects/projectWorkflow';
+  import { createProjectSessionIntegration, assertRepresentable } from './lib/projects/projectSessionIntegration';
+  import { createDesignDocument } from './lib/projects/createDesignDocument';
+  import { documentParametersToLegacy, legacyParametersToDocument } from './lib/stores/legacyDocumentAdapter';
+  import type { DesignDocument, ViewportPreferences, DesignSource } from './lib/domain/designDocument';
   import { historyStore } from './lib/stores/historyStore';
   import {
-    vectorizeImage,
-    readFileAsText,
     cleanSVG,
     terminateImageProcessor
   } from './lib/utils/imageProcessor';
-  import { generateCookieCutter } from './lib/utils/cookieCutterGenerator';
   import { exportToSTL, estimateSTLSize, formatFileSize } from './lib/utils/stlExporter';
   import { applyMaterialToMesh, type MaterialPreset } from './lib/utils/materialManager';
   import type { SavedDesign } from './lib/utils/cloudGallery';
   import { disposeObject3D } from './lib/utils/disposeThree';
-  import { LatestGenerationGuard } from './lib/utils/latestGenerationGuard';
+  import { createGenerationOrchestrator } from './lib/generation/generationOrchestrator';
+  import { RecipeRegistry } from './lib/generation/recipeRegistry';
+  import {
+    isGenerationPending,
+    type GenerationResult,
+    type GenerationState
+  } from './lib/generation/generationState';
   import type { CookieCutterParams } from './lib/types/CookieCutter';
   import type { Mesh, Group } from 'three';
   import * as THREE from 'three';
@@ -35,6 +56,7 @@
   type ModelObject = Mesh | Group;
   type ModelDimensions = Readonly<{ width: number; depth: number; height: number }>;
   type Category =
+    | 'projects'
     | 'upload'
     | 'params'
     | 'shapes'
@@ -49,18 +71,81 @@
   let currentMesh: ModelObject | null = null;
   let fileName = '';
   let svgCache: string | null = null;
-  let svgRevision = 0;
   let sourceRevision = 0;
-  let debounceTimer: number | undefined;
-  let isRestoringHistory = false;
+  let restoringHistory: { key: string; epoch: number } | null = null;
   let activeCategory: Category = 'upload';
+  let StartScreen: typeof import('./lib/components/ui/StartScreen.svelte').default | null = null;
+  let startScreenError: string | null = null;
+  onMount(() => {
+    void import('./lib/components/ui/StartScreen.svelte').then(module => {
+      if (alive) StartScreen = module.default;
+    }).catch(cause => {
+      if (alive) startScreenError = String(cause);
+    });
+  });
   let darkMode = false;
   let vectorizationController: AbortController | null = null;
+  let importPending = false;
+  let importError: string | null = null;
   const THEME_STORAGE_KEY = 'cookie-cutter-theme';
+  let publishedGenerationResult: GenerationResult | null = null;
+  let scheduledProjectEpoch = -1;
+  const generatedMeshEpochs = new WeakMap<THREE.Object3D, number>();
+  let externalExport: { mesh: ModelObject; params: Readonly<CookieCutterParams> | undefined; current: () => boolean } | null = null;
 
-  const generationGuard = new LatestGenerationGuard<ModelObject>((stale) => {
-    disposeObject3D(stale);
+  function geometryKey(document: DesignDocument): string {
+    // Match the integration's semantic generation key, not name/timestamps/view.
+    return JSON.stringify([document.kind, document.sketch, document.parameters]);
+  }
+
+  function captureGeometryExport(): { mesh: ModelObject; params: Readonly<CookieCutterParams> | undefined; filename: string } | null {
+    if (!alive || !currentMesh) return null;
+    if (unavailableReason !== null) {
+      // External batches own a separate publication/context proof; never fall
+      // back to the retained single-design preview or mutable legacy parameters.
+      if (!externalExport || externalExport.mesh !== currentMesh || !externalExport.current()) return null;
+      return { mesh: currentMesh, params: externalExport.params, filename: fileName };
+    }
+    const document = session.getDocument();
+    const state = generationOrchestrator.getState();
+    if (!document || state.phase !== 'ready'
+      || state.result.artifacts[0].object !== currentMesh
+      || generatedMeshEpochs.get(currentMesh) !== session.getSessionEpoch()
+      || geometryKey(state.result.document) !== geometryKey(document)) return null;
+    try {
+      return { mesh: currentMesh, params: documentParametersToLegacy(document), filename: document.source.fileName };
+    } catch { return null; }
+  }
+
+  let geometryExportAvailable = false;
+  // DOM state is advisory: every handler also queries the synchronous owner.
+  $: {
+    // Explicit dependencies: the live query intentionally reads owner state,
+    // not potentially stale child props or an earlier derived snapshot.
+    void $session; void $generationState; void currentMesh;
+    void unavailableReason; void externalExport; void sourceRevision;
+    geometryExportAvailable = captureGeometryExport() !== null;
+  }
+  $: geometryExportReason = geometryExportAvailable ? null : 'Generate the current design successfully before exporting its geometry.';
+  const pendingExternalDisposals = new Set<ModelObject>();
+  const pendingBatchObjects = new Set<ModelObject>();
+  const disposedExternalObjects = new WeakSet<THREE.Object3D>();
+
+  const recipeRegistry = new RecipeRegistry();
+  recipeRegistry.register('cutter', async () =>
+    (await import('./lib/generation/recipes/cutterRecipe')).cutterRecipe
+  );
+  recipeRegistry.register('stamp', async () =>
+    (await import('./lib/generation/recipes/stampRecipe')).stampRecipe
+  );
+
+  const generationOrchestrator = createGenerationOrchestrator({
+    registry: recipeRegistry,
+    debounceMs: 300,
+    onStateChange: handleGenerationStateChange,
+    afterResultChange: completeGenerationPublication
   });
+  publishGenerationState(generationOrchestrator.getState());
 
   function applyTheme(nextDarkMode: boolean): void {
     darkMode = nextDarkMode;
@@ -97,12 +182,64 @@
     applyTheme(prefersDark);
   });
 
-  function cancelPendingGeneration(): void {
-    if (debounceTimer !== undefined) {
-      window.clearTimeout(debounceTimer);
-      debounceTimer = undefined;
+  function isModelObject(object: THREE.Object3D): object is ModelObject {
+    return object instanceof THREE.Mesh || object instanceof THREE.Group;
+  }
+
+  function disposeExternalObject(object: ModelObject): void {
+    if (disposedExternalObjects.has(object)) return;
+    disposedExternalObjects.add(object);
+    disposeObject3D(object);
+  }
+
+  function handleGenerationStateChange(state: GenerationState): void {
+    const object = state.result?.artifacts[0].object;
+    if (state.phase === 'ready' && object && !generatedMeshEpochs.has(object)) {
+      generatedMeshEpochs.set(object, scheduledProjectEpoch);
     }
-    generationGuard.invalidate();
+    publishGenerationState(state);
+    $isProcessing = isGenerationPending(state);
+    $error = state.error?.message ?? null;
+
+    if (state.result === publishedGenerationResult) return;
+
+    const previousMesh = currentMesh;
+    const previousGeneratedObject = publishedGenerationResult?.artifacts[0].object ?? null;
+    const nextObject = state.result?.artifacts[0].object ?? null;
+    const nextMesh = nextObject !== null && isModelObject(nextObject) ? nextObject : null;
+
+    publishedGenerationResult = state.result;
+    currentMesh = nextMesh;
+    $model = nextMesh && state.result
+      ? {
+          mesh: nextMesh,
+          paths: [],
+          params: { ...state.result.document.parameters }
+        }
+      : null;
+
+    if (nextObject !== null && nextMesh === null) {
+      $error = 'Le résultat généré ne peut pas être affiché dans le viewer.';
+    }
+
+    if (
+      previousMesh
+      && previousMesh !== previousGeneratedObject
+      && previousMesh !== nextMesh
+    ) {
+      pendingExternalDisposals.add(previousMesh);
+    }
+  }
+
+  async function completeGenerationPublication(): Promise<void> {
+    const externalObjects = [...pendingExternalDisposals];
+    pendingExternalDisposals.clear();
+    await tick();
+    for (const object of externalObjects) disposeExternalObject(object);
+  }
+
+  function cancelPendingGeneration(): void {
+    generationOrchestrator.cancel();
   }
 
   async function replaceCurrentMesh(
@@ -118,105 +255,325 @@
     };
 
     await tick();
-    if (previous && previous !== next) disposeObject3D(previous);
+    if (previous && previous !== next) disposeExternalObject(previous);
   }
 
-  async function generateRevision(
-    revision: number,
-    svgSnapshot: string,
-    paramsSnapshot: Readonly<CookieCutterParams>
-  ): Promise<void> {
-    try {
-      let next: ModelObject;
-      if (paramsSnapshot.mode === 'stamp') {
-        const { generateStamp } = await import('./lib/utils/stampGenerator');
-        next = await generateStamp(svgSnapshot, { ...paramsSnapshot });
-      } else {
-        next = await generateCookieCutter(svgSnapshot, paramsSnapshot);
+  // Injectable edges; App remains the owner of generation and external meshes.
+  export let projectSession: DesignSessionStore = createDesignSessionStore();
+  export let projectStorage: ProjectStorage = createIndexedDbProjectStorage();
+  export let projectRecoveryStorage: ProjectRecoveryStorage = createIndexedDbProjectRecoveryStorage();
+  const session = projectSession;
+  let alive = true;
+  let unavailableReason: string | null = null;
+  let viewport: ViewportPreferences = { showGrid: true, showAxes: false, showWallThickness: false };
+  type Confirmation = { title: string; description: string; choices: readonly { id: string; label: string; destructive?: boolean }[]; resolve: (choice: string) => void };
+  let confirmation: Confirmation | null = null;
+  let recoveryTransitionValidity: (() => boolean) | null = null;
+  function ask(title: string, description: string, choices: Confirmation['choices']): Promise<string> {
+    confirmation?.resolve('cancel');
+    if (!alive) return Promise.resolve('cancel');
+    return new Promise(resolve => { confirmation = { title, description, choices, resolve }; });
+  }
+  function choose(request: Confirmation, choice: string): void {
+    if (confirmation !== request) return;
+    confirmation = null;
+    request.resolve(choice);
+  }
+  const workflow = createProjectWorkflow({
+    session, storage: projectStorage, assertRepresentable,
+    createId: () => crypto.randomUUID(),
+    captureTransitionValidity: () => {
+      // A competing project transition owns the source immediately, not only
+      // after its asynchronous read/dirty confirmation has completed.
+      if (vectorizationController !== null) cancelImageImport();
+      const revision = sourceRevision;
+      const epoch = session.getSessionEpoch();
+      const recoveryValidity = recoveryTransitionValidity;
+      return () => alive && revision === sourceRevision && epoch === session.getSessionEpoch()
+        && (recoveryValidity === null || recoveryValidity());
+    },
+    confirmDiscard: async document => {
+      const revision = sourceRevision;
+      const epoch = session.getSessionEpoch();
+      const choice = await ask('Unsaved changes', `Save changes to ${document.name} before continuing?`, [
+        { id: 'cancel', label: 'Cancel' }, { id: 'save', label: 'Save and continue' },
+        { id: 'discard', label: 'Discard changes', destructive: true }
+      ]);
+      if (!alive || revision !== sourceRevision || epoch !== session.getSessionEpoch()) return 'cancel';
+      // An external batch has no representable document to save.
+      return choice === 'save' && unavailableReason === null ? 'save' : choice === 'discard' ? 'discard' : 'cancel';
+    },
+    confirmCollision: async incoming => {
+      const choice = await ask('Project already exists', `Import ${incoming.name} as a copy or replace the existing project?`, [
+        { id: 'cancel', label: 'Cancel' }, { id: 'copy', label: 'Import a copy' },
+        { id: 'replace', label: 'Replace project', destructive: true }
+      ]);
+      return choice === 'copy' ? 'copy' : choice === 'replace' ? 'replace' : 'cancel';
+    }
+  });
+  const integration = createProjectSessionIntegration({
+    session, generation: {
+      cancel: () => generationOrchestrator.cancel(),
+      schedule: document => {
+        if (unavailableReason === null) {
+          scheduledProjectEpoch = session.getSessionEpoch();
+          generationOrchestrator.schedule(document);
+        }
       }
-
-      if (!generationGuard.accept(revision, next)) return;
-
-      await replaceCurrentMesh(next, paramsSnapshot);
-      if (generationGuard.isCurrent(revision)) $error = null;
-    } catch (generationError) {
-      if (!generationGuard.isCurrent(revision)) return;
-      console.error('Error generating model:', generationError);
-      $error = generationError instanceof Error
-        ? generationError.message
-        : 'Failed to generate model';
+    },
+    legacy: {
+      params: { subscribe: run => params.subscribe(value => { if (unavailableReason === null) run(value); }) },
+      setParams
+    },
+    invalidateSource: () => {
+      cancelImageImport();
+      importError = null;
+      unavailableReason = null;
+      externalExport = null;
+      $uploadedFile = null;
+      if (session.getDocument() === null) {
+        const external = currentMesh;
+        currentMesh = null;
+        $model = null;
+        if (external && external !== publishedGenerationResult?.artifacts[0].object) {
+          void tick().then(() => disposeExternalObject(external));
+        }
+        void generationOrchestrator.clear().catch(cause => { if (alive) $error = String(cause); });
+      }
+    },
+    clearHistory: () => historyStore.clear(),
+    projectViewport: value => { viewport = value ?? { showGrid: true, showAxes: false, showWallThickness: false }; },
+    onParameterError: cause => { if (cause) $error = cause instanceof Error ? cause.message : String(cause); },
+    onIntegrationError: cause => { $error = cause instanceof Error ? cause.message : String(cause); }
+  });
+  let historyKey = '';
+  // Observe synchronously, after workflow and integration exist. UI effects alone
+  // can miss the last accepted document when destruction precedes Svelte's flush.
+  const recovery = createProjectRecovery(projectRecoveryStorage);
+  let recoveryBusy = false;
+  let recoveryActionSequence = 0;
+  let recoveryActionError: string | null = null;
+  // Keep the panel and refresh focus target mounted after its final draft is deleted.
+  let recoveryPanelVisible = false;
+  $: if (activeCategory === 'projects' || $recovery.drafts.length || $recovery.pending || $recovery.saving || $recovery.savedAt || $recovery.error || $recovery.listError || recoveryActionError) recoveryPanelVisible = true;
+  let observedRecovery: { document: DesignDocument | null; epoch: number; dirty: boolean; available: boolean } | null = null;
+  function observeRecovery(): void {
+    if (!alive) return;
+    const document = session.getDocument();
+    const epoch = session.getSessionEpoch();
+    const state = workflow.getState();
+    // A queued workflow notification can predate a reentrant session edit.
+    // Require its dirty baseline to agree with the live canonical document.
+    const dirty = document !== null && (state.savedSnapshot === null || encodeProject(document) !== state.savedSnapshot);
+    if (state.disposed || state.sessionEpoch !== epoch || state.dirty !== dirty
+      || document !== session.getDocument() || epoch !== session.getSessionEpoch()
+      || state !== workflow.getState()) return;
+    const available = unavailableReason === null;
+    if (observedRecovery?.document === document && observedRecovery.epoch === epoch
+      && observedRecovery.dirty === dirty && observedRecovery.available === available) return;
+    observedRecovery = { document, epoch, dirty, available };
+    recovery.observe(document, epoch, dirty, available);
+  }
+  const unsubscribeRecoveryWorkflow = workflow.subscribe(state => {
+    if (state === workflow.getState()) observeRecovery();
+  });
+  const unsubscribeRecoverySession = session.subscribe(document => {
+    if (document === session.getDocument()) observeRecovery();
+  });
+  function recoveryWorkflowBusy(): boolean {
+    const state = workflow.getState();
+    return state.disposed || state.saving || state.pending !== null;
+  }
+  async function refreshRecovery(): Promise<void> {
+    if (!alive) return;
+    await recovery.refresh();
+  }
+  async function flushRecovery(): Promise<void> {
+    if (!alive) return;
+    await recovery.flush();
+    if (alive) await recovery.refresh();
+  }
+  async function resumeRecovery(expected: ProjectRecoveryEnvelope): Promise<void> {
+    if (!alive || recoveryBusy || recoveryWorkflowBusy()) return;
+    cancelImageImport();
+    importError = null;
+    recoveryBusy = true;
+    const sequence = ++recoveryActionSequence;
+    const revision = sourceRevision, epoch = session.getSessionEpoch(), document = session.getDocument();
+    const owned = () => alive && sequence === recoveryActionSequence;
+    const current = () => owned() && revision === sourceRevision && epoch === session.getSessionEpoch() && document === session.getDocument();
+    recoveryActionError = null;
+    try {
+      const snapshot = canonicalProjectRecoverySnapshot(expected);
+      const record = await projectRecoveryStorage.get(expected.draftId);
+      if (!current() || recoveryWorkflowBusy()) return;
+      if (!record || canonicalProjectRecoverySnapshot(record) !== snapshot) {
+        recoveryActionError = 'This recovery draft changed or is missing. Refresh and choose the displayed version again.';
+        await recovery.refresh(); return;
+      }
+      // Transfer the pre-read context to the workflow's final replacement guard.
+      // Its intentional new epoch must not be checked against the old context.
+      recoveryTransitionValidity = current;
+      let completion: Promise<boolean>;
+      try { completion = workflow.startNew(record.document); }
+      finally { recoveryTransitionValidity = null; }
+      const accepted = await completion;
+      if (owned() && accepted) activeCategory = 'params';
+    } catch (cause) {
+      if (current()) recoveryActionError = `Could not resume recovery draft: ${cause instanceof Error ? cause.message : 'Storage unavailable'}. Refresh and retry.`;
     } finally {
-      if (generationGuard.isCurrent(revision)) $isProcessing = false;
+      if (owned()) recoveryBusy = false;
+    }
+  }
+  async function deleteRecovery(expected: ProjectRecoveryEnvelope): Promise<void> {
+    if (!alive || recoveryBusy || recoveryWorkflowBusy()) return;
+    recoveryBusy = true;
+    const sequence = ++recoveryActionSequence;
+    const current = () => alive && sequence === recoveryActionSequence;
+    recoveryActionError = null;
+    try {
+      // Detached exact expected version, never reread/upgrade while prompting.
+      const snapshot = JSON.parse(canonicalProjectRecoverySnapshot(expected)) as ProjectRecoveryEnvelope;
+      const choice = await ask('Delete recovery draft?', `Delete ${snapshot.document.name}, saved at ${snapshot.savedAt}, from this browser?`, [
+        { id: 'cancel', label: 'Cancel' }, { id: 'delete', label: 'Delete draft', destructive: true }
+      ]);
+      if (!current() || choice !== 'delete' || recoveryWorkflowBusy()) return;
+      await projectRecoveryStorage.deleteExpected(snapshot);
+      if (!current()) return;
+      await recovery.refresh();
+      if (!current()) return;
+      recoveryBusy = false;
+      await tick();
+      if (current()) document.querySelector<HTMLButtonElement>('button[data-recovery-refresh]')?.focus();
+    } catch (cause) {
+      if (current()) {
+        recoveryActionError = `Could not delete recovery draft: ${cause instanceof Error ? cause.message : 'Storage unavailable'}. Refresh and retry.`;
+        await recovery.refresh();
+      }
+    } finally {
+      if (current()) recoveryBusy = false;
+    }
+  }
+  onMount(() => {
+    void recovery.list();
+    const flush = () => { if (alive) void recovery.flush(); };
+    const hidden = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', hidden);
+    };
+  });
+  const unsubscribeSession = session.subscribe(document => {
+    // Svelte can deliver an older queued snapshot after an observer edits/replaces.
+    if (document !== session.getDocument()) return;
+    svgCache = document?.sketch.svg ?? null;
+    fileName = document?.source.fileName ?? '';
+    if (!document) { activeCategory = 'upload'; historyKey = ''; return; }
+    // All persistent edits (including rename, viewport, updatedAt and sketch
+    // revision) are undoable. Never restore an older geometry snapshot over
+    // newer metadata that was silently left outside the history scope.
+    // Domain-valid but unrepresentable inputs must not throw out of a store
+    // subscriber and poison subsequent synchronous session notifications.
+    let historyParams: Readonly<CookieCutterParams>;
+    try { historyParams = documentParametersToLegacy(document); }
+    catch { return; }
+    const key = JSON.stringify(document);
+    const epoch = session.getSessionEpoch();
+    const isRestoredSnapshot = restoringHistory?.epoch === epoch && restoringHistory.key === key;
+    if (!isRestoredSnapshot && (historyStore.getLength() === 0 || historyKey !== key)) {
+      historyStore.pushState({
+        params: historyParams, svgData: document.sketch.svg,
+        document, sessionEpoch: session.getSessionEpoch(), description: 'Changed design'
+      });
+    }
+    historyKey = key;
+  });
+
+  async function publishSvg(svg: string, nextFileName: string, nextParams: CookieCutterParams = $params, source?: DesignSource): Promise<boolean> {
+    if (!alive) return false;
+    const revision = sourceRevision;
+    const epoch = session.getSessionEpoch();
+    try {
+      const parameterDocument = legacyParametersToDocument(nextParams);
+      const candidate = createDesignDocument({
+        name: nextFileName.replace(/\.[^/.]+$/, '') || 'Untitled design',
+        kind: parameterDocument.kind,
+        source: source ?? { type: 'svg', fileName: nextFileName, svg }
+      });
+      const accepted = await workflow.startNew({ ...candidate, parameters: parameterDocument.parameters });
+      if (alive && accepted) { $error = null; activeCategory = 'params'; }
+      return alive && accepted;
+    } catch (cause) {
+      if (alive && revision === sourceRevision && epoch === session.getSessionEpoch()) {
+        $error = cause instanceof Error ? cause.message : 'Failed to load design';
+        $isProcessing = false;
+      }
+      return false;
     }
   }
 
-  function scheduleGeneration(
-    svgSnapshot: string,
-    paramsSnapshot: Readonly<CookieCutterParams>
-  ): void {
-    if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
-
-    const revision = generationGuard.begin();
-    $isProcessing = true;
-    debounceTimer = window.setTimeout(() => {
-      debounceTimer = undefined;
-      void generateRevision(revision, svgSnapshot, paramsSnapshot);
-    }, 300);
+  function cancelImageImport(): void {
+    sourceRevision += 1;
+    vectorizationController?.abort();
+    vectorizationController = null;
+    importPending = false;
   }
 
-  function publishSvg(svg: string, nextFileName: string): void {
-    cancelPendingGeneration();
-    fileName = nextFileName;
-    svgRevision += 1;
-    svgCache = svg;
-    $error = null;
-    $isProcessing = true;
-    activeCategory = 'params';
+  function rejectImageImport(message: string): void {
+    cancelImageImport();
+    importError = message;
   }
 
-  $: if (svgCache && svgRevision > 0) {
-    scheduleGeneration(svgCache, { ...$params });
+  function handlePaste(event: ClipboardEvent): void {
+    if (!alive || event.defaultPrevented || isEditablePasteTarget(event.target) || !event.clipboardData) return;
+    const files = clipboardImageFiles(event.clipboardData);
+    if (!files.length) return; // Never interpret text, HTML or SVG clipboard strings.
+    event.preventDefault();
+    try {
+      const file = selectSingleImage(files);
+      if (file) void handleFileUpload(new CustomEvent('upload', { detail: file }));
+    } catch (cause) {
+      rejectImageImport(cause instanceof Error ? cause.message : 'Could not read clipboard image.');
+    }
   }
 
   async function handleFileUpload(event: CustomEvent<File>) {
     const file = event.detail;
-    const revision = ++sourceRevision;
-    vectorizationController?.abort();
+    cancelImageImport();
+    const revision = sourceRevision;
+    const epoch = session.getSessionEpoch();
     const controller = new AbortController();
     vectorizationController = controller;
-    cancelPendingGeneration();
-    $uploadedFile = file;
-    fileName = file.name;
+    importError = null;
     $error = null;
-    $isProcessing = true;
-    let published = false;
-
+    importPending = true;
+    const current = () => alive && !controller.signal.aborted && revision === sourceRevision && epoch === session.getSessionEpoch();
+    // Keep all operation data local until the guarded session replacement.
     try {
-      const svgString = file.type === 'image/svg+xml' || file.name.endsWith('.svg')
-        ? cleanSVG(await readFileAsText(file))
-        : await vectorizeImage(file, controller.signal);
-
-      if (revision !== sourceRevision) return;
-      publishSvg(svgString, file.name);
-      published = true;
-    } catch (processingError) {
-      if (revision !== sourceRevision) return;
-      console.error('Error processing file:', processingError);
-      $error = processingError instanceof Error
-        ? processingError.message
-        : 'Failed to process file';
+      const { svg, source } = await importImage(file, controller.signal);
+      if (!current()) return;
+      importPending = false; // The dirty-document dialog now owns cancellation.
+      vectorizationController = null;
+      await publishSvg(svg, file.name, $params, source);
+    } catch (cause) {
+      if (current()) importError = cause instanceof Error ? cause.message : 'Failed to process file';
     } finally {
-      if (vectorizationController === controller) vectorizationController = null;
-      if (revision === sourceRevision && !published) $isProcessing = false;
+      if (vectorizationController === controller) {
+        vectorizationController = null;
+        importPending = false;
+      }
     }
   }
 
   function handleExport() {
-    if (!currentMesh) return;
+    const snapshot = captureGeometryExport();
+    if (!snapshot) return;
 
     try {
       const filename = `${fileName.replace(/\.[^/.]+$/, '') || 'cookie-cutter'}.stl`;
-      exportToSTL(currentMesh, filename, { binary: true });
+      exportToSTL(snapshot.mesh, filename, { binary: true });
       $error = null;
     } catch (exportError) {
       console.error('Error exporting STL:', exportError);
@@ -230,9 +587,10 @@
       ? 'generated-shape'
       : shape.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-    sourceRevision += 1;
+    cancelImageImport();
+    importError = null;
     try {
-      publishSvg(cleanSVG(svg), `${fileBaseName || 'library-shape'}.svg`);
+      void publishSvg(cleanSVG(svg), `${fileBaseName || 'library-shape'}.svg`);
     } catch (shapeError) {
       $error = shapeError instanceof Error ? shapeError.message : 'Failed to process shape';
       $isProcessing = false;
@@ -244,8 +602,9 @@
       <circle cx="50" cy="50" r="20" fill="black"/>
     </svg>`;
 
-    sourceRevision += 1;
-    publishSvg(circleSvg, 'test-circle.svg');
+    cancelImageImport();
+    importError = null;
+    void publishSvg(circleSvg, 'test-circle.svg');
   }
 
   $: estimatedSize = currentMesh
@@ -253,59 +612,17 @@
     : null;
   $: modelDimensions = currentMesh ? measureModel(currentMesh) : null;
 
-  $: if (!isRestoringHistory && svgCache && $params) {
-    historyStore.pushState({
-      params: { ...$params },
-      svgData: svgCache,
-      description: 'Changed parameters'
-    });
-  }
-
-  async function handleUndo() {
-    const state = historyStore.undo();
-    if (!state) return;
-
-    isRestoringHistory = true;
+  function restoreHistory(state: ReturnType<typeof historyStore.undo>): void {
+    if (!state?.document || state.sessionEpoch !== session.getSessionEpoch() || unavailableReason) return;
+    // Suppress only this restoration, not edits/replacements made by observers.
+    restoringHistory = { key: JSON.stringify(state.document), epoch: state.sessionEpoch };
     try {
-      setParams(state.params);
-      if (state.svgData && state.svgData !== svgCache) {
-        sourceRevision += 1;
-        svgRevision += 1;
-        svgCache = state.svgData;
-      }
-      await tick();
-    } catch (historyError) {
-      console.error('Error restoring undo state:', historyError);
-      $error = historyError instanceof Error
-        ? historyError.message
-        : 'Failed to restore undo state';
-    } finally {
-      isRestoringHistory = false;
-    }
+      session.restoreHistory(state.document, state.sessionEpoch);
+    } catch (cause) { $error = cause instanceof Error ? cause.message : String(cause); }
+    finally { restoringHistory = null; }
   }
-
-  async function handleRedo() {
-    const state = historyStore.redo();
-    if (!state) return;
-
-    isRestoringHistory = true;
-    try {
-      setParams(state.params);
-      if (state.svgData && state.svgData !== svgCache) {
-        sourceRevision += 1;
-        svgRevision += 1;
-        svgCache = state.svgData;
-      }
-      await tick();
-    } catch (historyError) {
-      console.error('Error restoring redo state:', historyError);
-      $error = historyError instanceof Error
-        ? historyError.message
-        : 'Failed to restore redo state';
-    } finally {
-      isRestoringHistory = false;
-    }
-  }
+  function handleUndo(): void { if (unavailableReason === null) restoreHistory(historyStore.undo()); }
+  function handleRedo(): void { if (unavailableReason === null) restoreHistory(historyStore.redo()); }
 
   function handleMaterialChange(
     event: CustomEvent<{ meshName: string; material: MaterialPreset }>
@@ -323,9 +640,9 @@
       const design = event.detail;
       const nextSvg = cleanSVG(design.svgData);
 
-      setParams(design.params);
-      sourceRevision += 1;
-      publishSvg(nextSvg, `${design.metadata.name}.svg`);
+      cancelImageImport();
+      importError = null;
+      void publishSvg(nextSvg, `${design.metadata.name}.svg`, design.params);
     } catch (galleryError) {
       console.error('Error loading design:', galleryError);
       $error = galleryError instanceof Error
@@ -335,82 +652,159 @@
     }
   }
 
-  async function handleBatchCreated(event: CustomEvent<THREE.Group>) {
-    sourceRevision += 1;
-    cancelPendingGeneration();
-    await replaceCurrentMesh(event.detail, $params);
-    fileName = 'batch-production.stl';
-    $isProcessing = false;
+  function captureBatchOperationValidity(): () => boolean {
+    // Reserve at producer start, never date an old result as a new source request.
+    cancelImageImport();
+    const revision = sourceRevision;
+    const epoch = session.getSessionEpoch();
+    const geometry = () => {
+      const document = session.getDocument();
+      return JSON.stringify([document?.kind, document?.sketch, document?.parameters]);
+    };
+    const key = geometry();
+    return () => alive && revision === sourceRevision
+      && epoch === session.getSessionEpoch() && key === geometry();
   }
 
-  function handleDeleteObject(event: CustomEvent<THREE.Object3D>): void {
-    const object = event.detail;
-    if (!currentMesh || !object.parent) return;
-
-    let belongsToCurrentModel = false;
-    currentMesh.traverse((child) => {
-      if (child === object) belongsToCurrentModel = true;
-    });
-
-    if (belongsToCurrentModel) disposeObject3D(object);
-  }
-
-  async function handleAIProcessedImage(event: CustomEvent<Blob>) {
-    const revision = ++sourceRevision;
-    const file = new File([event.detail], 'ai-processed.png', { type: 'image/png' });
-    cancelPendingGeneration();
-    $uploadedFile = file;
-    $error = null;
-    $isProcessing = true;
+  async function acceptBatch(batch: THREE.Group, validity: () => boolean, metadata?: Readonly<CookieCutterParams>): Promise<void> {
+    const batchParams = metadata ? Object.freeze({ ...metadata }) : undefined;
+    // Model-store params serve display only for heterogeneous/legacy batches.
+    // Unknown export metadata MUST remain absent, never inferred from current UI.
+    const displayParams = batchParams ?? Object.freeze({ ...$params });
+    const revision = sourceRevision;
+    const epoch = session.getSessionEpoch();
+    const localCurrent = () => alive && revision === sourceRevision && epoch === session.getSessionEpoch();
+    const current = () => {
+      if (!localCurrent()) return false;
+      try { return validity() === true && localCurrent(); }
+      catch { return false; }
+    };
+    // From synchronous handoff until publication App owns this unpublished result,
+    // including teardown while clear() is still draining.
+    pendingBatchObjects.add(batch);
     let published = false;
-
     try {
-      const svgString = await vectorizeImage(file);
-      if (revision !== sourceRevision) return;
-      publishSvg(svgString, file.name);
+      if (!current()) return;
+      await generationOrchestrator.clear();
+      if (!current()) return;
+      await replaceCurrentMesh(batch, displayParams);
+      if (!current()) return;
+      externalExport = { mesh: batch, params: batchParams, current };
+      fileName = 'batch-production.stl';
+      unavailableReason = 'Batch previews cannot be saved or exported as a V1 project. Start or open a project to return to a representable design.';
+      observeRecovery();
+      $isProcessing = false;
       published = true;
-    } catch (processingError) {
-      if (revision !== sourceRevision) return;
-      console.error('Error processing AI image:', processingError);
-      $error = processingError instanceof Error
-        ? processingError.message
-        : 'Failed to process AI image';
+    } catch (cause) {
+      if (current()) $error = cause instanceof Error ? cause.message : 'Batch publication failed.';
     } finally {
-      if (revision === sourceRevision && !published) $isProcessing = false;
+      pendingBatchObjects.delete(batch);
+      if (!published || !current()) {
+        // A newer session may be scheduled but not ready yet. Detach only our own
+        // external preview before disposing; never clear/cancel the newer generation.
+        if (currentMesh === batch) { currentMesh = null; $model = null; await tick(); }
+        disposeExternalObject(batch);
+      }
     }
   }
 
-  async function startNewDesign(): Promise<void> {
-    sourceRevision += 1;
-    cancelPendingGeneration();
-    const previous = currentMesh;
-    currentMesh = null;
-    $model = null;
-    svgCache = null;
-    $uploadedFile = null;
-    $isProcessing = false;
-    $error = null;
-    activeCategory = 'upload';
-
-    await tick();
-    if (previous) disposeObject3D(previous);
+  function handleBatchCreated(event: CustomEvent<THREE.Group>): void {
+    // Compatibility for legacy synchronous event producers. Real BatchMode uses
+    // the contextual handoff below and captures before its first producer await.
+    void acceptBatch(event.detail, captureBatchOperationValidity());
+  }
+  function handleContextualBatchCreated(batch: THREE.Group, validity: () => boolean, metadata?: Readonly<CookieCutterParams>): void {
+    void acceptBatch(batch, validity, metadata);
   }
 
-  function requestNewDesign(): void {
-    if (window.confirm('Start a new design? Unsaved changes will be lost.')) {
-      void startNewDesign();
-    }
+  // V1 preview geometry is never edited by runtime delete events. There is no
+  // deletion listener: even stale/programmatic events cannot dispose owner assets.
+
+  function captureAIOperationValidity(): () => boolean {
+    cancelImageImport();
+    const revision = sourceRevision;
+    const epoch = session.getSessionEpoch();
+    const geometry = () => {
+      const document = session.getDocument();
+      return JSON.stringify([document?.kind, document?.sketch, document?.parameters]);
+    };
+    const key = geometry();
+    return () => alive && revision === sourceRevision
+      && epoch === session.getSessionEpoch() && key === geometry();
+  }
+  function acceptsAIHandoff(validity: () => boolean): boolean {
+    const revision = sourceRevision;
+    const epoch = session.getSessionEpoch();
+    const local = () => alive && revision === sourceRevision && epoch === session.getSessionEpoch();
+    if (!local()) return false;
+    try { return validity() === true && local(); } catch { return false; }
+  }
+  function handleContextualAISVG(svg: string, validity: () => boolean): void {
+    // Validate the producer context BEFORE reserving the new source request.
+    // Once transferred, publishSvg/workflow own the replacement context: the
+    // source revision changed by this handoff must not invalidate its own import.
+    if (acceptsAIHandoff(validity)) handleShapeSelect(svg);
+  }
+  function handleContextualAIImage(blob: Blob, validity: () => boolean): void {
+    if (acceptsAIHandoff(validity)) handleAIProcessedImage(new CustomEvent('processedImage', { detail: blob }));
+  }
+
+  function handleAIProcessedImage(event: CustomEvent<Blob>): void {
+    const file = new File([event.detail], 'ai-processed.png', { type: 'image/png' });
+    void handleFileUpload(new CustomEvent('upload', { detail: file }));
+  }
+  function requestNewDesign(): void { cancelImageImport(); importError = null; void workflow.startNew(); }
+  async function confirmDelete(document: DesignDocument): Promise<boolean> {
+    return await ask('Delete local project', `Delete ${document.name} from this browser?`, [
+      { id: 'cancel', label: 'Cancel' }, { id: 'delete', label: 'Delete project', destructive: true }
+    ]) === 'delete';
+  }
+  function changeViewport(value: ViewportPreferences): void {
+    if (alive && session.getDocument() && unavailableReason === null) session.updateViewport(value);
   }
 
   onDestroy(() => {
+    alive = false;
+    recoveryActionSequence += 1;
+    unsubscribeRecoveryWorkflow();
+    unsubscribeRecoverySession();
+    // Recovery owns only its separate storage; close after all accepted writes.
+    void recovery.dispose().then(() => projectRecoveryStorage.close()).catch(cause => console.error('Recovery cleanup failed:', cause));
+    confirmation?.resolve('cancel');
+    confirmation = null;
+    integration.dispose();
+    unsubscribeSession();
+    const workflowDisposal = workflow.dispose();
     sourceRevision += 1;
     vectorizationController?.abort();
     terminateImageProcessor();
-    cancelPendingGeneration();
-    if (currentMesh) disposeObject3D(currentMesh);
+    const generatedObject = publishedGenerationResult?.artifacts[0].object ?? null;
+    const externalObjects = new Set<ModelObject>([...pendingExternalDisposals, ...pendingBatchObjects]);
+    pendingBatchObjects.clear();
+    if (currentMesh && currentMesh !== generatedObject) externalObjects.add(currentMesh);
+    pendingExternalDisposals.clear();
     currentMesh = null;
+    $model = null;
+    $isProcessing = false;
+    const generationDisposal = generationOrchestrator.dispose();
+    void (async () => {
+      await tick();
+      for (const object of externalObjects) disposeExternalObject(object);
+      await generationDisposal;
+      await workflowDisposal;
+    })().catch(cause => console.error('Project cleanup failed:', cause));
   });
 </script>
+
+<svelte:window on:paste={handlePaste} />
+
+{#if confirmation}
+  {#key confirmation}
+    {@const request = confirmation}
+    <ProjectConfirmDialog title={request.title} description={request.description} choices={request.choices}
+      onChoose={choice => choose(request, choice)} />
+  {/key}
+{/if}
 
 <main>
   <!-- Modern Header with Gradient -->
@@ -426,6 +820,7 @@
       <div class="header-actions">
         {#if $model}
           <span class="current-file">{fileName}</span>
+        {/if}
           <button
             class="btn btn-outline btn-sm"
             on:click={requestNewDesign}
@@ -437,7 +832,6 @@
             </svg>
             <span class="new-design-label">New Design</span>
           </button>
-        {/if}
         <button
           class="btn btn-outline btn-sm btn-icon"
           on:click={toggleDarkMode}
@@ -471,6 +865,9 @@
     <!-- Mini Sidebar with Category Icons -->
     <aside class="mini-sidebar">
       <nav class="category-nav" aria-label="Design tools">
+        <button class="category-btn" class:active={activeCategory === 'projects'}
+          on:click={() => activeCategory = 'projects'} aria-label="Local projects" title="Local projects"
+          aria-current={activeCategory === 'projects' ? 'page' : undefined}>📁<span class="nav-label">Local projects</span></button>
         <button
           class="category-btn"
           class:active={activeCategory === 'upload'}
@@ -627,8 +1024,8 @@
 
     <!-- Content Panel -->
     <div class="content-panel">
-      {#if $error}
-        <div class="alert alert-error">
+      {#if importError || $error}
+        <div class="alert alert-error" role="alert">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="8" x2="12" y2="12"/>
@@ -636,14 +1033,35 @@
           </svg>
           <div>
             <strong>Error</strong>
-            <p>{$error}</p>
+            <p>{importError ?? $error}</p>
           </div>
         </div>
       {/if}
 
       <div class="panel-content">
-        {#if activeCategory === 'upload'}
-          <FileUpload on:upload={handleFileUpload} />
+        {#if importPending}
+          <div class="image-import-progress">
+            <p role="status" aria-live="polite">Importing image…</p>
+            <button type="button" class="btn" on:click={cancelImageImport}>Cancel image import</button>
+          </div>
+        {/if}
+        {#if activeCategory === 'projects'}
+          <ProjectManager {session} {workflow} {unavailableReason} />
+          <LocalProjectLibrary {workflow} onConfirmDelete={confirmDelete} />
+        {:else if activeCategory === 'upload'}
+          {#if $session === null}
+            {#if StartScreen}
+              <svelte:component this={StartScreen} on:upload={handleFileUpload} on:reject={e => rejectImageImport(e.detail)}
+                on:shapes={() => activeCategory = 'shapes'} on:projects={() => activeCategory = 'projects'} />
+            {:else}
+              {#if startScreenError}
+                <p role="alert">Could not load the start screen: {startScreenError}</p>
+              {/if}
+              <FileUpload on:upload={handleFileUpload} on:reject={e => rejectImageImport(e.detail)} />
+            {/if}
+          {:else}
+            <FileUpload on:upload={handleFileUpload} on:reject={e => rejectImageImport(e.detail)} />
+          {/if}
           {#if !$model}
             <div class="quick-start">
               <button class="btn-quick" on:click={loadTestModel}>
@@ -670,7 +1088,7 @@
           {#await import('./lib/components/ui/AIImageProcessor.svelte')}
             <div class="panel-loading" role="status">Loading image processor…</div>
           {:then component}
-            <component.default on:processedImage={handleAIProcessedImage} />
+            <component.default captureOperationValidity={captureAIOperationValidity} onProcessedImage={handleContextualAIImage} />
           {:catch}
             <div class="panel-load-error" role="alert">The image processor could not be loaded.</div>
           {/await}
@@ -714,7 +1132,8 @@
             <component.default
               params={$params}
               svgContent={svgCache}
-              on:optimizedSVG={(e) => handleShapeSelect(e.detail)}
+              captureOperationValidity={captureAIOperationValidity}
+              onOptimizedSVG={handleContextualAISVG}
             />
           {:catch}
             <div class="panel-load-error" role="alert">The AI assistant could not be loaded.</div>
@@ -751,7 +1170,7 @@
           {#await import('./lib/components/ui/CollisionDetector.svelte')}
             <div class="panel-loading" role="status">Loading collision detector…</div>
           {:then component}
-            <component.default mesh={currentMesh} buildPlateSize={$params.buildPlateSize} />
+            <component.default mesh={currentMesh} buildPlateSize={$params.buildPlateSize} allowPositionFix={false} />
           {:catch}
             <div class="panel-load-error" role="alert">The collision detector could not be loaded.</div>
           {/await}
@@ -780,6 +1199,8 @@
               currentSvg={svgCache}
               currentParams={$params}
               buildPlateSize={$params.buildPlateSize}
+              captureOperationValidity={captureBatchOperationValidity}
+              onBatchCreated={handleContextualBatchCreated}
               on:batchCreated={handleBatchCreated}
             />
           {:catch}
@@ -790,10 +1211,17 @@
           {#await import('./lib/components/ui/AdvancedExport.svelte')}
             <div class="panel-loading" role="status">Loading export tools…</div>
           {:then component}
-            <component.default mesh={currentMesh} filename={fileName} params={$params} />
+            <component.default mesh={currentMesh} filename={fileName} params={$params}
+              captureExport={captureGeometryExport} unavailableReason={geometryExportReason} />
           {:catch}
             <div class="panel-load-error" role="alert">Export tools could not be loaded.</div>
           {/await}
+        {/if}
+        {#if recoveryPanelVisible}
+          <RecoveryPanel {recovery} busy={recoveryBusy || $workflow.disposed || $workflow.saving || $workflow.pending !== null}
+            actionError={recoveryActionError} onRefresh={refreshRecovery} onFlush={flushRecovery}
+            onResume={resumeRecovery} onDelete={deleteRecovery} />
+          {#if activeCategory !== 'projects' && $workflow.error}<p role="alert">{$workflow.error.message}</p>{/if}
         {/if}
       </div>
     </div>
@@ -809,7 +1237,9 @@
         <ThreeViewer
           mesh={currentMesh}
           buildPlateSize={$params.buildPlateSize}
-          on:deleteObject={handleDeleteObject}
+          {viewport}
+          onViewportChange={changeViewport}
+          allowObjectDeletion={false}
         />
         {#if modelDimensions}
           <div class="dimension-badge" aria-label="Final model dimensions">

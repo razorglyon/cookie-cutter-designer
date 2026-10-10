@@ -1,201 +1,82 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import type { ProjectData } from '../../types/Project';
+  import type { DesignSessionStore } from '../../stores/designSessionStore';
+  import type { ProjectWorkflow } from '../../projects/projectWorkflow';
 
-  const dispatch = createEventDispatcher<{
-    export: void;
-    import: ProjectData;
-    save: void;
-  }>();
+  export let session: DesignSessionStore;
+  export let workflow: ProjectWorkflow;
+  export let unavailableReason: string | null = null;
 
-  let projectName = 'My Cookie Cutter';
   let fileInput: HTMLInputElement;
+  let nameDraft = '';
+  let nameError: string | null = null;
+  let observedName: string | undefined;
+  let observedEpoch = -1;
+  // A draft is not another document name: only session.rename commits it.
+  $: synchronizeName($session?.name, $workflow.sessionEpoch);
+  $: transitionBusy = $workflow.disposed || $workflow.saving || $workflow.pending !== null;
+  $: documentUnavailable = !$session || unavailableReason !== null || $workflow.disposed;
+  $: saveBlocked = documentUnavailable || transitionBusy || nameError !== null;
 
-  function handleExportProject() {
-    dispatch('export');
-  }
-
-  function handleImportProject(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const file = target.files?.[0];
-
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target?.result as string) as ProjectData;
-          dispatch('import', data);
-        } catch (error) {
-          alert('Failed to import project. Invalid file format.');
-        }
-      };
-      reader.readAsText(file);
+  function synchronizeName(name: string | undefined, epoch: number): void {
+    if (name !== observedName || epoch !== observedEpoch) {
+      observedName = name;
+      observedEpoch = epoch;
+      nameDraft = name ?? '';
+      nameError = null;
     }
   }
-
-  function handleSaveToLibrary() {
-    dispatch('save');
+  function rename(event: Event): void {
+    nameDraft = (event.currentTarget as HTMLInputElement).value;
+    try { session.rename(nameDraft); nameError = null; }
+    catch (cause) { nameError = cause instanceof Error ? cause.message : String(cause); }
   }
-
-  function triggerImport() {
-    fileInput.click();
+  async function save(): Promise<void> {
+    if (!saveBlocked && await workflow.save()) await workflow.list();
+  }
+  async function importFile(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    try { if (file && !transitionBusy) await workflow.import(file); }
+    finally { input.value = ''; }
   }
 </script>
 
-<div class="project-manager">
+<section class="project-manager" aria-label="Project">
   <h3>Project</h3>
-
-  <div class="project-name">
-    <label for="project-name">Project Name</label>
-    <input
-      id="project-name"
-      type="text"
-      bind:value={projectName}
-      placeholder="Enter project name..."
-      maxlength="50"
-    />
-  </div>
-
+  <label for="project-name">Project name</label>
+  <input id="project-name" type="text" value={nameDraft} on:input={rename}
+    disabled={!$session || $workflow.disposed}
+    aria-invalid={nameError !== null} aria-describedby={nameError ? 'project-name-error' : undefined} />
+  {#if nameError}<p id="project-name-error" role="alert">{nameError}</p>{/if}
+  <p role="status">{#if $workflow.saving}Saving project…{:else if !$session}No active project{:else if $workflow.dirty}Unsaved changes{:else}Saved locally{/if}</p>
+  {#if unavailableReason !== null}<p role="status">{unavailableReason}</p>{/if}
   <div class="actions">
-    <button class="action-btn save" on:click={handleSaveToLibrary}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-        <polyline points="17 21 17 13 7 13 7 21" />
-        <polyline points="7 3 7 8 15 8" />
-      </svg>
-      Save to Library
-    </button>
-
-    <button class="action-btn export" on:click={handleExportProject}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="7 10 12 15 17 10" />
-        <line x1="12" y1="15" x2="12" y2="3" />
-      </svg>
-      Export Project
-    </button>
-
-    <button class="action-btn import" on:click={triggerImport}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
-      </svg>
-      Import Project
-    </button>
-
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept=".json,.ccd.json"
-      on:change={handleImportProject}
-      style="display: none"
-    />
+    <button type="button" disabled={saveBlocked} on:click={save}>Save project</button>
+    <button type="button" disabled={documentUnavailable || ($workflow.pending !== null && $workflow.pending !== 'save')}
+      on:click={() => workflow.export()}>Export project</button>
+    <button type="button" disabled={transitionBusy} on:click={() => fileInput.click()}>Import project file</button>
+    <input bind:this={fileInput} type="file" accept=".ccd.json,.json" aria-label="Project file"
+      disabled={transitionBusy} on:change={importFile} hidden />
   </div>
-
-  <p class="hint">
-    💾 Save to library for quick access<br/>
-    📤 Export as .ccd.json file to share or backup
-  </p>
-</div>
+  {#if $workflow.saveError}<p role="alert">Could not save project: {$workflow.saveError.message} Retry saving or export a file backup.</p>{/if}
+  {#if $workflow.error && $workflow.error !== $workflow.saveError}<p role="alert">{$workflow.error.message}</p>{/if}
+  {#if $workflow.warnings.length}
+    <div role="status"><p>Import warnings</p><ul>{#each $workflow.warnings as warning}<li>{warning}</li>{/each}</ul></div>
+  {/if}
+  <p class="hint">Local projects stay in the same browser and origin (site address). Export a .ccd.json file for a portable backup or to move to another browser.</p>
+</section>
 
 <style>
-  .project-manager {
-    background: white;
-    padding: 1rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  h3 {
-    margin: 0 0 1rem;
-    font-size: 1rem;
-    color: #2d3748;
-    font-weight: 600;
-  }
-
-  .project-name {
-    margin-bottom: 1rem;
-  }
-
-  .project-name label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #4a5568;
-  }
-
-  .project-name input {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #cbd5e0;
-    border-radius: 6px;
-    font-size: 0.9rem;
-  }
-
-  .project-name input:focus {
-    outline: none;
-    border-color: #4299e1;
-    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-  }
-
-  .actions {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.65rem;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: white;
-  }
-
-  .action-btn svg {
-    flex-shrink: 0;
-  }
-
-  .action-btn.save {
-    background: #805ad5;
-  }
-
-  .action-btn.save:hover {
-    background: #6b46c1;
-  }
-
-  .action-btn.export {
-    background: #3182ce;
-  }
-
-  .action-btn.export:hover {
-    background: #2c5282;
-  }
-
-  .action-btn.import {
-    background: #38a169;
-  }
-
-  .action-btn.import:hover {
-    background: #2f855a;
-  }
-
-  .hint {
-    margin: 0;
-    padding: 0.75rem;
-    background: #f7fafc;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    color: #718096;
-    line-height: 1.6;
-  }
+  .project-manager { background: white; color: #2d3748; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgb(0 0 0 / 10%); }
+  h3 { margin: 0 0 1rem; font-size: 1rem; }
+  label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+  input[type='text'] { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0.5rem; border: 1px solid #718096; border-radius: 6px; }
+  .actions { display: flex; flex-direction: column; gap: 0.5rem; }
+  button { min-height: 44px; padding: 0.65rem; border: 1px solid #718096; border-radius: 6px; background: #f7fafc; color: #2d3748; font: inherit; cursor: pointer; }
+  button:first-child { background: #6b46c1; color: white; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #3182ce; outline-offset: 2px; }
+  [role='alert'] { color: #9b2c2c; overflow-wrap: anywhere; }
+  .hint { font-size: 0.85rem; line-height: 1.6; }
+  li { overflow-wrap: anywhere; }
 </style>

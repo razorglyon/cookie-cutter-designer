@@ -1,11 +1,15 @@
 import { writable, derived, get } from 'svelte/store';
 import type { CookieCutterParams } from '../types/CookieCutter';
+import type { DesignDocument } from '../domain/designDocument';
 
 export interface HistoryState {
   params: CookieCutterParams;
   svgData: string | null;
   timestamp: number;
   description: string;
+  /** App stores the canonical frozen document; legacy consumers may omit it. */
+  document?: DesignDocument;
+  sessionEpoch?: number;
 }
 
 const MAX_HISTORY_SIZE = 50;

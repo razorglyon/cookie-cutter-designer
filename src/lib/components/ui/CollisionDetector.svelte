@@ -11,6 +11,8 @@
 
   export let mesh: Mesh | Group | null;
   export let buildPlateSize: number;
+  // Canonical project previews must not mutate generated geometry directly.
+  export let allowPositionFix = true;
 
   const dispatch = createEventDispatcher<{
     fixCollisions: void;
@@ -62,7 +64,7 @@
   }
 
   function handleAutoFix() {
-    if (!mesh || !(mesh as any).isGroup) return;
+    if (!allowPositionFix || !mesh || !(mesh as any).isGroup) return;
 
     const result = autoFixCollisions(mesh as Group, buildPlateSize, minSeparation);
 
@@ -160,13 +162,20 @@
             {/if}
 
             <div class="actions">
-              <button class="fix-btn" on:click={handleAutoFix}>
+              <button class="fix-btn" on:click={handleAutoFix}
+                disabled={!allowPositionFix}
+                aria-describedby={!allowPositionFix ? 'collision-position-fix-reason' : undefined}>
                 🔧 Auto-Fix Positions
               </button>
               <button class="viz-btn" on:click={toggleVisualization}>
                 {showVisualization ? '👁️ Hide' : '👁️ Show'} Visualization
               </button>
             </div>
+            {#if !allowPositionFix}
+              <p id="collision-position-fix-reason" role="status">
+                Preview positions are read-only. Change the source or batch layout instead.
+              </p>
+            {/if}
           {:else}
             <div class="status success">
               <strong>✅ No Collisions</strong>

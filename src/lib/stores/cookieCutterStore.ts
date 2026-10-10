@@ -2,6 +2,11 @@ import { writable, derived, get, readonly, type Readable } from 'svelte/store';
 import type { CookieCutterParams, CookieCutterModel, PrintabilityCheck } from '../types/CookieCutter';
 import { DEFAULT_PARAMS } from '../types/CookieCutter';
 import {
+  createInitialGenerationState,
+  freezeGenerationState,
+  type GenerationState
+} from '../generation/generationState';
+import {
   CutterGenerationError,
   GENERATION_LIMITS,
   validateCookieCutterParams
@@ -29,8 +34,9 @@ export function migrateLegacyCookieCutterParams(value: unknown): unknown {
   };
 }
 
-// Parameters store
+// Legacy parameter bridge kept during the incremental document-store cutover.
 const paramsStore = writable<Readonly<CookieCutterParams>>(createDefaultParams());
+/** @deprecated Use a DesignDocumentStore for new document-driven workflows. */
 export const params: Readable<Readonly<CookieCutterParams>> = readonly(paramsStore);
 
 // Uploaded file store
@@ -42,12 +48,33 @@ export const pathData = writable<string | null>(null);
 // 3D model store
 export const model = writable<CookieCutterModel | null>(null);
 
+// Atomic generation lifecycle snapshot. Legacy UI stores remain during the incremental cutover.
+const generationStateStore = writable<GenerationState>(createInitialGenerationState());
+export const generationState: Readable<GenerationState> = readonly(generationStateStore);
+
+export function publishGenerationState(state: GenerationState): void {
+  generationStateStore.set(freezeGenerationState(state));
+}
+
 // Loading state
 export const isProcessing = writable<boolean>(false);
 
 // Error state
 export const error = writable<string | null>(null);
-export const parameterError = writable<string | null>(null);
+export interface ParameterIssue {
+  readonly message: string;
+  readonly field: string | null;
+}
+
+export const parameterIssue = writable<ParameterIssue | null>(null);
+export const parameterError: Readable<string | null> = derived(
+  parameterIssue,
+  ($parameterIssue) => $parameterIssue?.message ?? null
+);
+export const parameterErrorField: Readable<string | null> = derived(
+  parameterIssue,
+  ($parameterIssue) => $parameterIssue?.field ?? null
+);
 
 // Printability check
 export const printability = derived(
@@ -181,7 +208,8 @@ function buildParamUpdate(
   return candidate;
 }
 
-// Helper functions to update params
+// Helper functions to update legacy params.
+/** @deprecated Use DesignDocumentStore.updateParameters instead. */
 export function updateParam<K extends keyof CookieCutterParams>(
   key: K,
   value: CookieCutterParams[K]
@@ -189,6 +217,7 @@ export function updateParam<K extends keyof CookieCutterParams>(
   return updateParams({ [key]: value } as Partial<CookieCutterParams>);
 }
 
+/** @deprecated Use DesignDocumentStore.updateParameters instead. */
 export function updateParams(patch: Partial<CookieCutterParams>): boolean {
   const current = get(paramsStore);
 
@@ -196,11 +225,15 @@ export function updateParams(patch: Partial<CookieCutterParams>): boolean {
     const candidate = buildParamUpdate(current, patch);
     const validated = validateCookieCutterParams(candidate);
     paramsStore.set(validated);
-    parameterError.set(null);
+    parameterIssue.set(null);
     return true;
   } catch (validationError) {
     if (validationError instanceof CutterGenerationError) {
-      parameterError.set(validationError.message);
+      const field = validationError.details?.field;
+      parameterIssue.set({
+        message: validationError.message,
+        field: typeof field === 'string' ? field : null
+      });
       return false;
     }
 
@@ -208,13 +241,15 @@ export function updateParams(patch: Partial<CookieCutterParams>): boolean {
   }
 }
 
+/** @deprecated Use DesignDocumentStore.replace instead. */
 export function setParams(value: unknown) {
   const validated = validateCookieCutterParams(migrateLegacyCookieCutterParams(value));
   paramsStore.set(validated);
-  parameterError.set(null);
+  parameterIssue.set(null);
 }
 
+/** @deprecated Replace or create a complete versioned document instead. */
 export function resetParams() {
   paramsStore.set(createDefaultParams());
-  parameterError.set(null);
+  parameterIssue.set(null);
 }

@@ -11,7 +11,10 @@
 
   export let mesh: Mesh | Group | null;
   export let filename: string;
-  export let params: CookieCutterParams;
+  export let params: Readonly<CookieCutterParams> | undefined = undefined;
+  /** Query the owner at click time, even before reactive props have flushed. */
+  export let captureExport: (() => { mesh: Mesh | Group; params: Readonly<CookieCutterParams> | undefined; filename: string } | null) | undefined = undefined;
+  export let unavailableReason: string | null = null;
 
   let showPanel = false;
   let selectedFormat: ExportFormat = 'stl';
@@ -24,19 +27,20 @@
   ];
 
   function handleExport() {
-    if (!mesh) return;
-
-    const exportFilename = filename.replace(/\.[^/.]+$/, '');
+    const snapshot = captureExport ? captureExport() : mesh ? { mesh, params, filename } : null;
+    if (!snapshot) return;
+    const { mesh: exportMesh, params: exportParams } = snapshot;
+    const exportFilename = snapshot.filename.replace(/\.[^/.]+$/, '');
 
     switch (selectedFormat) {
       case 'stl':
-        exportToSTL(mesh, `${exportFilename}.stl`, { binary: binaryFormat });
+        exportToSTL(exportMesh, `${exportFilename}.stl`, { binary: binaryFormat });
         break;
       case 'obj':
-        exportToOBJ(mesh, `${exportFilename}.obj`);
+        exportToOBJ(exportMesh, `${exportFilename}.obj`);
         break;
       case '3mf':
-        exportTo3MF(mesh, `${exportFilename}.3mf`, params);
+        exportTo3MF(exportMesh, `${exportFilename}.3mf`, exportParams);
         break;
     }
   }
@@ -117,7 +121,11 @@
       </div>
 
       <!-- Export Button -->
-      <button class="export-btn" on:click={handleExport} disabled={!mesh}>
+      {#if unavailableReason}
+        <p id="geometry-export-reason" role="status">{unavailableReason}</p>
+      {/if}
+      <button class="export-btn" on:click={handleExport} disabled={!mesh || unavailableReason !== null}
+        aria-describedby={unavailableReason ? 'geometry-export-reason' : undefined}>
         <span class="btn-icon">💾</span>
         <span>Export as {selectedFormat.toUpperCase()}</span>
       </button>

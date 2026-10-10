@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { generateImageWithGemini, getAPIKey } from '../../utils/geminiAPI';
   import { vectorizeImage } from '../../utils/imageProcessor';
 
@@ -7,6 +7,32 @@
     imageGenerated: string; // SVG string
   }>();
 
+  let { captureOperationValidity, onImageGenerated, sourceKey = null }: {
+    captureOperationValidity?: () => (() => boolean);
+    onImageGenerated?: (svg: string, validity: () => boolean) => void;
+    sourceKey?: string | null;
+  } = $props();
+  let alive = true;
+  let sequence = 0;
+  let controller: AbortController | null = null;
+  let successTimer: ReturnType<typeof setTimeout> | undefined;
+  // URL ownership is explicit; UI state never substitutes for the cleanup ledger.
+  let ownedUrl: string | null = null;
+  function releasePreview() {
+    const url = ownedUrl; ownedUrl = null;
+    generatedImageUrl = null;
+    if (url) URL.revokeObjectURL(url);
+  }
+  function invalidate() {
+    sequence++;
+    const previous = controller; controller = null;
+    previous?.abort();
+    clearTimeout(successTimer);
+    releasePreview();
+    isGenerating = false;
+  }
+  onDestroy(() => { alive = false; invalidate(); });
+  $effect(() => { sourceKey; invalidate(); });
   let prompt = $state('');
   let isGenerating = $state(false);
   let error = $state('');
@@ -40,37 +66,58 @@
       return;
     }
 
+    invalidate();
+    const token = sequence;
+    const source = sourceKey;
+    const description = prompt;
+    const local = () => alive && token === sequence && source === sourceKey;
+    let validity: () => boolean;
+    try { validity = captureOperationValidity ? captureOperationValidity() : () => true; } catch { return; }
+    const current = () => {
+      if (!local()) return false;
+      try { return validity() === true && local(); } catch { return false; }
+    };
+    if (!current()) return;
+    const operationController = new AbortController();
+    controller = operationController;
     isGenerating = true;
     error = '';
-    generatedImageUrl = null;
 
     try {
       // Step 1: Generate image with Gemini
-      const imageBlob = await generateImageWithGemini(prompt, apiKey);
+      const imageBlob = await generateImageWithGemini(description, apiKey);
+      if (!current()) return;
 
       // Create object URL for preview
-      generatedImageUrl = URL.createObjectURL(imageBlob);
+      ownedUrl = URL.createObjectURL(imageBlob);
+      generatedImageUrl = ownedUrl;
 
       // Step 2: Convert to file and vectorize
       const file = new File([imageBlob], 'ai-generated.png', { type: 'image/png' });
-      const svgString = await vectorizeImage(file);
+      const svgString = await vectorizeImage(file, operationController.signal);
+      if (!current()) { if (local()) releasePreview(); return; }
 
       // Step 3: Dispatch SVG to parent
-      dispatch('imageGenerated', svgString);
+      if (onImageGenerated) onImageGenerated(svgString, validity);
+      else dispatch('imageGenerated', svgString);
+      if (!local()) return;
 
       error = '✅ Image generated and vectorized successfully!';
-      setTimeout(() => {
-        if (error.startsWith('✅')) error = '';
+      successTimer = setTimeout(() => {
+        if (local() && error.startsWith('✅')) error = '';
       }, 5000);
     } catch (err) {
+      if (!current()) { if (local()) releasePreview(); return; }
       error = err instanceof Error ? err.message : 'Failed to generate image';
       console.error('Image generation error:', err);
     } finally {
-      isGenerating = false;
+      if (controller === operationController) controller = null;
+      if (local()) isGenerating = false;
     }
   }
 
   function clearPrompt() {
+    invalidate();
     prompt = '';
     generatedImageUrl = null;
     error = '';
