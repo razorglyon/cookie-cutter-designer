@@ -36,6 +36,8 @@ Upload limits:
 - maximum raster side: 8192 px;
 - maximum raster area: 16 megapixels.
 
+Two explicit raster vectorization presets are available in Upload and Advanced Creation: **Dessin contrasté** (historical default) and **Photo — lissage expérimental** (blur radius 2, path omission 16). Selection alone never edits the current design. Revectorize explicitly uses the original raster still held in this session and edits only the sketch; source and identity stay unchanged. Undo restores replaced corrections. V1 does not save raster pixels: after reopening, reimport the original image. Photo may remove wanted small holes/details and does not guarantee improved photographic quality. Measurements and limits: `docs/TRACING_PRESETS_VALIDATION.md`.
+
 Raster decoding remains a browser/Canvas operation. The expensive ImageTracer vectorization receives a transferable pixel buffer in a Worker. Requests use IDs, support concurrent processing and cancellation, reject stale responses, and return structured errors.
 
 ## Design modes

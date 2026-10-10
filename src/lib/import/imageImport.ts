@@ -1,4 +1,5 @@
 import type { DesignSource } from '../domain/designDocument';
+import { DEFAULT_TRACING_PRESET, type TracingPresetId } from './tracingPresets';
 
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -54,12 +55,12 @@ function checkCancellation(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Image import was cancelled.', 'AbortError');
 }
 /** Conversion only: the caller owns session validity and guarded publication. */
-export async function importImage(file: File, signal?: AbortSignal): Promise<{ svg: string; source: DesignSource }> {
+export async function importImage(file: File, signal?: AbortSignal, preset: TracingPresetId = DEFAULT_TRACING_PRESET): Promise<{ svg: string; source: DesignSource }> {
   checkCancellation(signal);
   // Keep conversion out of the initial UI bundle without changing its pipeline.
   const { convertImage } = await import('./imageConversion');
   checkCancellation(signal);
-  const result = await convertImage(file, signal);
+  const result = await convertImage(file, signal, preset);
   checkCancellation(signal);
   return result;
 }

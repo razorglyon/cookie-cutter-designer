@@ -11,10 +11,10 @@ import { generationState, model, setParams } from '../lib/stores/cookieCutterSto
 import { DEFAULT_PARAMS } from '../lib/types/CookieCutter';
 import { encodeProject, decodeProject } from '../lib/projects/projectCodec';
 vi.mock('../lib/components/viewer/ThreeViewer.svelte', async () => import('./fixtures/ThreeViewerStub.svelte'));
-const raster = vi.hoisted(() => ({ calls: [] as { resolve: (svg: string) => void; signal?: AbortSignal }[] }));
+const raster = vi.hoisted(() => ({ calls: [] as { resolve: (svg: string) => void; signal?: AbortSignal; preset?: string }[] }));
 vi.mock('../lib/utils/imageProcessor', async original => ({
   ...await original<typeof import('../lib/utils/imageProcessor')>(),
-  vectorizeImage: vi.fn((_file: File, signal?: AbortSignal) => new Promise<string>(resolve => raster.calls.push({ resolve, signal })))
+  vectorizeImage: vi.fn((_file: File, signal?: AbortSignal, preset?: string) => new Promise<string>(resolve => raster.calls.push({ resolve, signal, preset })))
 }));
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="20"/></svg>';
 let app: ReturnType<typeof mount> | undefined;
@@ -50,6 +50,54 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.open = false; };
 });
 afterEach(async () => { if (app) await unmount(app); app = undefined; document.body.innerHTML = ''; setParams({ ...DEFAULT_PARAMS }); });
+it('shows an explicit contrast default and photo choice before importing', async () => {
+  setup();
+  await vi.waitFor(() => expect(document.querySelector('select[aria-label="Vectorization preset"]')).not.toBeNull());
+  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Vectorization preset"]')!;
+  expect(select.value).toBe('contrast');
+  expect([...select.options].map(option => option.textContent)).toEqual(['Dessin contrasté', 'Photo — lissage expérimental']);
+});
+
+function choosePreset(value: string) {
+  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Vectorization preset"]')!;
+  for (const option of select.options) option.selected = option.value === value;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+
+}
+it('revectorizes explicitly in session, preserving original source/identity/parameters and undo', async () => {
+  const session = setup(); await upload(new File(['pixels'], 'original.png', { type: 'image/png' }));
+  await vi.waitFor(() => expect(raster.calls).toHaveLength(1));
+  expect(raster.calls[0].preset).toBe('contrast'); raster.calls[0].resolve(svg);
+  await ready(); const original = session.getDocument()!;
+  click('Upload design'); await tick(); choosePreset('photo'); await tick();
+  expect(session.getDocument()).toBe(original);
+  click('Revectorize current image'); await vi.waitFor(() => expect(raster.calls).toHaveLength(2));
+  expect(raster.calls[1].preset).toBe('photo');
+  const changed = svg.replace('r="20"', 'r="25"'); raster.calls[1].resolve(changed);
+  await vi.waitFor(() => expect(session.getDocument()?.sketch.svg).toBe(changed)); await ready();
+  expect(session.getDocument()).toMatchObject({ id: original.id, source: original.source, name: original.name, parameters: original.parameters });
+  expect(decodeProject(encodeProject(session.getDocument()!)).document).toEqual(session.getDocument());
+  click('Parameters'); await tick(); click('Undo');
+  await vi.waitFor(() => expect(session.getDocument()?.sketch.svg).toBe(original.sketch.svg));
+});
+it.each(['cancel', 'edit', 'replace'])('discards late retracing after %s', async transition => {
+  const session = setup(); await upload(new File(['pixels'], 'original.png', { type: 'image/png' }));
+  await vi.waitFor(() => expect(raster.calls).toHaveLength(1)); raster.calls[0].resolve(svg); await ready();
+  click('Upload design'); await tick(); click('Revectorize current image');
+  await vi.waitFor(() => expect(raster.calls).toHaveLength(2)); const pending = raster.calls[1];
+  if (transition === 'cancel') click('Cancel image import');
+  if (transition === 'edit') session.rename('Edited while tracing');
+  if (transition === 'replace') session.replace(fixture('Replacement'));
+  const accepted = session.getDocument(); pending.resolve(svg.replace('r="20"', 'r="25"')); await settled();
+  expect(session.getDocument()).toBe(accepted);
+});
+it('requests original raster reimport after restoring a V1 project, never inventing pixels', async () => {
+  const initial = createDesignDocument({ name: 'Reloaded', kind: 'cutter', source: { type: 'raster', fileName: 'original.png', mimeType: 'image/png', vectorizedSvg: svg } });
+  setup(decodeProject(encodeProject(initial)).document); await tick();
+  expect(document.body.textContent).toContain('Réimportez');
+  expect([...document.querySelectorAll('button')].some(button => button.textContent === 'Revectorize current image')).toBe(false);
+  expect(raster.calls).toHaveLength(0);
+});
 it('pastes one binary SVG through the canonical session pipeline, never text markup', async () => {
   const session = setup();
   expect(paste([]).defaultPrevented).toBe(false); await settled(); expect(session.getDocument()).toBeNull();

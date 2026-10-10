@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import FileUpload from './lib/components/ui/FileUpload.svelte';
+  import TracingPresetPicker from './lib/components/ui/TracingPresetPicker.svelte';
+  import { DEFAULT_TRACING_PRESET, TRACING_PRESETS, type TracingPresetId } from './lib/import/tracingPresets';
 
   import { importImage, clipboardImageFiles, isEditablePasteTarget, selectSingleImage } from './lib/import/imageImport';
   import ParameterPanel from './lib/components/ui/ParameterPanel.svelte';
@@ -86,6 +88,11 @@
   let darkMode = false;
   let vectorizationController: AbortController | null = null;
   let importPending = false;
+  let tracingPreset: TracingPresetId = DEFAULT_TRACING_PRESET;
+  let pendingPreset: TracingPresetId = DEFAULT_TRACING_PRESET;
+  // Original bytes are session-only, never added to the V1 document/codec.
+  let sessionRaster: { file: File; epoch: number } | null = null;
+  let retracingSnapshot: ReturnType<typeof session.getDocument> = null;
   let importError: string | null = null;
   const THEME_STORAGE_KEY = 'cookie-cutter-theme';
   let publishedGenerationResult: GenerationResult | null = null;
@@ -331,6 +338,7 @@
       unavailableReason = null;
       externalExport = null;
       $uploadedFile = null;
+      sessionRaster = null;
       if (session.getDocument() === null) {
         const external = currentMesh;
         currentMesh = null;
@@ -468,6 +476,7 @@
   const unsubscribeSession = session.subscribe(document => {
     // Svelte can deliver an older queued snapshot after an observer edits/replaces.
     if (document !== session.getDocument()) return;
+    if (retracingSnapshot !== null && document !== retracingSnapshot) cancelImageImport();
     svgCache = document?.sketch.svg ?? null;
     fileName = document?.source.fileName ?? '';
     if (!document) { activeCategory = 'upload'; historyKey = ''; return; }
@@ -491,7 +500,7 @@
     historyKey = key;
   });
 
-  async function publishSvg(svg: string, nextFileName: string, nextParams: CookieCutterParams = $params, source?: DesignSource): Promise<boolean> {
+  async function publishSvg(svg: string, nextFileName: string, nextParams: CookieCutterParams = $params, source?: DesignSource, rasterFile?: File): Promise<boolean> {
     if (!alive) return false;
     const revision = sourceRevision;
     const epoch = session.getSessionEpoch();
@@ -503,6 +512,10 @@
         source: source ?? { type: 'svg', fileName: nextFileName, svg }
       });
       const accepted = await workflow.startNew({ ...candidate, parameters: parameterDocument.parameters });
+      if (alive && accepted && rasterFile && session.getDocument()?.id === candidate.id
+        && JSON.stringify(session.getDocument()?.source) === JSON.stringify(candidate.source)) {
+        sessionRaster = { file: rasterFile, epoch: session.getSessionEpoch() };
+      }
       if (alive && accepted) { $error = null; activeCategory = 'params'; }
       return alive && accepted;
     } catch (cause) {
@@ -519,6 +532,7 @@
     vectorizationController?.abort();
     vectorizationController = null;
     importPending = false;
+    retracingSnapshot = null;
   }
 
   function rejectImageImport(message: string): void {
@@ -549,19 +563,55 @@
     importError = null;
     $error = null;
     importPending = true;
+    const preset = tracingPreset;
+    pendingPreset = preset;
     const current = () => alive && !controller.signal.aborted && revision === sourceRevision && epoch === session.getSessionEpoch();
     // Keep all operation data local until the guarded session replacement.
     try {
-      const { svg, source } = await importImage(file, controller.signal);
+      const { svg, source } = await importImage(file, controller.signal, preset);
       if (!current()) return;
       importPending = false; // The dirty-document dialog now owns cancellation.
       vectorizationController = null;
-      await publishSvg(svg, file.name, $params, source);
+      await publishSvg(svg, file.name, $params, source, source.type === 'raster' ? file : undefined);
     } catch (cause) {
       if (current()) importError = cause instanceof Error ? cause.message : 'Failed to process file';
     } finally {
       if (vectorizationController === controller) {
         vectorizationController = null;
+        importPending = false;
+      }
+    }
+  }
+
+  async function revectorizeCurrentImage(): Promise<void> {
+    const raster = sessionRaster;
+    const snapshot = session.getDocument();
+    if (!raster || !snapshot || snapshot.source.type !== 'raster' || raster.epoch !== session.getSessionEpoch()) return;
+    cancelImageImport();
+    const revision = sourceRevision;
+    const controller = new AbortController();
+    const preset = tracingPreset;
+    pendingPreset = preset;
+    vectorizationController = controller;
+    retracingSnapshot = snapshot;
+    importPending = true;
+    importError = null;
+    const current = () => alive && !controller.signal.aborted && revision === sourceRevision
+      && raster.epoch === session.getSessionEpoch() && snapshot === session.getDocument();
+    try {
+      const { svg } = await importImage(raster.file, controller.signal, preset);
+      if (!current()) return;
+      // Validate the same representability boundary as other sketch commands.
+      assertRepresentable({ ...snapshot, sketch: { ...snapshot.sketch, svg } });
+      if (!current()) return;
+      retracingSnapshot = null;
+      session.updateSketch(svg); // One undoable edit, never replace source or identity.
+    } catch (cause) {
+      if (current()) importError = cause instanceof Error ? cause.message : 'Failed to revectorize image';
+    } finally {
+      if (vectorizationController === controller) {
+        vectorizationController = null;
+        retracingSnapshot = null;
         importPending = false;
       }
     }
@@ -1041,9 +1091,20 @@
       <div class="panel-content">
         {#if importPending}
           <div class="image-import-progress">
-            <p role="status" aria-live="polite">Importing image…</p>
+            <p role="status" aria-live="polite">Importing image… {TRACING_PRESETS.find(option => option.id === pendingPreset)?.label}</p>
             <button type="button" class="btn" on:click={cancelImageImport}>Cancel image import</button>
           </div>
+        {/if}
+        {#if activeCategory === 'upload' || activeCategory === 'advanced'}
+          <TracingPresetPicker bind:preset={tracingPreset} disabled={importPending} />
+          {#if $session?.source.type === 'raster'}
+            {#if sessionRaster && sessionRaster.epoch === session.getSessionEpoch()}
+              <p>Revectoriser remplace les corrections du dessin ; Undo permet de les retrouver.</p>
+              <button type="button" class="btn" disabled={importPending} on:click={revectorizeCurrentImage}>Revectorize current image</button>
+            {:else}
+              <p>Réimportez l’image originale pour changer de préréglage : les pixels raster ne sont pas sauvegardés dans le projet V1. Le dessin sauvegardé reste disponible.</p>
+            {/if}
+          {/if}
         {/if}
         {#if activeCategory === 'projects'}
           <ProjectManager {session} {workflow} {unavailableReason} />
@@ -1556,6 +1617,11 @@
     gap: var(--spacing-3);
     min-width: 0;
     overscroll-behavior: contain;
+  }
+
+  /* Keep tracing controls above the upload dropzone when this flex panel scrolls. */
+  .panel-content > :global(*) {
+    flex-shrink: 0;
   }
 
   .feature-header {
