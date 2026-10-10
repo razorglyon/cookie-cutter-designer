@@ -41,6 +41,11 @@ export interface ProjectWorkflowOptions {
   readonly storage: ProjectStorage;
   readonly confirmDiscard?: (document: DesignDocument) => Promise<'save' | 'discard' | 'cancel'>;
   readonly confirmCollision?: (incoming: DesignDocument, existing: DesignDocument) => Promise<'replace' | 'copy' | 'cancel'>;
+  /** Capture once per open/import/startNew, before foreground publication.
+   * The synchronous predicate must return true through the final replacement.
+   * Throws and malformed runtime callbacks fail closed; accepted saves still drain.
+   * Omit to retain the session-only transition contract. */
+  readonly captureTransitionValidity?: () => () => boolean;
   readonly createId?: () => string;
   readonly assertRepresentable?: (document: DesignDocument) => void;
   readonly migrationOptions?: MigrationV0ToV1Options;
@@ -89,15 +94,36 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
     const doc = session.getDocument();
     return doc !== null && (state.savedSnapshot === null || encodeProject(doc) !== state.savedSnapshot);
   }
+  interface ReplacementPublication {
+    readonly epoch: number;
+    readonly sequence: number;
+    readonly savedSnapshot: string | null;
+    readonly warnings: readonly string[];
+  }
+  // Reserve the incoming baseline before replace/clear can notify observers.
+  // Adoption belongs to exactly one resulting epoch, never just a document ID.
+  let replacementPublication: ReplacementPublication | undefined;
+  function synchronizeSession(): boolean {
+    if (disposed) return false;
+    const nextEpoch = session.getSessionEpoch();
+    if (epoch === nextEpoch) return false;
+    const incoming = replacementPublication;
+    const owned = incoming?.epoch === nextEpoch && incoming.sequence === transition;
+    replacementPublication = undefined;
+    epoch = nextEpoch;
+    transition += 1; foreground += 1;
+    activeSaves = 0;
+    const savedSnapshot = owned ? incoming.savedSnapshot : null;
+    publish({
+      sessionEpoch: epoch, savedSnapshot, error: null, pending: null,
+      saving: false, saveError: null, warnings: owned ? incoming.warnings : [],
+      dirty: session.getDocument() !== null && (savedSnapshot === null || currentSnapshot() !== savedSnapshot)
+    });
+    return true;
+  }
   const unsubscribe = session.subscribe(() => {
     if (disposed) return;
-    const nextEpoch = session.getSessionEpoch();
-    if (epoch !== nextEpoch) {
-      epoch = nextEpoch;
-      transition += 1; foreground += 1;
-      activeSaves = 0;
-      publish({ sessionEpoch: epoch, savedSnapshot: null, error: null, pending: null, saving: false, saveError: null, warnings: [], dirty: session.getDocument() !== null });
-    } else publish({ dirty: dirty() });
+    if (!synchronizeSession()) publish({ dirty: dirty() });
   });
   function failure(operation: WorkflowError['operation'], cause: unknown): WorkflowError {
     return Object.freeze({ operation, message: cause instanceof Error ? cause.message : String(cause), cause });
@@ -106,6 +132,7 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
     return !disposed && capturedEpoch === session.getSessionEpoch();
   }
   function begin(operation: WorkflowOperation): number {
+    synchronizeSession();
     const ticket = ++foreground;
     publish({ pending: operation, error: null, ...(operation === 'save' ? { saving: true, saveError: null } : {}) });
     return ticket;
@@ -130,6 +157,10 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
     return doc;
   }
   async function save(): Promise<boolean> {
+    if (disposed) return false;
+    // An earlier session observer can enter before our subscription is delivered.
+    // Adopt that epoch before registering the save, so adoption cannot erase it.
+    synchronizeSession();
     if (disposed) return false;
     const capturedEpoch = session.getSessionEpoch();
     activeSaves += 1;
@@ -160,8 +191,13 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
       }
     }
   }
-  interface TransitionToken { epoch: number; sequence: number }
+  interface TransitionToken { epoch: number; sequence: number; contextValid?: () => boolean }
   function isCurrent(token: TransitionToken): boolean {
+    if (!valid(token.epoch) || token.sequence !== transition) return false;
+    try {
+      if (token.contextValid !== undefined && token.contextValid() !== true) return false;
+    } catch { return false; }
+    // Injected predicates may synchronously replace/clear or start a newer switch.
     return valid(token.epoch) && token.sequence === transition;
   }
   function currentSnapshot(): string | null {
@@ -191,15 +227,28 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
     prepare: (token: TransitionToken) => Promise<IncomingSession | null>
   ): Promise<boolean> {
     if (disposed) return false;
-    const token = { epoch: session.getSessionEpoch(), sequence: ++transition };
-    let ticket = begin(operation);
+    synchronizeSession();
+    if (disposed) return false;
+    const token: TransitionToken = { epoch: session.getSessionEpoch(), sequence: ++transition };
+    let ticket: number | undefined;
     try {
+      // Reserve before invoking external code; capture before begin observers.
+      // Read the optional property inside try too: its getter can throw/re-enter.
+      const capture = options.captureTransitionValidity;
+      if (capture !== undefined) {
+        token.contextValid = capture();
+        if (typeof token.contextValid !== 'function') return false;
+      }
+      if (!isCurrent(token)) return false;
+      ticket = begin(operation);
+      if (!isCurrent(token)) return false;
       const incoming = await prepare(token);
       if (incoming === null || !isCurrent(token)) return false;
       const permission = await guard(token);
       if (permission === null || !isCurrent(token) || currentSnapshot() !== permission.snapshot) return false;
       ticket = begin(operation);
       while (true) {
+        let resolvedBarrier: Promise<unknown> | undefined;
         if (incoming.afterGuard !== undefined) {
           const resolved = await incoming.afterGuard();
           if (resolved === null) return false;
@@ -208,20 +257,37 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
           // last microtask in which another save/delete can enter the queue.
           if (resolved.barrier !== writes) continue;
           incoming.document = resolved.document;
+          resolvedBarrier = resolved.barrier;
         }
         if (!isCurrent(token) || currentSnapshot() !== permission.snapshot) return false;
+        // A validity callback may itself accept another write.
+        if (resolvedBarrier !== undefined && resolvedBarrier !== writes) continue;
         // No await from the final barrier/token/content checks to replacement.
-        if (incoming.document === null) session.clear(); else session.replace(incoming.document);
-        break;
+        const publication: ReplacementPublication = {
+          epoch: token.epoch + 1, sequence: token.sequence,
+          savedSnapshot: incoming.clean && incoming.document !== null ? encodeProject(incoming.document) : null,
+          warnings: Object.freeze([...(incoming.warnings ?? [])])
+        };
+        replacementPublication = publication;
+        try {
+          if (incoming.document === null) session.clear(); else session.replace(incoming.document);
+          // Clearing an already-null Svelte store emits no notification, although
+          // the session epoch still advances. Adopt explicitly (idempotently).
+          synchronizeSession();
+          // The intentional epoch adoption increments transition exactly once.
+          // Do not reuse the old external guard: it may depend on the old epoch.
+          // Baseline publication already happened at adoption, before callbacks;
+          // later saves/foreground tickets must not be cleared by this caller.
+          return valid(publication.epoch) && transition === publication.sequence + 1;
+        } finally {
+          if (replacementPublication === publication) replacementPublication = undefined;
+        }
       }
-      const savedSnapshot = incoming.clean && incoming.document !== null ? encodeProject(incoming.document) : null;
-      publish({ savedSnapshot, dirty: incoming.document !== null && !incoming.clean, warnings: Object.freeze([...(incoming.warnings ?? [])]), error: null, pending: null });
-      return true;
     } catch (cause) {
-      if (isCurrent(token)) publish({ error: failure(operation, cause) });
+      if (ticket !== undefined && isCurrent(token)) publish({ error: failure(operation, cause) });
       return false;
     } finally {
-      finish(ticket, token.epoch, operation);
+      if (ticket !== undefined) finish(ticket, token.epoch, operation);
     }
   }
   return {

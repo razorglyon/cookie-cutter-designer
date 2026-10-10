@@ -29,6 +29,26 @@ const blob = (doc: unknown) => new Blob([encodeProject(doc)]);
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
 describe('project workflow', () => {
+  it.each([null, projectDocument()])('finishes repeated clears even when the session is already empty (%j)', async initial => {
+    const session = createDesignSessionStore(initial);
+    const { workflow } = setup({ session, confirmDiscard: async () => 'discard' });
+    try {
+      for (const _ of [0, 1]) {
+        const previousEpoch = session.getSessionEpoch();
+        expect(await workflow.startNew(null)).toBe(true);
+        expect(session.getDocument()).toBeNull();
+        expect(session.getSessionEpoch()).toBe(previousEpoch + 1);
+        expect(workflow.getState().sessionEpoch).toBe(session.getSessionEpoch());
+        expect(workflow.getState().pending).toBeNull();
+        expect(workflow.getState().dirty).toBe(false);
+        expect(workflow.getState().savedSnapshot).toBeNull();
+        expect(workflow.getState().error).toBeNull();
+      }
+    } finally {
+      await workflow.dispose();
+    }
+  });
+
   it('compares the full persistent document with fixed timestamps; save does not replace session', async () => {
     const { workflow, session, records } = setup();
     expect(workflow.getState().dirty).toBe(true);
@@ -193,6 +213,128 @@ describe('project workflow', () => {
     expect(fail.session.getDocument()).not.toBeNull();
   });
 
+  it.each(['open', 'import', 'startNew', 'clear'] as const)('external context invalidation during guard-save blocks %s but commits the save', async operation => {
+    let revision = 0;
+    const captureTransitionValidity = vi.fn(() => { const captured = revision; return () => captured === revision; });
+    const { workflow, session, backend, records } = setup({ captureTransitionValidity, confirmDiscard: async () => 'save' });
+    const incoming = { ...projectDocument('stamp'), id: 'incoming' };
+    if (operation === 'open') records.set(incoming.id, incoming);
+    const gate = deferred<void>();
+    vi.mocked(backend.put).mockImplementationOnce(async doc => { await gate.promise; records.set(doc.id, doc); });
+    const original = session.getDocument();
+    const switching = operation === 'open' ? workflow.open(incoming.id) : operation === 'import' ? workflow.import(blob(incoming)) : workflow.startNew(operation === 'clear' ? null : incoming);
+    await vi.waitFor(() => expect(backend.put).toHaveBeenCalledOnce());
+    revision += 1; gate.resolve();
+    expect(await switching).toBe(false);
+    expect(session.getDocument()).toBe(original);
+    expect(session.sessionEpoch).toBe(0);
+    expect(records.has(original!.id)).toBe(true);
+    expect(workflow.getState().dirty).toBe(false);
+    expect(await workflow.startNew(incoming)).toBe(true);
+    expect(captureTransitionValidity).toHaveBeenCalledTimes(2);
+    await workflow.dispose();
+  });
+
+  it.each(['replace', 'clear', 'new'] as const)('rechecks internal currency after a truthy external validity callback re-enters %s at the final check', async mutation => {
+    let checks = 0;
+    let newer: Promise<boolean> | undefined;
+    const { workflow, session } = setup({ confirmDiscard: async () => 'discard', captureTransitionValidity: () => () => {
+      // The second begin publication arms the callback at the final replacement boundary.
+      if (armed && ++checks === 1) {
+        if (mutation === 'replace') session.replace({ ...projectDocument(), name: 'newer' });
+        else if (mutation === 'clear') session.clear();
+        else newer = workflow.startNew({ ...projectDocument(), name: 'newer' });
+      }
+      return true;
+    } });
+    let armed = false, publications = 0;
+    const unsubscribe = workflow.subscribe(state => { if (state.pending === 'startNew' && ++publications === 2) armed = true; });
+    expect(await workflow.startNew({ ...projectDocument(), name: 'obsolete' })).toBe(false);
+    if (newer) expect(await newer).toBe(true);
+    expect(session.getDocument()?.name ?? null).toBe(mutation === 'clear' ? null : 'newer');
+    unsubscribe(); await workflow.dispose();
+  });
+
+  it.each(['getter', 'capture', 'validity', 'non-function', 'non-boolean'] as const)('external validity %s fails closed without rejecting', async fault => {
+    const options: Partial<ProjectWorkflowOptions> = { confirmDiscard: async () => 'discard' };
+    Object.defineProperty(options, 'captureTransitionValidity', { enumerable: true, get: () => {
+      // setup spreads options; install the hostile getter on the actual factory options below instead.
+      return () => { if (fault === 'capture') throw new Error('capture'); return fault === 'non-function' ? null : () => { if (fault === 'validity') throw new Error('validity'); return fault === 'non-boolean' ? 'yes' : true; }; };
+    } });
+    const { session, storage } = setup();
+    const injected = { session, storage, confirmDiscard: options.confirmDiscard } as ProjectWorkflowOptions;
+    Object.defineProperty(injected, 'captureTransitionValidity', { get: () => { if (fault === 'getter') throw new Error('getter'); return options.captureTransitionValidity; } });
+    const workflow = createProjectWorkflow(injected);
+    expect(await workflow.startNew(null)).toBe(false);
+    expect(session.sessionEpoch).toBe(0);
+    await workflow.dispose();
+  });
+
+  it('captures external context before begin observers can start a newer transition', async () => {
+    let revision = 0;
+    const captures: number[] = [];
+    const { workflow, session } = setup({ confirmDiscard: async () => 'discard', captureTransitionValidity: () => {
+      const captured = revision; captures.push(captured); return () => captured === revision;
+    } });
+    let newer: Promise<boolean> | undefined;
+    let entered = false;
+    const unsubscribe = workflow.subscribe(state => {
+      if (state.pending === 'startNew' && !entered) { entered = true; revision++; newer = workflow.startNew({ ...projectDocument(), name: 'newer' }); }
+    });
+    expect(await workflow.startNew({ ...projectDocument(), name: 'obsolete' })).toBe(false);
+    expect(await newer).toBe(true);
+    expect(captures).toEqual([0, 1]);
+    expect(session.getDocument()?.name).toBe('newer');
+    unsubscribe(); await workflow.dispose();
+  });
+
+  it('a rejected external capture does not finish another foreground save', async () => {
+    const { workflow, backend } = setup({ captureTransitionValidity: () => () => false });
+    const gate = deferred<void>();
+    vi.mocked(backend.put).mockReturnValueOnce(gate.promise);
+    const saving = workflow.save();
+    await vi.waitFor(() => expect(backend.put).toHaveBeenCalledOnce());
+    expect(await workflow.startNew(null)).toBe(false);
+    expect(workflow.getState().pending).toBe('save');
+    expect(workflow.getState().saving).toBe(true);
+    gate.resolve(); expect(await saving).toBe(true);
+    await workflow.dispose();
+  });
+
+  it('external invalidation and dispose still drain the guard-save before closing storage', async () => {
+    let contextValid = true;
+    const { workflow, backend, records, session } = setup({ captureTransitionValidity: () => () => contextValid, confirmDiscard: async () => 'save' });
+    const gate = deferred<void>();
+    vi.mocked(backend.put).mockImplementationOnce(async doc => { await gate.promise; records.set(doc.id, doc); });
+    const original = session.getDocument();
+    const switching = workflow.startNew(null);
+    await vi.waitFor(() => expect(backend.put).toHaveBeenCalledOnce());
+    contextValid = false;
+    const disposing = workflow.dispose();
+    expect(backend.close).not.toHaveBeenCalled();
+    gate.resolve();
+    expect(await switching).toBe(false); expect(await disposing).toBe(true);
+    expect(records.has(original!.id)).toBe(true);
+    expect(session.getDocument()).toBe(original); expect(backend.close).toHaveBeenCalledOnce();
+  });
+
+  it.each(['getter', 'capture'] as const)('a reentrant %s cannot publish the older transition even if it throws', async boundary => {
+    const { session, storage } = setup();
+    let entered = false, newer: Promise<boolean> | undefined;
+    let workflow!: ReturnType<typeof createProjectWorkflow>;
+    const reenter = () => { if (!entered) { entered = true; newer = workflow.startNew({ ...projectDocument(), name: 'newer' }); throw new Error('obsolete callback'); } };
+    const options: ProjectWorkflowOptions = { session, storage, confirmDiscard: async () => 'discard' };
+    Object.defineProperty(options, 'captureTransitionValidity', { get: () => {
+      if (boundary === 'getter') reenter();
+      return () => { if (boundary === 'capture') reenter(); return () => true; };
+    } });
+    workflow = createProjectWorkflow(options);
+    expect(await workflow.startNew(null)).toBe(false);
+    expect(await newer).toBe(true);
+    expect(session.getDocument()?.name).toBe('newer'); expect(workflow.getState().error).toBeNull();
+    await workflow.dispose();
+  });
+
   it('guard save cannot discard edits made during the save', async () => {
     const { workflow, session, backend } = setup({ confirmDiscard: async () => 'save' });
     const gate = deferred<void>(); vi.mocked(backend.put).mockImplementationOnce(() => gate.promise);
@@ -207,6 +349,155 @@ describe('project workflow', () => {
     session.replace(projectDocument()); expect(workflow.getState().savedSnapshot).toBeNull();
     expect(workflow.getState().dirty).toBe(true);
     expect(await workflow.startNew(projectDocument('stamp'))).toBe(true); expect(workflow.getState().dirty).toBe(true);
+  });
+
+  it.each(['rename', 'kind', 'geometry'] as const)('retains the opened baseline after a synchronous observer %s edit', async edit => {
+    const incoming = { ...projectDocument(), id: 'incoming', name: 'B' };
+    const { workflow, session, records } = setup({ confirmDiscard: async () => 'discard' });
+    records.set(incoming.id, incoming);
+    let entered = false;
+    const unsubscribe = session.subscribe(doc => {
+      if (doc?.id !== incoming.id || entered) return;
+      entered = true;
+      if (edit === 'rename') session.rename('edited B');
+      else if (edit === 'kind') session.changeKind('stamp');
+      else session.updateSketch('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0L20 0L20 20Z"/></svg>');
+    });
+    expect(await workflow.open(incoming.id)).toBe(true);
+    expect(workflow.getState().savedSnapshot).toBe(encodeProject(incoming));
+    expect(workflow.getState().dirty).toBe(true);
+    expect(workflow.getState().sessionEpoch).toBe(session.sessionEpoch);
+    unsubscribe(); await workflow.dispose();
+  });
+
+  it.each(['different-ID', 'same-ID', 'clear'] as const)('does not publish an opened baseline after observer replacement %s', async change => {
+    const incoming = { ...projectDocument(), id: 'incoming', name: 'B' };
+    const replacement = { ...projectDocument('stamp'), id: change === 'same-ID' ? incoming.id : 'C', name: 'C' };
+    const { workflow, session, records } = setup({ confirmDiscard: async () => 'discard' });
+    records.set(incoming.id, incoming);
+    let entered = false;
+    const unsubscribe = session.subscribe(doc => {
+      if (doc?.id !== incoming.id || entered) return;
+      entered = true;
+      if (change === 'clear') session.clear(); else session.replace(replacement);
+    });
+    expect(await workflow.open(incoming.id)).toBe(false);
+    expect(session.getDocument()).toEqual(change === 'clear' ? null : replacement);
+    expect(workflow.getState().savedSnapshot).toBeNull();
+    expect(workflow.getState().dirty).toBe(change !== 'clear');
+    expect(workflow.getState().sessionEpoch).toBe(2);
+    expect(workflow.getState().pending).toBeNull();
+    expect(workflow.getState().error).toBeNull();
+    unsubscribe(); await workflow.dispose();
+  });
+
+  it('does not clear the saved baseline of a document created by a clear observer', async () => {
+    const { workflow, session } = setup({ confirmDiscard: async () => 'discard' });
+    const replacement = { ...projectDocument('stamp'), id: 'C' };
+    let saving: Promise<boolean> | undefined;
+    const unsubscribe = session.subscribe(doc => {
+      if (doc !== null) return;
+      session.replace(replacement);
+      saving = workflow.save();
+    });
+    expect(await workflow.startNew(null)).toBe(false);
+    expect(workflow.getState().pending).toBe('save');
+    expect(await saving).toBe(true);
+    expect(session.getDocument()).toEqual(replacement);
+    expect(workflow.getState().savedSnapshot).toBe(encodeProject(replacement));
+    expect(workflow.getState().dirty).toBe(false);
+    unsubscribe(); await workflow.dispose();
+  });
+
+  it('preserves a newer workflow ticket started from replacement notification', async () => {
+    const incoming = { ...projectDocument(), id: 'incoming', name: 'B' };
+    const decision = deferred<'discard'>();
+    const { workflow, session, records } = setup({ confirmDiscard: vi.fn().mockResolvedValueOnce('discard').mockReturnValueOnce(decision.promise) });
+    records.set(incoming.id, incoming);
+    let newer: Promise<boolean> | undefined;
+    let entered = false;
+    const unsubscribe = session.subscribe(doc => {
+      if (doc?.id !== incoming.id || entered) return;
+      entered = true;
+      session.rename('edited B');
+      newer = workflow.startNew({ ...projectDocument('stamp'), id: 'C' });
+    });
+    expect(await workflow.open(incoming.id)).toBe(false);
+    expect(workflow.getState().pending).toBe('startNew');
+    expect(workflow.getState().dirty).toBe(true);
+    decision.resolve('discard');
+    expect(await newer).toBe(true);
+    expect(session.getDocument()?.id).toBe('C');
+    expect(workflow.getState().savedSnapshot).toBeNull();
+    unsubscribe(); await workflow.dispose();
+  });
+
+  it.each(['before', 'after'] as const)('preserves an observer save ticket and exact baseline (%s workflow subscription)', async order => {
+    const incoming = { ...projectDocument(), id: 'incoming', name: 'B' };
+    const session = createDesignSessionStore(projectDocument(), { now: () => UPDATED_AT });
+    const { storage, backend, records } = setup();
+    records.set(incoming.id, incoming);
+    const gate = deferred<void>();
+    vi.mocked(backend.put).mockImplementationOnce(async doc => { await gate.promise; records.set(doc.id, doc); });
+    let workflow!: ReturnType<typeof createProjectWorkflow>;
+    let saving: Promise<boolean> | undefined;
+    let entered = false;
+    const observe = () => session.subscribe(doc => {
+      if (doc?.id !== incoming.id || entered) return;
+      entered = true;
+      session.rename('saved edit B');
+      saving = workflow.save();
+    });
+    const early = order === 'before' ? observe() : undefined;
+    workflow = createProjectWorkflow({ session, storage, confirmDiscard: async () => 'discard' });
+    const late = order === 'after' ? observe() : undefined;
+    expect(await workflow.open(incoming.id)).toBe(true);
+    expect(workflow.getState().pending).toBe('save');
+    expect(workflow.getState().saving).toBe(true);
+    expect(workflow.getState().savedSnapshot).toBe(encodeProject(incoming));
+    expect(workflow.getState().dirty).toBe(true);
+    gate.resolve();
+    expect(await saving).toBe(true);
+    expect(workflow.getState().savedSnapshot).toBe(encodeProject(session.getDocument()));
+    expect(workflow.getState().dirty).toBe(false);
+    expect(workflow.getState().saving).toBe(false);
+    early?.(); late?.(); await workflow.dispose();
+  });
+
+  it('accepts the intended replacement without reusing an external guard bound to the old epoch', async () => {
+    const { session, storage, records } = setup();
+    const incoming = { ...projectDocument(), id: 'incoming' };
+    records.set(incoming.id, incoming);
+    const workflow = createProjectWorkflow({ session, storage, confirmDiscard: async () => 'discard', captureTransitionValidity: () => {
+      const captured = session.sessionEpoch;
+      return () => session.sessionEpoch === captured;
+    } });
+    expect(await workflow.open(incoming.id)).toBe(true);
+    expect(session.getDocument()).toEqual(incoming);
+    expect(workflow.getState().savedSnapshot).toBe(encodeProject(incoming));
+    expect(workflow.getState().dirty).toBe(false);
+    await workflow.dispose();
+  });
+
+  it('a workflow publication observer can supersede the replacement without losing its ticket', async () => {
+    const { workflow, session, records } = setup({ confirmDiscard: async () => 'discard' });
+    const incoming = { ...projectDocument(), id: 'incoming' };
+    records.set(incoming.id, incoming);
+    let newer: Promise<boolean> | undefined;
+    let entered = false;
+    const unsubscribe = workflow.subscribe(state => {
+      if (state.sessionEpoch !== 1 || entered) return;
+      entered = true;
+      newer = workflow.startNew({ ...projectDocument('stamp'), id: 'C' });
+    });
+    expect(await workflow.open(incoming.id)).toBe(false);
+    expect(await newer).toBe(true);
+    expect(session.getDocument()?.id).toBe('C');
+    expect(workflow.getState().savedSnapshot).toBeNull();
+    expect(workflow.getState().dirty).toBe(true);
+    expect(workflow.getState().pending).toBeNull();
+    expect(workflow.getState().error).toBeNull();
+    unsubscribe(); await workflow.dispose();
   });
 
   it('reopens the committed same-ID document after guard-save without a stale subsequent save', async () => {
