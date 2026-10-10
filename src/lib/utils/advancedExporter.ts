@@ -165,7 +165,7 @@ ${triangles}
 
 function generate3MFModel(
   meshes: readonly ModelMesh[],
-  params: CookieCutterParams
+  params?: Readonly<CookieCutterParams>
 ): string {
   const resources = meshes.map(modelMeshXML).join('\n');
   const buildItems = meshes
@@ -178,8 +178,8 @@ function generate3MFModel(
   <metadata name="Designer">Cookie Cutter Designer</metadata>
   <metadata name="Description">Validated 3D-printable cookie cutter</metadata>
   <metadata name="Application">Cookie Cutter Designer</metadata>
-  <metadata name="ccd:WallThickness" preserve="1">${params.wallThickness}</metadata>
-  <metadata name="ccd:CuttingHeight" preserve="1">${params.cuttingHeight}</metadata>
+${params ? `  <metadata name="ccd:WallThickness" preserve="1">${params.wallThickness}</metadata>
+  <metadata name="ccd:CuttingHeight" preserve="1">${params.cuttingHeight}</metadata>` : ''}
   <resources>
 ${resources}
   </resources>
@@ -207,7 +207,7 @@ function rootRelationshipsXML(): string {
 /** Serialize a validated object to a minimal 3MF Core OPC package. */
 export function serialize3MF(
   object: THREE.Object3D,
-  params: CookieCutterParams
+  params?: Readonly<CookieCutterParams>
 ): Uint8Array {
   const manufacturingObject = validatedManufacturingObject(object);
   const model = generate3MFModel(collectModelMeshes(manufacturingObject), params);
@@ -234,7 +234,7 @@ export function exportToOBJ(object: THREE.Object3D, filename: string): void {
 export function exportTo3MF(
   object: THREE.Object3D,
   filename: string,
-  params: CookieCutterParams
+  params?: Readonly<CookieCutterParams>
 ): void {
   const archive = serialize3MF(object, params);
   const ownedArchive = Uint8Array.from(archive);

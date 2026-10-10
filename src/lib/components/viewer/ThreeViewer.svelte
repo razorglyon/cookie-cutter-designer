@@ -11,6 +11,11 @@
 
   export let mesh: THREE.Mesh | THREE.Group | null = null;
   export let buildPlateSize = 200;
+  // Legacy viewers remain editable; document-owned previews explicitly opt out.
+  export let allowObjectDeletion: boolean = true;
+  const deletionUnavailableReason = 'Generated geometry is a read-only preview. Persistent part editing is not available in V1.';
+  export let viewport: import('../../domain/designDocument').ViewportPreferences = { showGrid: true, showAxes: false, showWallThickness: false };
+  export let onViewportChange: (value: import('../../domain/designDocument').ViewportPreferences) => void = () => {};
 
   const dispatch = createEventDispatcher<{ deleteObject: THREE.Object3D }>();
 
@@ -153,7 +158,7 @@
       }
     });
     wallHeatmapAvailable = target !== null && hasMeasurements;
-    if (!wallHeatmapAvailable) wallHeatmapEnabled = false;
+    wallHeatmapEnabled = viewport.showWallThickness && wallHeatmapAvailable;
   }
 
   function applyWallThicknessHeatmap(): void {
@@ -207,13 +212,24 @@
     if (heatmapOverrides.length > 0) wallHeatmapRange = range;
   }
 
-  function handleWallHeatmapChange(event: Event): void {
-    wallHeatmapEnabled = (event.currentTarget as HTMLInputElement).checked;
-    if (wallHeatmapEnabled && wallHeatmapAvailable) {
-      applyWallThicknessHeatmap();
-    } else {
-      clearWallThicknessHeatmap();
+  function projectViewport(value: import('../../domain/designDocument').ViewportPreferences): void {
+    if (!scene) return;
+    gridHelper.visible = value.showGrid;
+    buildPlateBorder.visible = value.showGrid;
+    axesHelper.visible = value.showAxes;
+    const enabled = value.showWallThickness && wallHeatmapAvailable;
+    if (enabled !== wallHeatmapEnabled || (enabled && heatmapOverrides.length === 0)) {
+      wallHeatmapEnabled = enabled;
+      if (enabled) applyWallThicknessHeatmap(); else clearWallThicknessHeatmap();
     }
+  }
+  function userViewportChange(patch: Partial<import('../../domain/designDocument').ViewportPreferences>): void {
+    viewport = { ...viewport, ...patch };
+    projectViewport(viewport);
+    onViewportChange(viewport);
+  }
+  function handleWallHeatmapChange(event: Event): void {
+    userViewportChange({ showWallThickness: (event.currentTarget as HTMLInputElement).checked });
   }
 
   function createBuildPlate(size: number): void {
@@ -238,6 +254,7 @@
     disposeRenderable(gridHelper);
     disposeRenderable(buildPlateBorder);
     createBuildPlate(buildPlateSize);
+    projectViewport(viewport);
   }
 
   function initThree(): void {
@@ -278,6 +295,7 @@
     window.addEventListener('resize', handleResize);
     renderer.domElement.addEventListener('click', handleClick);
     updateDisplayedMesh(mesh);
+    projectViewport(viewport);
   }
 
   function applySceneTheme(): void {
@@ -324,7 +342,7 @@
   }
 
   function deleteSelected(): void {
-    if (!selectedObject) return;
+    if (!allowObjectDeletion || !selectedObject) return;
 
     const objectToDelete = selectedObject;
     clearSelection();
@@ -401,6 +419,7 @@
   }
 
   $: if (scene) updateDisplayedMesh(mesh);
+  $: if (scene) projectViewport(viewport);
   $: if (scene && gridHelper && buildPlateBorder && buildPlateSize !== renderedBuildPlateSize) {
     replaceBuildPlate();
   }
@@ -411,6 +430,10 @@
 
   <!-- Selection controls overlay -->
   <div class="controls-overlay">
+    <label class="heatmap-toggle"><input type="checkbox" aria-label="Show grid" checked={viewport.showGrid}
+      on:change={event => userViewportChange({ showGrid: event.currentTarget.checked })} />Grid</label>
+    <label class="heatmap-toggle"><input type="checkbox" aria-label="Show axes" checked={viewport.showAxes}
+      on:change={event => userViewportChange({ showAxes: event.currentTarget.checked })} />Axes</label>
     <button
       class="control-btn"
       class:active={selectionMode}
@@ -479,7 +502,9 @@
       <button
         class="control-btn delete-btn"
         on:click={deleteSelected}
-        title="Delete selected element"
+        disabled={!allowObjectDeletion}
+        aria-describedby={!allowObjectDeletion ? 'viewer-deletion-reason' : undefined}
+        title={!allowObjectDeletion ? deletionUnavailableReason : 'Delete selected element'}
         aria-label="Delete selected element"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -488,6 +513,9 @@
         </svg>
         <span class="control-label">Delete</span>
       </button>
+      {#if !allowObjectDeletion}
+        <p id="viewer-deletion-reason" class="selection-hint">{deletionUnavailableReason}</p>
+      {/if}
     {/if}
 
     {#if selectionMode}

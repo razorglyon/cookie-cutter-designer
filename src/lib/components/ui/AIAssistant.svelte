@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import {
     getAPIKey,
     suggestDesignImprovements,
@@ -13,9 +13,35 @@
   interface Props {
     params: CookieCutterParams;
     svgContent: string | null;
+    captureOperationValidity?: () => (() => boolean);
+    onOptimizedSVG?: (svg: string, validity: () => boolean) => void;
   }
 
-  let { params, svgContent }: Props = $props();
+  let { params, svgContent, captureOperationValidity, onOptimizedSVG }: Props = $props();
+
+  let alive = true;
+  let sequence = 0;
+  let successTimer: ReturnType<typeof setTimeout> | undefined;
+  onDestroy(() => { alive = false; sequence++; clearTimeout(successTimer); });
+  $effect(() => { svgContent; params; sequence++; isProcessing = false; clearTimeout(successTimer); });
+  function beginOperation() {
+    const token = ++sequence;
+    const source = svgContent;
+    const paths = $pathData;
+    const parameters = JSON.stringify(params);
+    const local = () => alive && token === sequence && source === svgContent && (source !== null || paths === $pathData) && parameters === JSON.stringify(params);
+    let validity: () => boolean;
+    try { validity = captureOperationValidity ? captureOperationValidity() : () => true; } catch { return null; }
+    const current = () => {
+      if (!local()) return false;
+      try { return validity() === true && local(); } catch { return false; }
+    };
+    return current() ? { local, current, validity } : null;
+  }
+  function handoff(svg: string, validity: () => boolean) {
+    if (onOptimizedSVG) onOptimizedSVG(svg, validity);
+    else dispatch('optimizedSVG', svg);
+  }
 
   const dispatch = createEventDispatcher<{
     optimizedSVG: string;
@@ -73,17 +99,20 @@
       return;
     }
 
+    const operation = beginOperation();
+    if (!operation) return;
     isProcessing = true;
     error = '';
     suggestions = [];
 
     try {
       const dataToUse = svgContent || $pathData || '';
-      suggestions = await suggestDesignImprovements(dataToUse, params, apiKey);
+      const result = await suggestDesignImprovements(dataToUse, params, apiKey);
+      if (operation.current()) suggestions = result;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to get suggestions';
+      if (operation.current()) error = err instanceof Error ? err.message : 'Failed to get suggestions';
     } finally {
-      isProcessing = false;
+      if (operation.local()) isProcessing = false;
     }
   }
 
@@ -93,23 +122,29 @@
       return;
     }
 
+    const operation = beginOperation();
+    if (!operation) return;
     isProcessing = true;
     error = '';
 
     try {
       const result = await optimizeSVGWithAI(svgContent, apiKey);
+      if (!operation.current()) return;
       // Note: optimizeSVGWithAI now returns original SVG with analysis in console
-      dispatch('optimizedSVG', result);
+      handoff(result, operation.validity);
+      if (!operation.local()) return;
       // Show success message briefly
       error = '✅ SVG analysis complete! Check browser console (F12) for optimization recommendations.';
-      setTimeout(() => {
-        if (error.startsWith('✅')) error = '';
+      clearTimeout(successTimer);
+      successTimer = setTimeout(() => {
+        if (operation.local() && error.startsWith('✅')) error = '';
       }, 5000);
     } catch (err) {
+      if (!operation.current()) return;
       error = err instanceof Error ? err.message : 'Failed to analyze SVG';
       console.error('SVG Analysis error:', err);
     } finally {
-      isProcessing = false;
+      if (operation.local()) isProcessing = false;
     }
   }
 
@@ -119,19 +154,22 @@
       return;
     }
 
+    const operation = beginOperation();
+    if (!operation) return;
     const description = prompt('Describe the design you want variations of:');
-    if (!description) return;
+    if (!description || !operation.current()) return;
 
     isProcessing = true;
     error = '';
     variations = [];
 
     try {
-      variations = await generateDesignVariations(description, apiKey);
+      const result = await generateDesignVariations(description, apiKey);
+      if (operation.current()) variations = result;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to generate variations';
+      if (operation.current()) error = err instanceof Error ? err.message : 'Failed to generate variations';
     } finally {
-      isProcessing = false;
+      if (operation.local()) isProcessing = false;
     }
   }
 
@@ -195,7 +233,7 @@
         <div class="tab-content">
           {#if activeTab === 'generate'}
             <div class="tab-pane">
-              <AIImageGenerator on:imageGenerated={(e) => dispatch('optimizedSVG', e.detail)} />
+              <AIImageGenerator {captureOperationValidity} sourceKey={svgContent} onImageGenerated={handoff} />
             </div>
           {:else if activeTab === 'suggestions'}
             <div class="tab-pane">
