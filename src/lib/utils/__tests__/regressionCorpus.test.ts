@@ -127,6 +127,23 @@ describe('manufacturing regression corpus', () => {
     }
   });
 
+  it('validates a shallow notch whose offsets simplify vertices without splitting rings', async () => {
+    // The old rejection was a vertex-count mismatch, not a component change
+    // or a manufacturing-resolution policy. Keep the export validator as the
+    // contract: closed, consistently oriented, non-degenerate, positive solid.
+    let object: THREE.Object3D | undefined;
+    try {
+      object = await generateCookieCutter(tinyDetailsSvg, cutterParams);
+      const report = validatePrintableObject(object, { requireSingleShell: true });
+      expect(report.valid, report.errors.join('\n')).toBe(true);
+      expect(report.shells).toBe(1);
+      expect(report.triangles).toBeGreaterThan(0);
+      expect(report.volume).toBeGreaterThan(0);
+    } finally {
+      if (object) disposeObject3D(object);
+    }
+  });
+
   it('handles an extreme aspect ratio without losing the requested longest dimension', async () => {
     let object: THREE.Object3D | undefined;
 
@@ -148,8 +165,7 @@ describe('manufacturing regression corpus', () => {
 
   it.each([
     ['self-intersection', selfIntersectingSvg],
-    ['degenerate contour', degenerateSvg],
-    ['sub-resolution detail that changes offset topology', tinyDetailsSvg]
+    ['degenerate contour', degenerateSvg]
   ])('rejects %s instead of exporting plausible-looking geometry', async (_name, svg) => {
     const error = await captureGenerationFailure('cutter', svg, cutterParams);
     expect(error).toBeInstanceOf(CutterGenerationError);
