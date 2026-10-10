@@ -12,6 +12,8 @@
 
 ## Statut et autorisations
 
+**État local actuel, 2026-10-10 :** lots 1/1b/2 consolidés dans la base `8037df8` (#62–#65). Lot 3 atelier minimal implémenté sur `feature/sketch-workspace`, **non commité/non publié** ; 988/988 tests, check 0/0, smoke 3/3, build et recette Chromium desktop/mobile réussis. Périmètre borné et preuves : `docs/SKETCH_WORKSPACE_VALIDATION.md`. Les anciennes mentions PR brouillon ci-dessous sont historiques. Instruction actuelle : continuer le travail local, **aucun commit/push/PR/merge/deploy** ; elle prime les autorisations anciennes. Lots 4–7 non réalisés.
+
 **Mise à jour de livraison, 2026-10-10 :** le GO Discord `1558257545167114381` a depuis autorisé l'ensemble du plan avec commits/push/PR organisés ; aucune fusion ni production sans « GO merge ». Les règles de la phase de planification ci-dessous sont historiques. Lot 1 intégré au commit source `141b774`, conformité PASS, qualité APPROVED, 830 tests et gates locales verts, recette Chromium réussie. Détails : `docs/LOCAL_PROJECT_WORKFLOW_VALIDATION.md`. PR #57 brouillon empilée sur #41 ; publication/CI à vérifier sur le head exact. Recovery lot1b également livré au sourcec3d9fba dans PR #59 brouillon sur #58 : 915 tests,11 étapesChromium, conformitéPASS et qualitéAPPROVED ; détails `docs/LOCAL_PROJECT_RECOVERY_VALIDATION.md`. Lots produit2–7 pas encore réalisés. Organisation actuelle : `.hermes/plans/rea-delivery-organization.md`.
 
 - Ce document est un plan, pas une implémentation ni une autorisation de publication.

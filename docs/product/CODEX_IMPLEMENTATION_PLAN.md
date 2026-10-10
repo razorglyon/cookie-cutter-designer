@@ -14,9 +14,9 @@
 
 ### Synchronisation avec le chantier REA — 2026-10-10
 
-La bibliothèque locale et le raccordement du document canonique ont été avancés avant le catalogue et les recettes supplémentaires, selon `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`. Lot 1 intégré au commit source `141b774`, conformité PASS et qualité APPROVED ; validations et limites dans `docs/LOCAL_PROJECT_WORKFLOW_VALIDATION.md`. Ce n'est pas une clôture de toutes les phases de ce document : autosauvegarde, atelier raccordé, presets, ponts, profils et multi-cutter restent à livrer par lots séparés.
+La bibliothèque locale, la récupération de brouillon séparée et l’import unifié sont intégrés au socle actuel, selon `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`. Base locale relue : `8037df8` (#62–#65). L’atelier minimal du lot 3 est implémenté et validé **localement, non commité/non publié** sur `feature/sketch-workspace` : sketch canonique, édition bornée M/L/C/Q/Z, undo/redo, génération, sauvegarde/réouverture. Preuves et limites : `../SKETCH_WORKSPACE_VALIDATION.md`. Cela ne clôt pas toute la phase 4 : primitives/snapping/calques/plume complète/restore-original restent hors tranche ; presets, ponts, profils et multi-cutter restent à livrer.
 
-Pour ce chantier uniquement, le GO Discord `1558257545167114381` autorise commits, push et PR réversibles. Les règles générales ci-dessous restent applicables aux autres chantiers. PR #57 reste brouillon et empilée sur #41, CI distante à vérifier, aucune fusion ni production sans « GO merge ».
+Les autorisations historiques de publication ne s’appliquent pas à la validation actuelle du lot 3 : instruction courante **aucun commit/push/PR/merge/deploy**. Les anciennes PR empilées ont été remplacées par la consolidation ; ne pas les reprendre comme branches de livraison. Toute publication ultérieure exige une nouvelle autorisation applicable.
 
 - Branche dédiée, jamais `main`.
 - Un commit local cohérent par tâche ou petit groupe de tâches.
