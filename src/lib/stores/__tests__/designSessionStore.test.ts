@@ -7,6 +7,92 @@ import { CREATED_AT, UPDATED_AT, EDITED_SVG, INITIAL_SVG, projectDocument, raste
 import { createDesignSessionStore, type DesignSessionStore } from '../designSessionStore';
 
 const NEXT = '2026-10-09T12:00:00.000Z';
+describe('createDesignSessionStore history restoration', () => {
+  it('restores exact codec snapshots atomically without changing epoch, identity or original raster source', () => {
+    const session = createDesignSessionStore({ ...projectDocument(), source: rasterSource() }, { now: () => NEXT });
+    const saved = session.getDocument()!;
+    const epoch = session.sessionEpoch;
+    session.updateSketch(INITIAL_SVG);
+    session.updateParameters('cutter', { targetSize: 90 });
+    const edited = session.getDocument()!;
+    const listener = vi.fn();
+    const unsubscribe = session.subscribe(listener);
+    session.restoreHistory(saved, epoch);
+    expect(get(session)).toEqual(saved);
+    expect(session.sessionEpoch).toBe(epoch);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(Object.isFrozen(get(session)?.sketch)).toBe(true);
+    session.restoreHistory(edited, epoch);
+    expect(get(session)).toEqual(edited);
+    // The underlying active store, not a concurrent projection, is restored too.
+    session.rename('After redo');
+    expect(get(session)).toMatchObject({ ...edited, name: 'After redo' });
+    unsubscribe();
+  });
+  it.each([
+    { schemaVersion: 2 }, { unexpected: true }, { id: 'other' },
+    { createdAt: '2026-10-08T08:00:00.000Z' },
+    { source: rasterSource() }, { sketch: { svg: '<svg><script/></svg>', revision: 2 } }
+  ])('rejects invalid or foreign snapshots before mutation: %j', patch => {
+    const session = createDesignSessionStore(projectDocument());
+    const before = session.getDocument()!;
+    const listener = vi.fn();
+    const unsubscribe = session.subscribe(listener);
+    expect(() => session.restoreHistory({ ...before, ...patch }, session.sessionEpoch)).toThrow();
+    expect(get(session)).toBe(before);
+    expect(session.sessionEpoch).toBe(0);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+  it.each(['same-id', 'other-id', 'clear'])('rejects a stale epoch after %s', action => {
+    const session = createDesignSessionStore(projectDocument());
+    const before = session.getDocument()!;
+    const epoch = session.sessionEpoch;
+    if (action === 'clear') session.clear();
+    else session.replace({ ...before, id: action === 'same-id' ? before.id : 'other' });
+    const replacement = session.getDocument();
+    expect(() => session.restoreHistory(before, epoch)).toThrow();
+    expect(get(session)).toBe(replacement);
+    expect(session.sessionEpoch).toBe(epoch + 1);
+  });
+  it.each(['replace', 'clear'])('rejects reentrant Proxy %s before committing the old snapshot', action => {
+    const session = createDesignSessionStore(projectDocument());
+    const before = session.getDocument()!;
+    let reentered = false;
+    const proxy = new Proxy(before, { ownKeys(target) {
+      if (!reentered) {
+        reentered = true;
+        if (action === 'clear') session.clear();
+        else session.replace({ ...before, name: 'Newer Proxy session' });
+      }
+      return Reflect.ownKeys(target);
+    } });
+    expect(() => session.restoreHistory(proxy, 0)).toThrow();
+    expect(reentered).toBe(true);
+    expect(session.sessionEpoch).toBe(1);
+    expect(get(session)?.name ?? null).toBe(action === 'clear' ? null : 'Newer Proxy session');
+  });
+  it.each(['replace', 'clear', 'edit', 'throw'])('cannot clobber reentrant %s during unknown validation', action => {
+    const session = createDesignSessionStore(projectDocument(), { now: () => NEXT });
+    const before = session.getDocument()!;
+    let newer: DesignDocument | null = before;
+    const candidate = { ...before, get name() {
+      if (action === 'clear') session.clear();
+      else if (action === 'edit') session.rename('Newer edit');
+      else session.replace({ ...before, name: 'Newer session' });
+      newer = session.getDocument();
+      if (action === 'throw') throw new Error('Hostile getter');
+      return before.name;
+    } };
+    expect(() => session.restoreHistory(candidate, 0)).toThrow();
+    expect(get(session)).toBe(newer);
+    if (action === 'edit') {
+      session.updateViewport({ showGrid: false });
+      expect(get(session)?.name).toBe('Newer edit');
+    }
+  });
+});
+
 describe('createDesignSessionStore', () => {
   it('démarre vide sans faux SVG et expose un readable nullable', () => {
     const session = createDesignSessionStore();

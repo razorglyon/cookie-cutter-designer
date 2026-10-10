@@ -1,5 +1,6 @@
 import { get, writable, type Readable } from 'svelte/store';
 import type { DesignDocument } from '../domain/designDocument';
+import { parseDesignDocumentV1 } from '../domain/documentValidation';
 import {
   createDesignDocumentStore,
   type DesignDocumentStore,
@@ -11,6 +12,8 @@ export interface DesignSessionStore extends Readable<DesignDocument | null> {
   /** Valide avant remplacement ; null n'est pas un document, utiliser clear(). */
   replace(value: unknown): void;
   clear(): void;
+  /** Restaure un snapshot exact dans la même époque, sans commande d'édition. */
+  restoreHistory(value: unknown, expectedEpoch: number): void;
   rename: DesignDocumentStore['rename'];
   updateSketch: DesignDocumentStore['updateSketch'];
   updateViewport: DesignDocumentStore['updateViewport'];
@@ -66,6 +69,28 @@ export function createDesignSessionStore(
       active = null;
       epoch += 1;
       internal.set(null);
+    },
+
+    restoreHistory(value: unknown, expectedEpoch: number): void {
+      const owner = active;
+      const current = get(internal);
+      if (owner === null || current === null || epoch !== expectedEpoch) {
+        throw new Error('Historique obsolète : la session a changé.');
+      }
+      // unknown may run getters/Proxy traps. Detach and validate everything before
+      // touching the active store, then re-check both lifetime and snapshot identity.
+      const snapshot = parseDesignDocumentV1(value);
+      if (epoch !== expectedEpoch || active !== owner || get(internal) !== current) {
+        throw new Error('La session a changé pendant la validation de l’historique.');
+      }
+      if (snapshot.id !== current.id || snapshot.createdAt !== current.createdAt
+        || JSON.stringify(snapshot.source) !== JSON.stringify(current.source)) {
+        throw new Error('Le snapshot historique appartient à un autre document ou source.');
+      }
+      // The validated snapshot has no user getters. replace preserves updatedAt
+      // and sketch revision; subsequent edits use this very same active document.
+      owner.replace(snapshot);
+      internal.set(get(owner));
     },
 
     rename: name => mutate(store => store.rename(name)),
