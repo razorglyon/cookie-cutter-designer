@@ -18,6 +18,10 @@
     generationState
   } from './lib/stores/cookieCutterStore';
   import ProjectManager from './lib/components/ui/ProjectManager.svelte';
+  import RecoveryPanel from './lib/components/ui/RecoveryPanel.svelte';
+  import { createProjectRecovery } from './lib/projects/projectRecovery';
+  import { canonicalProjectRecoverySnapshot, createIndexedDbProjectRecoveryStorage, type ProjectRecoveryStorage, type ProjectRecoveryEnvelope } from './lib/projects/projectRecoveryStorage';
+  import { encodeProject } from './lib/projects/projectCodec';
   import LocalProjectLibrary from './lib/components/library/LocalProjectLibrary.svelte';
   import ProjectConfirmDialog from './lib/components/ui/ProjectConfirmDialog.svelte';
   import { createDesignSessionStore, type DesignSessionStore } from './lib/stores/designSessionStore';
@@ -246,12 +250,14 @@
   // Injectable edges; App remains the owner of generation and external meshes.
   export let projectSession: DesignSessionStore = createDesignSessionStore();
   export let projectStorage: ProjectStorage = createIndexedDbProjectStorage();
+  export let projectRecoveryStorage: ProjectRecoveryStorage = createIndexedDbProjectRecoveryStorage();
   const session = projectSession;
   let alive = true;
   let unavailableReason: string | null = null;
   let viewport: ViewportPreferences = { showGrid: true, showAxes: false, showWallThickness: false };
   type Confirmation = { title: string; description: string; choices: readonly { id: string; label: string; destructive?: boolean }[]; resolve: (choice: string) => void };
   let confirmation: Confirmation | null = null;
+  let recoveryTransitionValidity: (() => boolean) | null = null;
   function ask(title: string, description: string, choices: Confirmation['choices']): Promise<string> {
     confirmation?.resolve('cancel');
     if (!alive) return Promise.resolve('cancel');
@@ -268,7 +274,9 @@
     captureTransitionValidity: () => {
       const revision = sourceRevision;
       const epoch = session.getSessionEpoch();
-      return () => alive && revision === sourceRevision && epoch === session.getSessionEpoch();
+      const recoveryValidity = recoveryTransitionValidity;
+      return () => alive && revision === sourceRevision && epoch === session.getSessionEpoch()
+        && (recoveryValidity === null || recoveryValidity());
     },
     confirmDiscard: async document => {
       const revision = sourceRevision;
@@ -326,6 +334,122 @@
     onIntegrationError: cause => { $error = cause instanceof Error ? cause.message : String(cause); }
   });
   let historyKey = '';
+  // Observe synchronously, after workflow and integration exist. UI effects alone
+  // can miss the last accepted document when destruction precedes Svelte's flush.
+  const recovery = createProjectRecovery(projectRecoveryStorage);
+  let recoveryBusy = false;
+  let recoveryActionSequence = 0;
+  let recoveryActionError: string | null = null;
+  // Keep the panel and refresh focus target mounted after its final draft is deleted.
+  let recoveryPanelVisible = false;
+  $: if (activeCategory === 'projects' || $recovery.drafts.length || $recovery.pending || $recovery.saving || $recovery.savedAt || $recovery.error || $recovery.listError || recoveryActionError) recoveryPanelVisible = true;
+  let observedRecovery: { document: DesignDocument | null; epoch: number; dirty: boolean; available: boolean } | null = null;
+  function observeRecovery(): void {
+    if (!alive) return;
+    const document = session.getDocument();
+    const epoch = session.getSessionEpoch();
+    const state = workflow.getState();
+    // A queued workflow notification can predate a reentrant session edit.
+    // Require its dirty baseline to agree with the live canonical document.
+    const dirty = document !== null && (state.savedSnapshot === null || encodeProject(document) !== state.savedSnapshot);
+    if (state.disposed || state.sessionEpoch !== epoch || state.dirty !== dirty
+      || document !== session.getDocument() || epoch !== session.getSessionEpoch()
+      || state !== workflow.getState()) return;
+    const available = unavailableReason === null;
+    if (observedRecovery?.document === document && observedRecovery.epoch === epoch
+      && observedRecovery.dirty === dirty && observedRecovery.available === available) return;
+    observedRecovery = { document, epoch, dirty, available };
+    recovery.observe(document, epoch, dirty, available);
+  }
+  const unsubscribeRecoveryWorkflow = workflow.subscribe(state => {
+    if (state === workflow.getState()) observeRecovery();
+  });
+  const unsubscribeRecoverySession = session.subscribe(document => {
+    if (document === session.getDocument()) observeRecovery();
+  });
+  function recoveryWorkflowBusy(): boolean {
+    const state = workflow.getState();
+    return state.disposed || state.saving || state.pending !== null;
+  }
+  async function refreshRecovery(): Promise<void> {
+    if (!alive) return;
+    await recovery.refresh();
+  }
+  async function flushRecovery(): Promise<void> {
+    if (!alive) return;
+    await recovery.flush();
+    if (alive) await recovery.refresh();
+  }
+  async function resumeRecovery(expected: ProjectRecoveryEnvelope): Promise<void> {
+    if (!alive || recoveryBusy || recoveryWorkflowBusy()) return;
+    recoveryBusy = true;
+    const sequence = ++recoveryActionSequence;
+    const revision = sourceRevision, epoch = session.getSessionEpoch(), document = session.getDocument();
+    const owned = () => alive && sequence === recoveryActionSequence;
+    const current = () => owned() && revision === sourceRevision && epoch === session.getSessionEpoch() && document === session.getDocument();
+    recoveryActionError = null;
+    try {
+      const snapshot = canonicalProjectRecoverySnapshot(expected);
+      const record = await projectRecoveryStorage.get(expected.draftId);
+      if (!current() || recoveryWorkflowBusy()) return;
+      if (!record || canonicalProjectRecoverySnapshot(record) !== snapshot) {
+        recoveryActionError = 'This recovery draft changed or is missing. Refresh and choose the displayed version again.';
+        await recovery.refresh(); return;
+      }
+      // Transfer the pre-read context to the workflow's final replacement guard.
+      // Its intentional new epoch must not be checked against the old context.
+      recoveryTransitionValidity = current;
+      let completion: Promise<boolean>;
+      try { completion = workflow.startNew(record.document); }
+      finally { recoveryTransitionValidity = null; }
+      const accepted = await completion;
+      if (owned() && accepted) activeCategory = 'params';
+    } catch (cause) {
+      if (current()) recoveryActionError = `Could not resume recovery draft: ${cause instanceof Error ? cause.message : 'Storage unavailable'}. Refresh and retry.`;
+    } finally {
+      if (owned()) recoveryBusy = false;
+    }
+  }
+  async function deleteRecovery(expected: ProjectRecoveryEnvelope): Promise<void> {
+    if (!alive || recoveryBusy || recoveryWorkflowBusy()) return;
+    recoveryBusy = true;
+    const sequence = ++recoveryActionSequence;
+    const current = () => alive && sequence === recoveryActionSequence;
+    recoveryActionError = null;
+    try {
+      // Detached exact expected version, never reread/upgrade while prompting.
+      const snapshot = JSON.parse(canonicalProjectRecoverySnapshot(expected)) as ProjectRecoveryEnvelope;
+      const choice = await ask('Delete recovery draft?', `Delete ${snapshot.document.name}, saved at ${snapshot.savedAt}, from this browser?`, [
+        { id: 'cancel', label: 'Cancel' }, { id: 'delete', label: 'Delete draft', destructive: true }
+      ]);
+      if (!current() || choice !== 'delete' || recoveryWorkflowBusy()) return;
+      await projectRecoveryStorage.deleteExpected(snapshot);
+      if (!current()) return;
+      await recovery.refresh();
+      if (!current()) return;
+      recoveryBusy = false;
+      await tick();
+      if (current()) document.querySelector<HTMLButtonElement>('button[data-recovery-refresh]')?.focus();
+    } catch (cause) {
+      if (current()) {
+        recoveryActionError = `Could not delete recovery draft: ${cause instanceof Error ? cause.message : 'Storage unavailable'}. Refresh and retry.`;
+        await recovery.refresh();
+      }
+    } finally {
+      if (current()) recoveryBusy = false;
+    }
+  }
+  onMount(() => {
+    void recovery.list();
+    const flush = () => { if (alive) void recovery.flush(); };
+    const hidden = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', hidden);
+    };
+  });
   const unsubscribeSession = session.subscribe(document => {
     // Svelte can deliver an older queued snapshot after an observer edits/replaces.
     if (document !== session.getDocument()) return;
@@ -519,6 +643,7 @@
       externalExport = { mesh: batch, params: batchParams, current };
       fileName = 'batch-production.stl';
       unavailableReason = 'Batch previews cannot be saved or exported as a V1 project. Start or open a project to return to a representable design.';
+      observeRecovery();
       $isProcessing = false;
       published = true;
     } catch (cause) {
@@ -590,6 +715,11 @@
 
   onDestroy(() => {
     alive = false;
+    recoveryActionSequence += 1;
+    unsubscribeRecoveryWorkflow();
+    unsubscribeRecoverySession();
+    // Recovery owns only its separate storage; close after all accepted writes.
+    void recovery.dispose().then(() => projectRecoveryStorage.close()).catch(cause => console.error('Recovery cleanup failed:', cause));
     confirmation?.resolve('cancel');
     confirmation = null;
     integration.dispose();
@@ -1016,6 +1146,12 @@
           {:catch}
             <div class="panel-load-error" role="alert">Export tools could not be loaded.</div>
           {/await}
+        {/if}
+        {#if recoveryPanelVisible}
+          <RecoveryPanel {recovery} busy={recoveryBusy || $workflow.disposed || $workflow.saving || $workflow.pending !== null}
+            actionError={recoveryActionError} onRefresh={refreshRecovery} onFlush={flushRecovery}
+            onResume={resumeRecovery} onDelete={deleteRecovery} />
+          {#if activeCategory !== 'projects' && $workflow.error}<p role="alert">{$workflow.error.message}</p>{/if}
         {/if}
       </div>
     </div>
