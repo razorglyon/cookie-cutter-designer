@@ -27,8 +27,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       three:
-        specifier: ^0.185.1
-        version: 0.185.1
+        specifier: ^0.186.1
+        version: 0.186.1
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^6.2.4
@@ -655,8 +655,8 @@ packages:
   tess2@1.0.0:
     resolution: {integrity: sha512-iSWBSOUoPn3cCT26L5Wi6mvVgL11RV4kReSnVIIPdMN7qNpkL5SLKen5BJcWj+ZTN7kK6JrHBdqTV7vvL8g+9w==}
 
-  three@0.185.1:
-    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
+  three@0.186.1:
+    resolution: {integrity: sha512-blFeqb49wRCSGUGj7gtpfnSGHy2lwDk94RhUmS1c/hTby70kvChbWpkJ4Pm1390LqzzvTmzgXKHPEafJwCb8jA==}
 
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
@@ -1286,7 +1286,7 @@ snapshots:
 
   tess2@1.0.0: {}
 
-  three@0.185.1: {}
+  three@0.186.1: {}
 
   tinybench@2.9.0: {}
 
