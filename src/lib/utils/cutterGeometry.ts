@@ -388,6 +388,54 @@ function setLoopThicknesses(
   }
 }
 
+/**
+ * Earcut can emit a numerically flat cap face between collinear boundary samples.
+ * Split its neighbour across the retained middle point instead: preserve every
+ * boundary index/edge, rather than drop a face and leave an open mesh.
+ */
+function repairCollinearCapFaces(
+  points: readonly THREE.Vector2[],
+  faces: number[][]
+): number[][] {
+  const areaEpsilon = Math.sqrt(TRIANGLE_EPSILON_SQUARED);
+  const area2 = (face: readonly number[]): number => {
+    const [a, b, c] = face.map(index => points[index]);
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  };
+  for (let index = 0; index < faces.length; index++) {
+    const face = faces[index];
+    const oldArea = area2(face);
+    if (!Number.isFinite(oldArea) || Math.abs(oldArea) > areaEpsilon) continue;
+    const edges = [
+      [face[0], face[1], face[2]],
+      [face[1], face[2], face[0]],
+      [face[2], face[0], face[1]]
+    ];
+    edges.sort((first, second) => points[second[0]].distanceToSquared(points[second[1]]) - points[first[0]].distanceToSquared(points[first[1]]));
+    const [start, end, middle] = edges[0];
+    const dx = points[end].x - points[start].x, dy = points[end].y - points[start].y;
+    const lengthSquared = dx * dx + dy * dy;
+    const projection = ((points[middle].x - points[start].x) * dx + (points[middle].y - points[start].y) * dy) / lengthSquared;
+    if (!Number.isFinite(projection) || projection <= 0 || projection >= 1) continue;
+    const neighbours = faces.map((candidate, position) => ({ candidate, position })).filter(({ candidate, position }) => position !== index && candidate.includes(start) && candidate.includes(end));
+    if (neighbours.length !== 1) continue;
+    const neighbour = neighbours[0];
+    const far = neighbour.candidate.find(vertex => vertex !== start && vertex !== end);
+    if (far === undefined || far === middle || faces.some(candidate => candidate.includes(middle) && candidate.includes(far))) continue;
+    const first = [start, middle, far], second = [middle, end, far];
+    const firstArea = area2(first), secondArea = area2(second);
+    const neighbourArea = area2(neighbour.candidate);
+    if (!Number.isFinite(firstArea) || !Number.isFinite(secondArea) || !Number.isFinite(neighbourArea)
+      || Math.abs(firstArea) <= areaEpsilon || Math.abs(secondArea) <= areaEpsilon
+      || firstArea * secondArea <= 0
+      || Math.abs(Math.abs(firstArea) + Math.abs(secondArea) - Math.abs(neighbourArea) - Math.abs(oldArea)) > areaEpsilon * 2) continue;
+    faces[index] = first;
+    faces[neighbour.position] = second;
+  }
+  // Unrepairable faces still reach addOrientedTriangle's existing strict guard.
+  return faces;
+}
+
 function addCap(
   indices: number[],
   triangleThicknesses: number[],
@@ -405,7 +453,7 @@ function addCap(
   );
   const flattenedIndices = [...outerIndices, ...holeIndices.flatMap((loop) => [...loop])];
   const desiredNormal = new THREE.Vector3(0, top ? 1 : -1, 0);
-  const faces = THREE.ShapeUtils.triangulateShape(outer, holes);
+  const faces = repairCollinearCapFaces([...outer, ...holes.flat()], THREE.ShapeUtils.triangulateShape(outer, holes));
 
   if (faces.length === 0) {
     throw generationError(

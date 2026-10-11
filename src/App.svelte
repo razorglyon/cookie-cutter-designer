@@ -2,6 +2,8 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import FileUpload from './lib/components/ui/FileUpload.svelte';
   import TracingPresetPicker from './lib/components/ui/TracingPresetPicker.svelte';
+  import type { PhotoTraceResult } from './lib/import/photoImport';
+  import { validateImageFile } from './lib/import/imageValidation';
   import { DEFAULT_TRACING_PRESET, TRACING_PRESETS, type TracingPresetId } from './lib/import/tracingPresets';
 
   import { importImage, clipboardImageFiles, isEditablePasteTarget, selectSingleImage } from './lib/import/imageImport';
@@ -90,6 +92,10 @@
   let importPending = false;
   let tracingPreset: TracingPresetId = DEFAULT_TRACING_PRESET;
   let pendingPreset: TracingPresetId = DEFAULT_TRACING_PRESET;
+  type PhotoDraft = { file: File; mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; epoch: number; revision: number; snapshot: DesignDocument | null; kind: 'import' | 'retrace' };
+  let photoDraft: PhotoDraft | null = null;
+  let PhotoImportReview: typeof import('./lib/components/ui/PhotoImportReview.svelte').default | null = null;
+  let photoReviewError: string | null = null;
   // Original bytes are session-only, never added to the V1 document/codec.
   let sessionRaster: { file: File; epoch: number } | null = null;
   let retracingSnapshot: ReturnType<typeof session.getDocument> = null;
@@ -292,7 +298,7 @@
     captureTransitionValidity: () => {
       // A competing project transition owns the source immediately, not only
       // after its asynchronous read/dirty confirmation has completed.
-      if (vectorizationController !== null) cancelImageImport();
+      if (vectorizationController !== null || photoDraft !== null) cancelImageImport();
       const revision = sourceRevision;
       const epoch = session.getSessionEpoch();
       const recoveryValidity = recoveryTransitionValidity;
@@ -529,6 +535,8 @@
 
   function cancelImageImport(): void {
     sourceRevision += 1;
+    photoDraft = null;
+    photoReviewError = null;
     vectorizationController?.abort();
     vectorizationController = null;
     importPending = false;
@@ -553,9 +561,70 @@
     }
   }
 
+  async function loadPhotoReview(): Promise<void> {
+    photoReviewError = null;
+    try {
+      const module = await import('./lib/components/ui/PhotoImportReview.svelte');
+      if (alive) PhotoImportReview = module.default;
+    } catch (cause) {
+      if (alive && photoDraft) photoReviewError = cause instanceof Error ? cause.message : 'Impossible de charger la préparation photo.';
+    }
+  }
+
+  function stagePhoto(file: File, kind: PhotoDraft['kind']): boolean {
+    const mimeType = validateImageFile(file);
+    if (mimeType === 'image/svg+xml') return false;
+    photoDraft = { file, mimeType, kind, epoch: session.getSessionEpoch(), revision: sourceRevision, snapshot: session.getDocument() };
+    if (!PhotoImportReview) void loadPhotoReview();
+    return true;
+  }
+
+  $: if (photoDraft && ($session !== photoDraft.snapshot || session.getSessionEpoch() !== photoDraft.epoch)) {
+    cancelImageImport();
+  }
+
+  async function applyPreparedPhoto(detail: { file: File; result: PhotoTraceResult }): Promise<void> {
+    const draft = photoDraft;
+    if (!alive || !draft || detail.file !== draft.file || !detail.result.diagnostics.canApply
+      || draft.revision !== sourceRevision || draft.epoch !== session.getSessionEpoch()
+      || draft.snapshot !== session.getDocument()) return;
+    try {
+      const svg = detail.result.svg;
+      if (draft.kind === 'retrace') {
+        const snapshot = draft.snapshot;
+        if (!snapshot || snapshot.source.type !== 'raster') return;
+        assertRepresentable({ ...snapshot, sketch: { ...snapshot.sketch, svg } });
+        photoDraft = null;
+        session.updateSketch(svg);
+      } else {
+        photoDraft = null;
+        await publishSvg(svg, draft.file.name, $params, { type: 'raster', fileName: draft.file.name, mimeType: draft.mimeType, vectorizedSvg: svg }, draft.file);
+      }
+      await tick();
+      document.querySelector<HTMLElement>('button[aria-current="page"]')?.focus();
+    } catch (cause) {
+      if (alive && draft.epoch === session.getSessionEpoch()) importError = cause instanceof Error ? cause.message : 'Impossible d’appliquer le contour photo.';
+    }
+  }
+
+  async function cancelPhotoReview(): Promise<void> {
+    cancelImageImport();
+    await tick();
+    document.querySelector<HTMLElement>('select[aria-label="Vectorization preset"]')?.focus();
+  }
+
   async function handleFileUpload(event: CustomEvent<File>) {
     const file = event.detail;
     cancelImageImport();
+    if (tracingPreset === 'photo') {
+      try {
+        importError = null;
+        if (stagePhoto(file, 'import')) return;
+      } catch (cause) {
+        importError = cause instanceof Error ? cause.message : 'Photo invalide.';
+        return;
+      }
+    }
     const revision = sourceRevision;
     const epoch = session.getSessionEpoch();
     const controller = new AbortController();
@@ -588,6 +657,11 @@
     const snapshot = session.getDocument();
     if (!raster || !snapshot || snapshot.source.type !== 'raster' || raster.epoch !== session.getSessionEpoch()) return;
     cancelImageImport();
+    if (tracingPreset === 'photo') {
+      importError = null;
+      stagePhoto(raster.file, 'retrace');
+      return;
+    }
     const revision = sourceRevision;
     const controller = new AbortController();
     const preset = tracingPreset;
@@ -1096,11 +1170,22 @@
           </div>
         {/if}
         {#if activeCategory === 'upload' || activeCategory === 'advanced'}
-          <TracingPresetPicker bind:preset={tracingPreset} disabled={importPending} />
+          <TracingPresetPicker bind:preset={tracingPreset} disabled={importPending || photoDraft !== null} />
+          {#if photoDraft}
+            {#key photoDraft}
+              {#if PhotoImportReview}
+                <svelte:component this={PhotoImportReview} file={photoDraft.file} on:apply={event => void applyPreparedPhoto(event.detail)} on:cancel={cancelPhotoReview} />
+              {:else}
+                <p role="status">Chargement de la préparation photo…</p>
+                {#if photoReviewError}<p role="alert">{photoReviewError}</p><button type="button" class="btn" on:click={loadPhotoReview}>Réessayer la préparation photo</button>{/if}
+                <button type="button" class="btn" on:click={cancelPhotoReview}>Annuler la préparation photo</button>
+              {/if}
+            {/key}
+          {/if}
           {#if $session?.source.type === 'raster'}
             {#if sessionRaster && sessionRaster.epoch === session.getSessionEpoch()}
               <p>Revectoriser remplace les corrections du dessin ; Undo permet de les retrouver.</p>
-              <button type="button" class="btn" disabled={importPending} on:click={revectorizeCurrentImage}>Revectorize current image</button>
+              <button type="button" class="btn" disabled={importPending || photoDraft !== null} on:click={revectorizeCurrentImage}>Revectorize current image</button>
             {:else}
               <p>Réimportez l’image originale pour changer de préréglage : les pixels raster ne sont pas sauvegardés dans le projet V1. Le dessin sauvegardé reste disponible.</p>
             {/if}
