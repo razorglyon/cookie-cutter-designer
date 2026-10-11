@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { strFromU8, unzipSync } from 'fflate';
@@ -12,14 +12,14 @@ import { disposeObject3D } from '../disposeThree';
 import { serializeSTL } from '../stlExporter';
 import { installSvgLoaderDomParserAdapter } from './svgDomTestSupport';
 
-export const SMOKE_OUTPUT_DIR = join(tmpdir(), 'cookie-cutter-export-smoke');
+// Retain artifacts for inspection, but never reuse/delete a predictable shared path.
+export const SMOKE_OUTPUT_DIR = mkdtempSync(join(tmpdir(), 'cookie-cutter-export-smoke-'));
 
 let restoreDomParser: (() => void) | undefined;
 
 beforeAll(async () => {
   restoreDomParser = installSvgLoaderDomParserAdapter();
-  rmSync(SMOKE_OUTPUT_DIR, { recursive: true, force: true });
-  mkdirSync(SMOKE_OUTPUT_DIR, { recursive: true });
+  process.stdout.write(`Export smoke artifacts: ${SMOKE_OUTPUT_DIR}\n`);
 
   const cutter = await createTestCookieCutter({ ...DEFAULT_PARAMS });
   try {
@@ -44,6 +44,12 @@ afterAll(() => {
 });
 
 describe('export artifacts smoke test', () => {
+  it('uses a private unique temporary directory', () => {
+    expect(SMOKE_OUTPUT_DIR).not.toBe(join(tmpdir(), 'cookie-cutter-export-smoke'));
+    expect(statSync(SMOKE_OUTPUT_DIR).isDirectory()).toBe(true);
+    if (process.platform !== 'win32') expect(statSync(SMOKE_OUTPUT_DIR).mode & 0o777).toBe(0o700);
+  });
+
   it('writes a structurally consistent binary STL', () => {
     const bytes = readFileSync(join(SMOKE_OUTPUT_DIR, 'cookie-cutter.stl'));
     const triangleCount = bytes.readUInt32LE(80);

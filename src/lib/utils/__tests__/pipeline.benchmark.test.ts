@@ -1,8 +1,8 @@
 /// <reference types="node" />
 
-import { writeFileSync } from 'node:fs';
+import { mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS } from '../../types/CookieCutter';
@@ -15,7 +15,8 @@ import { serializeSTL } from '../stlExporter';
 import { compoundHoleSvg, concaveSvg } from './fixtures';
 import { installSvgLoaderDomParserAdapter } from './svgDomTestSupport';
 
-const BENCHMARK_OUTPUT = join(tmpdir(), 'cookie-cutter-pipeline-benchmark.json');
+const BENCHMARK_OUTPUT_DIR = mkdtempSync(join(tmpdir(), 'cookie-cutter-pipeline-benchmark-'));
+const BENCHMARK_OUTPUT = join(BENCHMARK_OUTPUT_DIR, 'report.json');
 
 interface Metric {
   iterations: number;
@@ -58,6 +59,13 @@ afterAll(() => {
 });
 
 describe('print-ready pipeline benchmark', () => {
+  it('uses a private unique temporary directory', () => {
+    const directory = dirname(BENCHMARK_OUTPUT);
+    expect(directory).not.toBe(tmpdir());
+    expect(statSync(directory).isDirectory()).toBe(true);
+    if (process.platform !== 'win32') expect(statSync(directory).mode & 0o777).toBe(0o700);
+  });
+
   it('records bounded generation, intersection and export timings', async () => {
     const heapBefore = process.memoryUsage().heapUsed;
 
@@ -120,6 +128,7 @@ describe('print-ready pipeline benchmark', () => {
       ]
     };
     writeFileSync(BENCHMARK_OUTPUT, `${JSON.stringify(report, null, 2)}\n`);
+    process.stdout.write(`Pipeline benchmark report: ${BENCHMARK_OUTPUT}\n`);
 
     for (const metric of Object.values(report.metrics)) {
       expect(Number.isFinite(metric.averageMs)).toBe(true);

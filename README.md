@@ -147,8 +147,10 @@ Focused export smoke test:
 
 ```bash
 pnpm run test:smoke
-unzip -t "${TMPDIR:-/tmp}/cookie-cutter-export-smoke/cookie-cutter.3mf"
-unzip -Z1 "${TMPDIR:-/tmp}/cookie-cutter-export-smoke/cookie-cutter.3mf"
+# Use the exact private directory printed as "Export smoke artifacts".
+SMOKE_DIR="/absolute/path/from/test/output"
+unzip -t "$SMOKE_DIR/cookie-cutter.3mf"
+unzip -Z1 "$SMOKE_DIR/cookie-cutter.3mf"
 ```
 
 Pipeline benchmark:
@@ -157,7 +159,7 @@ Pipeline benchmark:
 pnpm run benchmark
 ```
 
-The benchmark writes `cookie-cutter-pipeline-benchmark.json` in the OS temporary directory (respecting `TMPDIR` when set). Its timings are local regression signals, not printer-time estimates.
+Each smoke/benchmark run creates a unique private directory using `mkdtemp` under the OS temporary directory (respecting `TMPDIR` when set). Artifacts are retained for inspection; their exact paths are printed by the tests. The benchmark writes `report.json` in its private directory. These paths are not stable across runs; no shared directory is deleted or reused. Timings are local regression signals, not printer-time estimates.
 
 ## Usage
 

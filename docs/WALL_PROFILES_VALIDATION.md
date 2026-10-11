@@ -106,6 +106,36 @@ Contrôle reproductible hors dépôt : `/workspace/reports/wall-profiles-final-r
 
 Précommit du 11 octobre 2026 : `pnpm check` relancé avec 0 erreur/0 avertissement ; `pnpm exec vitest run src/lib/components/parameters/__tests__/WallProfiles.test.ts src/__tests__/App.wall-profiles.test.ts --pool=threads --maxWorkers=1 --fileParallelism=false` : **13/13 tests réussis**, 2 fichiers. Même TMP isolé ; logs `wall-profiles-precommit-{check,tests}.log`. La suite complète et le navigateur n’ont pas été relancés à cette étape : leurs preuves restent liées aux mêmes 217 empreintes applicatives, vérifiées avant commit.
 
+## Correctif des fichiers temporaires après publication de la PR #70
+
+Le commit initial `1d3d351019ba00940d743ab4c45dc25b62572b62` a passé Quality et le job d’analyse CodeQL, mais le verdict externe CodeQL a signalé quatre alertes high « Insecure temporary file » dans smoke/benchmark. Le succès du job ne constitue pas une approbation sécurité.
+
+Rza a autorisé le 11 octobre 2026 la correction, les tests, le commit et le push sur la même PR brouillon, sans passage ready, fusion ni déploiement.
+
+- Chacun des deux tests alloue désormais un répertoire unique via `mkdtempSync` sous `tmpdir()`, avec permissions privées `0700` sous Linux. `TMPDIR` reste respecté.
+- Le smoke ne supprime ni ne réutilise de chemin partagé prévisible. Les fichiers finaux restent à noms stables **dans** le répertoire privé, sans accès d’un autre utilisateur au parent.
+- Les artefacts restent disponibles après le test ; les chemins sont imprimés par `process.stdout.write`. Une tentative avec `console.info` n’affichait pas les chemins dans l’environnement de tests ; la sortie stdout effective a été vérifiée après correction.
+- Le README demande d’utiliser le chemin exact annoncé, sans rechercher par glob un artefact potentiellement obsolète. Benchmark : `report.json` sous son répertoire privé.
+- Deux régressions exécutées avant correction échouaient sur les chemins partagés, puis passent avec contrôles des permissions. Deux exécutions indépendantes vérifiées : répertoires distincts, artefacts précédents conservés, rapports JSON lisibles et archives 3MF intègres (`unzip -t` sur chaque archive).
+
+Qualification locale finale : **1 098 tests / 79 fichiers**, `pnpm check` 0/0, smoke **4/4**, benchmark **2/2**, audit sans vulnérabilité connue et build réussis. Les deux nouvelles régressions expliquent la différence avec les 1 096 tests de la qualification initiale. Suite finale relancée après la modification de stdout. Budgets finals inchangés : 35 JS, entrée 175 103 octets, autre maximum 561 528 octets, seuils 200/600 KiB respectés.
+
+Commandes supplémentaires réellement exécutées, avec le même TMP isolé :
+
+```sh
+pnpm exec vitest run src/lib/utils/__tests__/exportArtifacts.smoke.test.ts src/lib/utils/__tests__/pipeline.benchmark.test.ts -t 'uses a private unique temporary directory' --pool=threads --maxWorkers=1 --fileParallelism=false # RED avant correction
+pnpm test:smoke --pool=threads --fileParallelism=false
+pnpm benchmark --pool=threads --fileParallelism=false
+pnpm check
+pnpm test:run --pool=threads --maxWorkers=1 --fileParallelism=false
+pnpm build
+pnpm audit --audit-level=moderate
+```
+
+Preuves hors dépôt : `/workspace/reports/wall-profiles-temp-security-red.log`, `*-smoke-final.log`, `*-benchmark-final.log`, `*-check-final.log`, `*-full-final.log`, `*-build.log` et `*-audit.log`. Les quatre premiers sites annotés restent couverts sans désactivation ni dismissal CodeQL ; la conclusion distante doit être relue sur le SHA correctif poussé.
+
+Aucun code applicatif modifié : seuls smoke/benchmark diffèrent sous `src/` de l’implémentation qualifiée. Le navigateur n’a pas été relancé pour ce correctif d’outillage ; ne pas présenter la recette historique comme une nouvelle exécution. Les répertoires d’artefacts sont volontairement retenus et peuvent être nettoyés séparément après inspection/accord ; pas de nettoyage global automatique.
+
 ## Limites et prochaine décision
 
 - Chromium uniquement, toucher émulé : pas d’essai sur téléphone physique, Safari, Firefox ou lecteur d’écran.
@@ -113,6 +143,6 @@ Précommit du 11 octobre 2026 : `pnpm check` relancé avec 0 erreur/0 avertissem
 - Les nouveaux parcours profils/V2 portent sur un pont simple. Les chaînes et états intermédiaires restent couverts par les tests historiques relancés, pas par un nouveau parcours navigateur profils-chaîne.
 - Les profils ne garantissent pas qu’un SVG arbitraire génère un modèle valide ; un refus des gardes existantes reste possible.
 - Aucun test de performance sur très gros SVG ni test de zoom/texte à 200 % dans ce lot.
-- Commit local de cette première tranche autorisé le 11 octobre 2026. Aucun push, PR, merge, CI distante du lot 6 ou déploiement effectué ni autorisé. La version publiée n’a pas changé.
+- PR #70 publiée en brouillon après accord ; correction de l’outillage, commit et push autorisés. CI initiale détaillée ci-dessus ; aucune fusion ni déploiement autorisés ou exécutés. La version publiée n’a pas changé.
 
 Avant toute publication : accord explicite de Rza et nouvelle vérification du snapshot à publier. Socle/paroi/tranchant indépendants et multi-cutter restent hors périmètre.
