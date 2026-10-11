@@ -13,6 +13,7 @@ export type ArtifactRole =
 export type ImplementedArtifactRolesByKind = {
   readonly cutter: 'primary' | 'cutter' | 'handle';
   readonly stamp: 'primary' | 'stamp' | 'handle';
+  readonly 'multi-cutter': 'primary' | 'set-item';
 };
 
 export interface ModelDimensions {

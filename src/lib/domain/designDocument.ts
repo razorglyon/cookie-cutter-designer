@@ -68,4 +68,18 @@ export type DesignDocumentV2<K extends DesignKind = DesignKind> = {
       };
 }[K];
 
-export type DesignDocument<K extends DesignKind = DesignKind> = DesignDocumentV1<K> | DesignDocumentV2<K>;
+export interface CutterSeriesLayout {
+  readonly copies: number;
+  readonly columns: number;
+  readonly spacingMm: number;
+}
+
+/** V3 only introduces homogeneous, disconnected Cutter copies. V1/V2 stay frozen. */
+export type MultiCutterDocument = Omit<DesignDocumentV2<'cutter'>, 'schemaVersion' | 'kind'> & {
+  readonly schemaVersion: 3;
+  readonly kind: 'multi-cutter';
+  readonly layout: CutterSeriesLayout;
+};
+
+export type DesignDocument<K extends DesignKind = DesignKind> = DesignDocumentV1<K> | DesignDocumentV2<K>
+  | ('multi-cutter' extends K ? MultiCutterDocument : never);

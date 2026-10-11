@@ -66,7 +66,7 @@ function verifyParameterNarrowing(document: DesignDocument): void {
     return;
   }
 
-  expectTypeOf(document).toEqualTypeOf<DesignDocument<'cutter'>>();
+  expectTypeOf(document).toEqualTypeOf<DesignDocument<'cutter'> | DesignDocument<'multi-cutter'>>();
   expectTypeOf(document.parameters).toEqualTypeOf<CutterDesignParameters>();
   expect(document.parameters.mode).toBe('cutter');
 }
@@ -75,7 +75,7 @@ describe('DesignDocumentV1', () => {
   it('exclut les recettes dont les paramètres ne sont pas implémentés', () => {
     expectTypeOf<DesignDocumentV1<'imprint-cutter'>>().toEqualTypeOf<never>();
     expectTypeOf<DesignDocument>().toEqualTypeOf<
-      DesignDocumentV1<'cutter'> | DesignDocumentV1<'stamp'> | DesignDocumentV2<'cutter'> | DesignDocumentV2<'stamp'>
+      DesignDocumentV1<'cutter'> | DesignDocumentV1<'stamp'> | DesignDocumentV2<'cutter'> | DesignDocumentV2<'stamp'> | import('../designDocument').MultiCutterDocument
     >();
   });
 

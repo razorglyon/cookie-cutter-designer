@@ -22,7 +22,7 @@ const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circ
 function photoResult(svg: string, canApply = true): import('../lib/import/photoImport').PhotoTraceResult { return { svg, diagnostics: { width: 100, height: 100, threshold: 128, components: 1, holes: 0, removedComponents: 0, filledHoles: 0, warnings: [], canApply } }; }
 let app: ReturnType<typeof mount> | undefined;
 function fixture(name = 'Original') { return createDesignDocument({ name, kind: 'cutter', source: { type: 'svg', fileName: `${name}.svg`, svg } }); }
-function setup(initial: ReturnType<typeof fixture> | null = null) {
+function setup(initial: import('../lib/domain/designDocument').DesignDocument | null = null) {
   const session = createDesignSessionStore(initial);
   const other = fixture('Other');
   const storage = createProjectStorage({ put: async () => {}, get: async () => other, getAll: async () => [other], delete: async () => {}, close: async () => {} });

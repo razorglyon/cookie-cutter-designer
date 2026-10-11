@@ -1,11 +1,11 @@
-import type { DesignDocument, DesignSource } from '../domain/designDocument';
+import type { DesignDocumentV1, DesignSource } from '../domain/designDocument';
 import type { ImplementedDesignKind } from '../domain/designKind';
 import { createDefaultCutterParameters, createDefaultStampParameters } from '../domain/designParameters';
 import { parseDesignDocumentV1 } from '../domain/documentValidation';
 
 export interface CreateDesignDocumentInput {
   readonly name: string;
-  readonly kind: ImplementedDesignKind;
+  readonly kind: Exclude<ImplementedDesignKind, 'multi-cutter'>;
   /** Source déjà normalisée par le pipeline d'import, jamais un blob raster. */
   readonly source: DesignSource;
 }
@@ -17,7 +17,7 @@ export interface CreateDesignDocumentOptions {
 export function createDesignDocument(
   input: CreateDesignDocumentInput,
   options: CreateDesignDocumentOptions = {}
-): DesignDocument {
+): DesignDocumentV1 {
   const timestamp = (options.now ?? (() => new Date().toISOString()))();
   const id = (options.createId ?? (() => crypto.randomUUID()))();
   return parseDesignDocumentV1({

@@ -20,7 +20,7 @@
   $: document = $session;
   $: if ((start && (document !== start.baseline || session.getSessionEpoch() !== start.epoch))
     || (drag && (document !== drag.baseline || session.getSessionEpoch() !== drag.epoch))) cancel();
-  $: bridges = document?.schemaVersion === 2 ? document.bridges : [];
+  $: bridges = document && document.schemaVersion !== 1 ? document.bridges : [];
   $: model = document ? inspectSketch(document.sketch.svg) : null;
   $: svg = document?.sketch.svg ?? '';
   $: outlines = svg ? outlinePaths(svg) : [];
@@ -51,7 +51,7 @@
     finally { if (mounted) busy = false; }
   }
   function place(event: PointerEvent): void {
-    if (!adding || busy || drag || !document || document.kind !== 'cutter' || event.button !== 0) return;
+    if (!adding || busy || drag || !document || (document.kind !== 'cutter' && document.kind !== 'multi-cutter') || event.button !== 0) return;
     event.preventDefault();
     try {
       const point = coordinates(event);
@@ -104,7 +104,7 @@
 </script>
 
 <svelte:window on:keydown={event => { if (event.key === 'Escape') { cancel(); adding = false; } }} />
-{#if document?.kind === 'cutter' && model}
+{#if (document?.kind === 'cutter' || document?.kind === 'multi-cutter') && model}
 <section class="bridge-workspace" aria-label="Éditeur de ponts pour les îlots">
   <h2>Ponts pour les îlots</h2>
   <p>Relie deux contours distincts pour n’obtenir qu’un emporte-pièce. Les extrémités s’aimantent aux contours. Si d’autres îlots restent isolés, sauvegarde le projet et ajoute leurs ponts avant l’export STL.</p>

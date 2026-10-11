@@ -2,15 +2,17 @@ import { get, writable, type Readable } from 'svelte/store';
 import type {
   DesignDocument,
   Bridge,
+  CutterSeriesLayout,
   ViewportPreferences
 } from '../domain/designDocument';
 import type { ImplementedDesignKind } from '../domain/designKind';
 import {
   createDefaultCutterParameters,
   createDefaultStampParameters,
-  type DesignParametersByKind
+  type ActiveDesignParametersByKind
 } from '../domain/designParameters';
 import { parseDesignDocument } from '../domain/documentValidation';
+import { DEFAULT_CUTTER_SERIES_LAYOUT } from '../domain/cutterSeries';
 import { migrateV1ToV2 } from '../domain/migrations/v1ToV2';
 
 export interface DesignDocumentStoreOptions {
@@ -24,10 +26,12 @@ export interface DesignDocumentStore extends Readable<DesignDocument> {
   updateSketch(svg: string): void;
   /** Promote V1 only on the first bridge edit; the input is validated and detached. */
   updateBridges(bridges: readonly Bridge[]): void;
+  /** Atomic promotion/update; same identity and epoch, no generated objects. */
+  updateSeries(layout: CutterSeriesLayout): void;
   updateViewport(patch: Partial<ViewportPreferences>): void;
   updateParameters<K extends ImplementedDesignKind>(
     kind: K,
-    patch: Partial<DesignParametersByKind[K]>
+    patch: Partial<ActiveDesignParametersByKind[K]>
   ): void;
   changeKind(kind: ImplementedDesignKind): void;
 }
@@ -37,7 +41,7 @@ function freezePersistentSnapshot(document: DesignDocument): DesignDocument {
   Object.freeze(document.sketch);
   Object.freeze(document.parameters);
   Object.freeze(document.viewport);
-  if (document.schemaVersion === 2) {
+  if (document.schemaVersion !== 1) {
     for (const bridge of document.bridges) {
       Object.freeze(bridge.from);
       Object.freeze(bridge.to);
@@ -45,6 +49,7 @@ function freezePersistentSnapshot(document: DesignDocument): DesignDocument {
     }
     Object.freeze(document.bridges);
   }
+  if (document.schemaVersion === 3) Object.freeze(document.layout);
   return Object.freeze(document);
 }
 
@@ -115,11 +120,18 @@ export function createDesignDocumentStore(
 
     updateBridges(bridges: readonly Bridge[]): void {
       const current = get(internal);
-      if (current.kind !== 'cutter') throw new Error('Les ponts sont réservés aux emporte-pièces.');
+      if (current.kind !== 'cutter' && current.kind !== 'multi-cutter') throw new Error('Les ponts sont réservés aux emporte-pièces.');
       if (current.schemaVersion === 1 && bridges.length === 0) return;
-      if (current.schemaVersion === 2 && JSON.stringify(current.bridges) === JSON.stringify(bridges)) return;
+      if (current.schemaVersion !== 1 && JSON.stringify(current.bridges) === JSON.stringify(bridges)) return;
       const base = current.schemaVersion === 1 ? migrateV1ToV2(current) : current;
       publishMutation(current, { ...base, bridges });
+    },
+    updateSeries(layout: CutterSeriesLayout): void {
+      const current = get(internal);
+      if (current.kind !== 'cutter' && current.kind !== 'multi-cutter') throw new Error('Une série nécessite un Cutter.');
+      if (current.schemaVersion === 3 && JSON.stringify(current.layout) === JSON.stringify(layout)) return;
+      publishMutation(current, { ...current, schemaVersion: 3, kind: 'multi-cutter',
+        bridges: current.schemaVersion === 1 ? [] : current.bridges, layout });
     },
     updateViewport(patch: Partial<ViewportPreferences>): void {
       const current = get(internal);
@@ -131,7 +143,7 @@ export function createDesignDocumentStore(
 
     updateParameters<K extends ImplementedDesignKind>(
       kind: K,
-      patch: Partial<DesignParametersByKind[K]>
+      patch: Partial<ActiveDesignParametersByKind[K]>
     ): void {
       const current = get(internal);
       if (current.kind !== kind) {
@@ -149,15 +161,28 @@ export function createDesignDocumentStore(
     changeKind(kind: ImplementedDesignKind): void {
       const current = get(internal);
       if (current.kind === kind) return;
-      if (current.schemaVersion === 2 && current.bridges.length > 0) {
+      if (kind === 'multi-cutter') {
+        if (current.kind !== 'cutter') throw new Error('Une série nécessite un Cutter.');
+        publishMutation(current, { ...current, kind, schemaVersion: 3,
+          bridges: current.schemaVersion === 1 ? [] : current.bridges, layout: DEFAULT_CUTTER_SERIES_LAYOUT });
+        return;
+      }
+      if (current.schemaVersion === 3 && kind === 'cutter') {
+        const { layout: _layout, ...single } = current;
+        if (single.bridges.length > 0) publishMutation(current, { ...single, kind, schemaVersion: 2 });
+        else { const { bridges: _bridges, ...v1 } = single; publishMutation(current, { ...v1, kind, schemaVersion: 1 }); }
+        return;
+      }
+      if (current.schemaVersion !== 1 && current.bridges.length > 0) {
         throw new Error('Supprimez explicitement les ponts avant de changer de type de design.');
       }
 
-      publishMutation(current, {
-        ...current,
-        kind,
-        parameters: createDefaultParameters(kind)
-      });
+      if (current.schemaVersion === 3) {
+        const { layout: _layout, ...single } = current;
+        publishMutation(current, { ...single, schemaVersion: 2, kind, parameters: createDefaultParameters(kind) });
+      } else {
+        publishMutation(current, { ...current, kind, parameters: createDefaultParameters(kind) });
+      }
     }
   };
 }

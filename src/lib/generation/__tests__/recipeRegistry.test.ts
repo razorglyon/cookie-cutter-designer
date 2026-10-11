@@ -162,6 +162,7 @@ describe('GenerationRecipe', () => {
     expectTypeOf<ImplementedArtifactRolesByKind>().toEqualTypeOf<{
       readonly cutter: 'primary' | 'cutter' | 'handle';
       readonly stamp: 'primary' | 'stamp' | 'handle';
+      readonly 'multi-cutter': 'primary' | 'set-item';
     }>();
     expectTypeOf<GeneratedArtifact<'cutter'>['role']>()
       .toEqualTypeOf<'primary' | 'cutter' | 'handle'>();
@@ -215,13 +216,13 @@ describe('RecipeRegistry', () => {
       .toEqualTypeOf<Promise<never>>();
     expectTypeOf<ReturnType<typeof resolveDynamic>>()
       .toEqualTypeOf<
-        Promise<GenerationRecipe<'cutter'> | GenerationRecipe<'stamp'>>
+        Promise<GenerationRecipe<'cutter'> | GenerationRecipe<'stamp'> | GenerationRecipe<'multi-cutter'>>
       >();
     expectTypeOf<ResolvedGenerationRecipe<'cutter' | 'inconnu'>>()
       .toEqualTypeOf<GenerationRecipe<'cutter'>>();
     expectTypeOf<ResolvedGenerationRecipe<'imprint-cutter'>>().toBeNever();
     expectTypeOf<ResolvedGenerationRecipe<string>>()
-      .toEqualTypeOf<GenerationRecipe<'cutter'> | GenerationRecipe<'stamp'>>();
+      .toEqualTypeOf<GenerationRecipe<'cutter'> | GenerationRecipe<'stamp'> | GenerationRecipe<'multi-cutter'>>();
   });
 
   it('reste local, lazy, déterministe et refuse un doublon avant tout chargement', () => {

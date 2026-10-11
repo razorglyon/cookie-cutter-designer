@@ -1,3 +1,4 @@
+import { parseDesignDocument } from '../domain/documentValidation';
 import type { DesignDocument } from '../domain/designDocument';
 import type { GeneratedArtifact } from '../domain/generatedArtifact';
 import type { ImplementedDesignKind } from '../domain/designKind';
@@ -90,35 +91,13 @@ export type GenerationState =
   | DisposedGenerationState;
 
 function cloneDocument(document: ImplementedDesignDocument): ImplementedDesignDocument {
-  const source = document.source.type === 'svg'
-    ? Object.freeze({ ...document.source })
-    : Object.freeze({ ...document.source });
-  const common = {
-    id: document.id,
-    name: document.name,
-    source,
-    sketch: Object.freeze({ ...document.sketch }),
-    viewport: Object.freeze({ ...document.viewport }),
-    createdAt: document.createdAt,
-    updatedAt: document.updatedAt
-  };
-  const version = document.schemaVersion === 2
-    ? { schemaVersion: 2 as const, bridges: Object.freeze(document.bridges.map(bridge => Object.freeze({
-        ...bridge, from: Object.freeze({ ...bridge.from }), to: Object.freeze({ ...bridge.to })
-      }))) }
-    : { schemaVersion: 1 as const };
-
-  return document.kind === 'cutter'
-    ? Object.freeze({
-        ...common, ...version,
-        kind: 'cutter' as const,
-        parameters: Object.freeze({ ...document.parameters })
-      })
-    : Object.freeze({
-        ...common, ...version,
-        kind: 'stamp' as const,
-        parameters: Object.freeze({ ...document.parameters })
-      });
+  const copy = parseDesignDocument(document);
+  function freezeGraph(value: object): void {
+    for (const child of Object.values(value)) if (child !== null && typeof child === 'object') freezeGraph(child);
+    Object.freeze(value);
+  }
+  freezeGraph(copy);
+  return copy;
 }
 
 function cloneArtifact(
@@ -174,6 +153,10 @@ function cloneError(error: PublicGenerationError): PublicGenerationError {
     : Object.freeze({ revision: error.revision, message: error.message, code: error.code });
 }
 
+function isMultiCutterResult(result: GenerationResult): result is GenerationResult<'multi-cutter'> {
+  return result.document.kind === 'multi-cutter';
+}
+
 function isCutterResult(
   result: GenerationResult
 ): result is GenerationResult<'cutter'> {
@@ -184,6 +167,9 @@ export function createReadyGenerationState(
   revision: number,
   result: GenerationResult
 ): ReadyGenerationState {
+  if (isMultiCutterResult(result)) {
+    return Object.freeze({ phase: 'ready', revision, requestedDocument: result.document, result, error: null });
+  }
   if (isCutterResult(result)) {
     return Object.freeze({
       phase: 'ready',

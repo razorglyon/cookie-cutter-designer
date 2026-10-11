@@ -89,7 +89,7 @@ function freezeDocument(document: ImplementedDesignDocument): ImplementedDesignD
   Object.freeze(document.sketch);
   Object.freeze(document.parameters);
   Object.freeze(document.viewport);
-  if (document.schemaVersion === 2) {
+  if (document.schemaVersion !== 1) {
     for (const bridge of document.bridges) {
       Object.freeze(bridge.from);
       Object.freeze(bridge.to);
@@ -97,6 +97,7 @@ function freezeDocument(document: ImplementedDesignDocument): ImplementedDesignD
     }
     Object.freeze(document.bridges);
   }
+  if (document.schemaVersion === 3) Object.freeze(document.layout);
   return Object.freeze(document);
 }
 
@@ -118,7 +119,7 @@ function cloneValidationReport(
   });
 }
 
-function cloneArtifact<K extends 'cutter' | 'stamp'>(
+function cloneArtifact<K extends 'cutter' | 'stamp' | 'multi-cutter'>(
   artifact: GeneratedArtifact<K>
 ): GeneratedArtifact<K> {
   return Object.freeze({
@@ -128,7 +129,7 @@ function cloneArtifact<K extends 'cutter' | 'stamp'>(
   });
 }
 
-function cloneArtifacts<K extends 'cutter' | 'stamp'>(
+function cloneArtifacts<K extends 'cutter' | 'stamp' | 'multi-cutter'>(
   artifacts: readonly GeneratedArtifact<K>[]
 ): NonEmptyReadonlyArray<GeneratedArtifact<K>> {
   const [first, ...rest] = artifacts;
@@ -143,7 +144,7 @@ function cloneArtifacts<K extends 'cutter' | 'stamp'>(
   return Object.freeze(clones);
 }
 
-function createResult<K extends 'cutter' | 'stamp'>(
+function createResult<K extends 'cutter' | 'stamp' | 'multi-cutter'>(
   revision: number,
   document: DesignDocument<K>,
   artifacts: readonly GeneratedArtifact<K>[]
@@ -152,7 +153,7 @@ function createResult<K extends 'cutter' | 'stamp'>(
     revision,
     document,
     artifacts: cloneArtifacts(artifacts)
-  });
+  }) as GenerationResult<K>;
 }
 
 function publicError(revision: number, error: unknown): PublicGenerationError {
@@ -450,6 +451,21 @@ export class GenerationOrchestrator {
         case 'cutter': {
           this.assertCurrent(revision, controller);
           const recipe = await this.registry.resolve('cutter');
+          this.assertCurrent(revision, controller);
+          const artifacts = await recipe.generate(document, context);
+          generatedArtifacts = artifacts;
+          if (!this.isCurrent(revision, controller)) {
+            await this.disposeArtifacts(artifacts);
+            generatedArtifacts = null;
+            return;
+          }
+          this.assertArtifactsPublishable(artifacts);
+          result = createResult(revision, document, artifacts);
+          break;
+        }
+        case 'multi-cutter': {
+          this.assertCurrent(revision, controller);
+          const recipe = await this.registry.resolve('multi-cutter');
           this.assertCurrent(revision, controller);
           const artifacts = await recipe.generate(document, context);
           generatedArtifacts = artifacts;

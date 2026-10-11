@@ -20,6 +20,7 @@ let app: ReturnType<typeof mount> | undefined;
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="20"/></svg>';
 function fixture(name = 'Recovered A') {
   const doc = createDesignDocument({ name, kind: 'cutter', source: { type: 'svg', fileName: 'original.svg', svg } });
+  if (doc.kind !== 'cutter') throw new Error('Expected a Cutter fixture');
   return { ...doc, sketch: { svg: svg.replace('r="20"', 'r="25"'), revision: 7 }, parameters: { ...doc.parameters, totalHeight: 29 }, viewport: { showGrid: false, showAxes: true, showWallThickness: true } };
 }
 function envelope(): ProjectRecoveryEnvelope { return parseProjectRecoveryEnvelope({ format: 'cookie-cutter-designer-recovery', version: 1, draftId: '11111111-1111-4111-8111-111111111111', savedAt: '2026-10-09T12:00:00.000Z', document: fixture() }); }
@@ -27,7 +28,7 @@ function deferred() { let resolve!: () => void; const promise = new Promise<void
 function setup(initial: unknown = null, options: { empty?: boolean; read?: () => Promise<void>; put?: () => Promise<void>; list?: () => Promise<void>; projectPut?: () => Promise<void> } = {}) {
   const session = createDesignSessionStore(initial), expected = envelope();
   const drafts = new Map<string, ProjectRecoveryEnvelope>(options.empty ? [] : [[expected.draftId, expected]]);
-  const saved = new Map([['B', { ...fixture('Library B'), id: 'B' }]]);
+  const saved = new Map<string, import('../lib/domain/designDocument').DesignDocument>([['B', { ...fixture('Library B'), id: 'B' }]]);
   const put = vi.fn(async (record: ProjectRecoveryEnvelope) => { await options.put?.(); drafts.set(record.draftId, record); });
   const read = vi.fn(async (id: string) => { await options.read?.(); return drafts.get(id); });
   const close = vi.fn(async () => {});
@@ -37,7 +38,7 @@ function setup(initial: unknown = null, options: { empty?: boolean; read?: () =>
     drafts.delete(record.draftId); return true;
   });
   const storage = createProjectRecoveryStorage({ put, get: read, getAll: async () => { await options.list?.(); return [...drafts.values()]; }, deleteExpected: deletion, close });
-  const projectPut = vi.fn(async (doc: ReturnType<typeof fixture>) => { await options.projectPut?.(); saved.set(doc.id, doc); });
+  const projectPut = vi.fn(async (doc: import('../lib/domain/designDocument').DesignDocument) => { await options.projectPut?.(); saved.set(doc.id, doc); });
   const projectStorage = createProjectStorage({ put: projectPut, get: async id => saved.get(id), getAll: async () => [...saved.values()], delete: async id => { saved.delete(id); } });
   app = mount(App, { target: document.body.appendChild(document.createElement('div')), props: { projectSession: session, projectStorage, projectRecoveryStorage: storage } });
   return { session, expected, drafts, saved, put, read, close, deletion, projectPut };

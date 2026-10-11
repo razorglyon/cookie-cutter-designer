@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
+  import type { DesignDocument, CutterSeriesLayout } from '../../domain/designDocument';
+  import CutterSeriesControls from './CutterSeriesControls.svelte';
   import { disposeObject3D } from '../../utils/disposeThree';
   import type { Group } from 'three';
   import type { CookieCutterParams } from '../../types/CookieCutter';
@@ -15,6 +17,10 @@
   export let currentSvg: string | null;
   export let currentParams: CookieCutterParams;
   export let buildPlateSize: number;
+  export let currentDocument: DesignDocument | null = null;
+  export let onUpdateSeries: ((layout: CutterSeriesLayout) => void) | undefined = undefined;
+  export let onSingleCutter: (() => void) | undefined = undefined;
+  let showLegacy = false;
   // Capture before production. Predicate must return strictly true; exceptions fail closed.
   export let captureOperationValidity: (() => (() => boolean)) | undefined = undefined;
   // Optional contextual handoff. Ownership transfers synchronously on invocation;
@@ -143,7 +149,13 @@
   $: fitCheck = checkBuildPlateFit(batchItems, layout, buildPlateSize);
 </script>
 
-<div class="batch-mode">
+{#if onUpdateSeries && !showLegacy}
+  <CutterSeriesControls {currentDocument} {onUpdateSeries} {onSingleCutter} />
+{/if}
+{#if onUpdateSeries}
+  <button type="button" class="legacy-switch" aria-expanded={showLegacy} on:click={() => showLegacy = !showLegacy}>{showLegacy ? 'Revenir à la série enregistrable' : 'Production libre historique — non enregistrable'}</button>
+{/if}
+<div class="batch-mode" hidden={Boolean(onUpdateSeries) && !showLegacy}>
   <div class="panel-header">
     <h3>🏭 Batch Mode</h3>
     <button class="toggle-btn" on:click={() => showPanel = !showPanel}>
@@ -201,6 +213,10 @@
 </div>
 
 <style>
+  .batch-mode[hidden] { display: none; }
+  .legacy-switch { min-height: 44px; padding: var(--spacing-2) var(--spacing-3); margin: var(--spacing-3) 0; border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--surface-card); }
+  .legacy-switch:focus-visible { outline: 3px solid var(--color-primary-500); outline-offset: 2px; }
+
   .batch-mode {
     background: white;
     border-radius: 8px;

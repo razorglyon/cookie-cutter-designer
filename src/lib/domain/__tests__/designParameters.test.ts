@@ -33,7 +33,7 @@ const EXPECTED_DESIGN_KINDS = [
   'practice-cookie'
 ] as const;
 
-const EXPECTED_IMPLEMENTED_DESIGN_KINDS = ['cutter', 'stamp'] as const;
+const EXPECTED_IMPLEMENTED_DESIGN_KINDS = ['cutter', 'stamp', 'multi-cutter'] as const;
 
 type ExpectedDesignSizeModeV1 = 'longest' | 'width' | 'height';
 type ExpectedDesignHandleStyleV1 =
@@ -102,7 +102,7 @@ describe('DesignKind', () => {
     expect(DESIGN_KINDS).toEqual(EXPECTED_DESIGN_KINDS);
   });
 
-  it('expose exactement Cutter et Stamp comme recettes implémentées', () => {
+  it('expose Cutter, Stamp et les séries comme recettes implémentées', () => {
     expect(IMPLEMENTED_DESIGN_KINDS).toEqual(EXPECTED_IMPLEMENTED_DESIGN_KINDS);
     expectTypeOf<ImplementedDesignKind>().toEqualTypeOf<
       (typeof EXPECTED_IMPLEMENTED_DESIGN_KINDS)[number]

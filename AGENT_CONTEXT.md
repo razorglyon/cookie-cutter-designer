@@ -1,5 +1,18 @@
 # AGENT_CONTEXT — cookie-cutter-designer
 
+## État courant — lot 7a, validé localement
+
+- Branche `feature/reprenable-cutter-series`, base `1c9e54a2507eceac7bcb788ffc5ad90d4c38cc9e`. GO explicite de Rza le 2026-10-11 pour commit, push, PR puis fusion uniquement si Quality et sécurité sont verts, et vérification GitHub Pages. Préflight : `HEAD == origin/main`, aucune PR ouverte, 225 empreintes src identiques à la recette qualifiée. Publication autorisée, pas encore exécutée à la rédaction de cette note ; la production reste au lot 6. Main local et anciennes branches conservés sans rebase/suppression.
+- Série homogène de Cutter séparés via Batch : copie/colonnes/espacement, source/profils/ponts conservés et éditables ; document + enveloppe V3 stricts, sauvegarde/JSON/reprise/historique canoniques. V1/V2 inchangés hors utilisation de la série ; V3 n’est pas lisible par la production actuelle. Retour au Cutter unique sans perte de paramètres (V2 avec ponts, sinon V1).
+- Bornes : copies 1–24, colonnes 1–copies, espace 0,5–40 mm, total 500 000 triangles ; dimensions réelles poignée comprise. Annulation/échec sans publication partielle. Document physiquement impossible sauvegardable, export géométrique bloqué ; Batch reste accessible sans mesh pour réparer après reload, avec message de plateau.
+- Qualification finale après dernier patch : **511/511 ciblés et voisins ; 1 128/1 128 tests (84 fichiers)**, check **0/0**, smoke **4/4**, benchmark **2/2**, build et budgets 200/600 KiB réussis (178 253 / 561 528 octets). Chromium desktop 1365×900 / mobile 375×812 : V1 comparé au vrai main, JSON/STL inchangés ; séries V1/V2, ponts/profils, Undo/Redo, IndexedDB/reload et réparation du plateau validés. 225 empreintes src inchangées pendant recette et jusqu’après suite complète, zéro erreur console/requête échouée ; serveurs arrêtés.
+- Preuves et limites : `docs/CUTTER_SERIES_VALIDATION.md`, logs `/workspace/reports/multi-cutter-*-qualified.log`, rapport navigateur `/workspace/reports/cutter-series-browser-PjTE35/report.json`. Pas de device/Safari/Firefox/lecteur d’écran/slicer/impression ; pas de nouveau parcours photo/raster ni qualification performance de séries maximales. CI/CodeQL du lot 7a non exécutés, code non publié.
+- Suite autorisée : commit/push/PR, contrôles du SHA publié, squash sans bypass et vérification du site servi. Bloquer avant fusion si un contrôle échoue ; aucun accord de suppression de branche ni d’élargissement au monobloc, aux dessins/tailles différents, Stamp ou socle/paroi/tranchant séparés. L’ancien Batch libre reste explicitement non enregistrable.
+
+## Notes antérieures conservées — historique, pas état du lot 7a
+
+La note locale de livraison du lot 6 ci-dessous est préservée intégralement ; ses anciens statuts et autorisations ne s’appliquent pas au nouveau chantier. Copie avant cette mise à jour : `/workspace/reports/cutter-series-browser-PjTE35/AGENT_CONTEXT.before.md`. Empreinte avant modification `7952f544d6a174429b84ab74df1b3ef519fa9ea36c223d468b299fe5e5377c93`. Aucune restauration, aucun reset ou stash ; index laissé vide. Les commandes et contrats historiques restent des références, la section courante en tête prime.
+
 ## Dépôt et État courant
 
 - `razorglyon/cookie-cutter-designer`, clone `/workspace/cookie-cutter-designer` ; branche principale `main`.
@@ -10,12 +23,22 @@
 
 - Lot 6, première tranche : branche active `feature/simple-wall-profiles`, créée sans upstream depuis `origin/main` après fetch ; base de départ `c98e63855e7263aba2dc7de151b03daad251c24b`. Le commit local de livraison se relit avec `git log -1`. La note locale de reprise a traversé le changement de branche intégralement (empreinte avant/après identique) ; ses informations utiles sont conservées ici. Commit local autorisé par Rza le 2026-10-11. Push, PR, merge et déploiement restent non autorisés et non exécutés pour le lot 6. Le plan contient des statuts historiques : ce contexte et les références Git vérifiées priment.
 
-## Correctif de sécurité des artefacts — état courant
+## Lot 6 — livraison finale vérifiée (état courant)
+
+- GO de Rza pour passage ready, fusion et vérification du déploiement exécuté le 2026-10-11. PR #70 MERGED, squash `1c9e54a2507eceac7bcb788ffc5ad90d4c38cc9e`. `origin/main` fetché ; arbre `127c6793b99b3e0991959868c96a8ff03182de0b` identique au HEAD qualifié `f862b63f707609806d4232994301916b0da2f9d6`.
+- Sur le squash : Quality run `38155888929`, CodeQL Security Scan run `38155888930`, Pages run `38155888955` tous SUCCESS ; checks validate, Analyze (javascript), build et deploy réussis. Les verdicts externes CodeQL/GitGuardian réussis concernent le HEAD de PR ; ne pas les présenter comme réexécutés sur le squash.
+- Déploiement `6998459333`, environnement github-pages, SHA exact confirmé et dernier statut success. Site : https://razorglyon.github.io/cookie-cutter-designer/ . Artefact github-pages téléchargé du run confirmé et comparé au build local issu de l'arbre intégré : 56 fichiers identiques. Les 56 fichiers publics relus en HTTP 200, tailles et SHA-256 identiques (chunks différés/Workers inclus). Seul `.nojekyll` vide est propre au build et absent du paquet, qualifié comme métadonnée de packaging. Rapport : `/workspace/reports/wall-profiles-pages-verified.json`.
+- Clone volontairement conservé sur `feature/simple-wall-profiles` après squash ; branches lot 5 et lot 6 non rebasées/non supprimées. Pas de travail applicatif restant ; note de reprise seule locale, non commitée/non poussée. La divergence historique après squash n'est pas un lot non livré. Pour le chantier suivant, créer une nouvelle branche depuis `origin/main` vérifié et préserver cette note.
+- Première tranche du lot 6 déployée et vérifiée. Pas de nouveau parcours navigateur sur production ni essai device/imprimante : recette locale précédente + preuve HTTP de version servie, limites inchangées. Les sections suivantes sont historiques et ne remplacent pas ce bilan.
+
+## Correctif de sécurité des artefacts — qualification historique
 
 - Rza a autorisé correction, tests, commit et push sur la PR #70 le 2026-10-11 ; aucun accord de passage ready, fusion ou déploiement. Les constats du premier SHA ci-dessous sont historiques.
 - Smoke et benchmark allouent chacun un répertoire privé unique par `mkdtempSync(join(tmpdir(), prefix))`, donc respectent toujours TMPDIR. Suppression de la suppression/réutilisation du chemin smoke partagé ; artefacts conservés pour inspection, chemins exacts publiés via stdout. README adapté aux chemins non stables.
 - TDD : deux régressions rouges sur les anciens chemins prévisibles ; après correction, permissions 0700 et chemins distincts vérifiés. Deux exécutions réelles conservent leurs artefacts distincts ; JSON benchmark lisibles et deux 3MF vérifiés par unzip.
-- Qualification finale : 1 098/1 098 tests (79 fichiers), smoke 4/4, benchmark 2/2 ; check 0/0, audit sans vulnérabilité connue, build réussi ; budgets inchangés (entrée 175 103 octets, autre max 561 528). Seuls les deux fichiers de tests ont changé sous src/ ; aucun parcours navigateur rejoué pour ce correctif d’outillage, comportement applicatif inchangé. Logs `/workspace/reports/wall-profiles-temp-security-*.log`. Verdict CodeQL du futur SHA correctif à relire après push : ne pas le présumer vert.
+- Qualification finale : 1 098/1 098 tests (79 fichiers), smoke 4/4, benchmark 2/2 ; check 0/0, audit sans vulnérabilité connue, build réussi ; budgets inchangés (entrée 175 103 octets, autre max 561 528). Seuls les deux fichiers de tests ont changé sous src/ ; aucun parcours navigateur rejoué pour ce correctif d’outillage, comportement applicatif inchangé. Logs `/workspace/reports/wall-profiles-temp-security-*.log`. Correctif poussé : `f862b63f707609806d4232994301916b0da2f9d6` — `secure temporary test artifacts`. PR #70 OPEN/draft, HEAD exact relu. Quality `validate` run 38148170614, Analyze run 38148170668, verdict externe CodeQL check 114496053606 et GitGuardian tous SUCCESS ; verdict CodeQL « No new alerts in code changed by this pull request ». Aucun dismissal/désactivation. Corps PR actualisé et relu.
+
+- Après livraison du correctif : cette mise à jour de résultat distant est locale, non commitée/non poussée. Aucun changement applicatif restant, seule `AGENT_CONTEXT.md` est modifiée ; deux commits publiés sur la branche. Aucun passage ready, merge ni déploiement. Attendre le GO explicite pour ces étapes.
 
 ## Publication lot 6 — premier SHA, historique
 

@@ -1,4 +1,4 @@
-import type { DesignDocument, DesignDocumentV1, DesignDocumentV2 } from '../domain/designDocument';
+import type { DesignDocument, DesignDocumentV1, DesignDocumentV2, MultiCutterDocument } from '../domain/designDocument';
 import { parseDesignDocument } from '../domain/documentValidation';
 import {
   migrateV0ToV1,
@@ -18,6 +18,12 @@ export interface ProjectEnvelopeV2 {
   readonly format: typeof PROJECT_FORMAT;
   readonly version: typeof PROJECT_VERSION_V2;
   readonly document: DesignDocumentV2;
+}
+
+export interface ProjectEnvelopeV3 {
+  readonly format: typeof PROJECT_FORMAT;
+  readonly version: 3;
+  readonly document: MultiCutterDocument;
 }
 
 export interface DecodedProject {
@@ -106,18 +112,18 @@ function validateEnvelopeHeader(record: UnknownRecord): void {
     );
   }
 
-  if (record.version !== PROJECT_VERSION && record.version !== PROJECT_VERSION_V2) {
+  if (record.version !== PROJECT_VERSION && record.version !== PROJECT_VERSION_V2 && record.version !== 3) {
     if (
       typeof record.version === 'number' &&
       Number.isFinite(record.version) &&
-      record.version > PROJECT_VERSION_V2
+      record.version > 3
     ) {
       invalid(
         'version',
         `version future ${record.version} non prise en charge.`
       );
     }
-    invalid('version', 'version inconnue ; seules les versions 1 et 2 sont prises en charge.');
+    invalid('version', 'version inconnue ; seules les versions 1, 2 et 3 sont prises en charge.');
   }
 }
 
@@ -128,9 +134,11 @@ function validateEnvelopeHeader(record: UnknownRecord): void {
  */
 export function encodeProject(document: unknown): string {
   const parsedDocument = parseDesignDocument(document);
-  const envelope: ProjectEnvelopeV1 | ProjectEnvelopeV2 = parsedDocument.schemaVersion === 1
+  const envelope: ProjectEnvelopeV1 | ProjectEnvelopeV2 | ProjectEnvelopeV3 = parsedDocument.schemaVersion === 1
     ? { format: PROJECT_FORMAT, version: PROJECT_VERSION, document: parsedDocument }
-    : { format: PROJECT_FORMAT, version: PROJECT_VERSION_V2, document: parsedDocument };
+    : parsedDocument.schemaVersion === 2
+      ? { format: PROJECT_FORMAT, version: PROJECT_VERSION_V2, document: parsedDocument }
+      : { format: PROJECT_FORMAT, version: 3, document: parsedDocument };
   return JSON.stringify(envelope, null, 2);
 }
 

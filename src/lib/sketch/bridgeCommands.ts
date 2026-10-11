@@ -32,8 +32,8 @@ export async function commitBridgeEdit(
   active: () => boolean = () => true,
   onIncomplete?: () => void
 ): Promise<boolean> {
-  if (!active() || baseline.kind !== 'cutter' || session.getSessionEpoch() !== epoch || session.getDocument() !== baseline) return false;
-  const previous = baseline.schemaVersion === 2 ? baseline.bridges : [];
+  if (!active() || (baseline.kind !== 'cutter' && baseline.kind !== 'multi-cutter') || session.getSessionEpoch() !== epoch || session.getDocument() !== baseline) return false;
+  const previous = baseline.schemaVersion !== 1 ? baseline.bridges : [];
   if (JSON.stringify(previous) === JSON.stringify(bridges)) return false;
   let incomplete = false;
   if (bridges.length > 0) {
