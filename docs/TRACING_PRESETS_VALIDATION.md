@@ -1,5 +1,7 @@
 # Lot 4 — préréglages de vectorisation : validation locale
 
+> Historique du préréglage livré dans #67. Le nouveau parcours guidé remplace son flou/pathomit ; ne pas utiliser les mesures ci-dessous comme preuve de qualification photographique. État et preuves actuels : `PHOTO_IMPORT_VALIDATION.md`.
+
 2026-10-10, branche `feature/tracing-presets`, base `b1b6aa8c35b4a61cd299b1d860650174b0a64e0e`, diff local non commité. Aucun commit/push/PR/merge/deploy ; aucune nouvelle vérification distante.
 
 ## Livré et garanties

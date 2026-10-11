@@ -3,8 +3,9 @@
 ## Dépôt et État courant
 
 - `razorglyon/cookie-cutter-designer`, clone `/workspace/cookie-cutter-designer` ; branche principale `main`.
-- Base locale `b1b6aa8c35b4a61cd299b1d860650174b0a64e0e` : atelier lot 3 intégré. Aucun réseau/GitHub exécuté dans cette validation du lot 4.
-- Branche active `feature/tracing-presets` : **lot 4 préréglages validé localement**, gates locales réussies ; recette réelle documentée avec limites dans `docs/TRACING_PRESETS_VALIDATION.md`. GO explicite du 2026-10-10 : commit `add explicit raster tracing presets`, push uniquement cette branche, PR draft vers main et lecture des checks du SHA exact. **Aucun merge ni déploiement autorisé**. La note de validation décrit le snapshot avant publication ; vérifier l’état distant pour la reprise.
+- Base locale et référence origin/main `8683d16b73e843d5bc04ee149151944788a601fe` (#67). Lots 3/4 intégrés ; cette reprise ne republie pas leurs commits.
+- Branche active `feature/robust-photo-import` : photo guidée **validée localement**. GO courant : commit `add robust guided photo preparation` et push de cette seule branche ; **pas de PR, merge ni déploiement**. Cette note précède le push : relire Git/GitHub pour confirmer sa réalisation.
+- Snapshot final :**1 068/1 068 tests /73 fichiers**, ciblés151/151, check0/0, smoke3/3, build/audit/diff verts. Vraie photo pièce → silhouette seule → STL1 890triangles ; retrace réellement différent/undo/redo et source/id/params invariants, save/reload JSON/STL exacts ; photo ambiguë bloquée,375px sans overflow ; cercle historique3 576triangles/STL inchangé. Worker/fond blanc séparés pour ne pas inventer un cadre ; cap collinéaire réparé sans perte frontières ni relâchement des gardes. Preuves et essais rouges : `docs/PHOTO_IMPORT_VALIDATION.md`. Aucun agent/processus de recette actif, ports fermés aux rapports.
 - Feuille de route : `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`. Presets lot 4 implémentés ; ponts, profils et multi-cutter restent distincts et non réalisés.
 
 ## Stack et commandes
@@ -35,7 +36,14 @@ TMP isolé obligatoire ; sérialiser les gates. Le script smoke fixe déjà maxW
 - Loft raster : chemin legacy conservé pour cardinalités égales ; fusion périmétrique monotone pour cardinalités différentes sans rééchantillonnage. Changements du nombre de composants refusés ; validateurs et fixtures historiques inchangés par l’atelier.
 - Budgets finaux UTF-8 après preload Vite : 200 KiB entry, 600 KiB chunks ; découpage runtime/addons ≠ baisse garantie du transfert total.
 
-## Validation lot 4
+## Contrat photo guidée
+
+- `photoSettings.ts` : seuil null=auto ; polarité dark/light ; crop normalisé ; minComponentArea0 et fillHolesfalse par défaut. Aucun choix destructif implicite.
+- `photoProcessing.ts` : segmentation luminance/alpha, diagnostics/topologie ; Worker `photoProcessor.worker.ts` : décodage, budgets, ImageTracer noir uniquement et contrôle des trous. `photoImport.ts` : Worker propriétaire par requête, timeout/abort/cleanup.
+- App stage un brouillon gardé par document/snapshot/epoch/sourceRevision ; `PhotoImportReview` prépare sans mutation puis applique explicitement. Retrace conserve source/id/nom/paramètres, réutilise l’historique canonique. Raster et réglages restent volatiles, pas de schéma V2.
+- Fixtures photographiques attribuées coins/coffee/chelsea dans `src/lib/import/__tests__/fixtures/photos/`. Test Node déterministe et vrai décodage Chromium complémentaires ; aucun détour cloud.
+
+## Validation lot 4 (historique)
 
 2026-10-10 : 995/995 tests (68 fichiers), check 0 erreur/0 warning, smoke 3/3, build et diff check réussis après correction du chevauchement flex du bouton retrace. Corpus : 4 rasters originaux procéduraux × 2 choix × 3 répétitions, vrais décodage/Worker Chromium ; SVG exactement reproductibles. Photo supprime du bruit mais aussi petit trou/îlot ; cercle historique identique. Ce corpus ne contient pas de photographie de caméra. Recette navigateur : choix explicite sans mutation, retrace cercle identique, IndexedDB/reload V1 exact et invitation à réimporter ; 375px sans overflow. Undo et cancel/edit/replace tardifs vérifiés dans tests App à Worker simulé, pas intégralement en navigateur réel. Cercle sur dist : STL identique après reload (178884 octets, 3576 triangles). Serveurs arrêtés/ports fermés. Preuves et essais échoués : `docs/TRACING_PRESETS_VALIDATION.md`. Pas de CI distante ni validation performance gros raster.
 

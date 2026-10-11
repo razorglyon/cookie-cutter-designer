@@ -11,12 +11,15 @@ import { generationState, model, setParams } from '../lib/stores/cookieCutterSto
 import { DEFAULT_PARAMS } from '../lib/types/CookieCutter';
 import { encodeProject, decodeProject } from '../lib/projects/projectCodec';
 vi.mock('../lib/components/viewer/ThreeViewer.svelte', async () => import('./fixtures/ThreeViewerStub.svelte'));
+const photo = vi.hoisted(() => ({ calls: [] as { resolve: (result: import('../lib/import/photoImport').PhotoTraceResult) => void; signal?: AbortSignal }[] }));
+vi.mock('../lib/import/photoImport', () => ({ preparePhoto: vi.fn((_file: File, _settings: unknown, signal?: AbortSignal) => new Promise(resolve => photo.calls.push({ resolve, signal }))) }));
 const raster = vi.hoisted(() => ({ calls: [] as { resolve: (svg: string) => void; signal?: AbortSignal; preset?: string }[] }));
 vi.mock('../lib/utils/imageProcessor', async original => ({
   ...await original<typeof import('../lib/utils/imageProcessor')>(),
   vectorizeImage: vi.fn((_file: File, signal?: AbortSignal, preset?: string) => new Promise<string>(resolve => raster.calls.push({ resolve, signal, preset })))
 }));
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="20"/></svg>';
+function photoResult(svg: string, canApply = true): import('../lib/import/photoImport').PhotoTraceResult { return { svg, diagnostics: { width: 100, height: 100, threshold: 128, components: 1, holes: 0, removedComponents: 0, filledHoles: 0, warnings: [], canApply } }; }
 let app: ReturnType<typeof mount> | undefined;
 function fixture(name = 'Original') { return createDesignDocument({ name, kind: 'cutter', source: { type: 'svg', fileName: `${name}.svg`, svg } }); }
 function setup(initial: ReturnType<typeof fixture> | null = null) {
@@ -46,16 +49,19 @@ async function ready() { await vi.waitFor(() => expect(get(generationState).phas
 async function settled() { await tick(); await tick(); await new Promise(resolve => setTimeout(resolve, 10)); }
 beforeEach(() => {
   raster.calls = [];
+  photo.calls = [];
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:photo-test');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   HTMLDialogElement.prototype.close = function () { this.open = false; };
 });
-afterEach(async () => { if (app) await unmount(app); app = undefined; document.body.innerHTML = ''; setParams({ ...DEFAULT_PARAMS }); });
+afterEach(async () => { if (app) await unmount(app); vi.restoreAllMocks(); app = undefined; document.body.innerHTML = ''; setParams({ ...DEFAULT_PARAMS }); });
 it('shows an explicit contrast default and photo choice before importing', async () => {
   setup();
   await vi.waitFor(() => expect(document.querySelector('select[aria-label="Vectorization preset"]')).not.toBeNull());
   const select = document.querySelector<HTMLSelectElement>('select[aria-label="Vectorization preset"]')!;
   expect(select.value).toBe('contrast');
-  expect([...select.options].map(option => option.textContent)).toEqual(['Dessin contrasté', 'Photo — lissage expérimental']);
+  expect([...select.options].map(option => option.textContent)).toEqual(['Dessin contrasté', 'Photo — préparation guidée']);
 });
 
 function choosePreset(value: string) {
@@ -71,9 +77,12 @@ it('revectorizes explicitly in session, preserving original source/identity/para
   await ready(); const original = session.getDocument()!;
   click('Upload design'); await tick(); choosePreset('photo'); await tick();
   expect(session.getDocument()).toBe(original);
-  click('Revectorize current image'); await vi.waitFor(() => expect(raster.calls).toHaveLength(2));
-  expect(raster.calls[1].preset).toBe('photo');
-  const changed = svg.replace('r="20"', 'r="25"'); raster.calls[1].resolve(changed);
+  click('Revectorize current image'); await vi.waitFor(() => expect(photo.calls).toHaveLength(1), { timeout: 10000 });
+  expect(raster.calls).toHaveLength(1);
+  const changed = svg.replace('r="20"', 'r="25"'); photo.calls[0].resolve(photoResult(changed));
+  await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Appliquer le contour photo')?.disabled).toBe(false));
+  expect(session.getDocument()).toBe(original);
+  click('Appliquer le contour photo');
   await vi.waitFor(() => expect(session.getDocument()?.sketch.svg).toBe(changed)); await ready();
   expect(session.getDocument()).toMatchObject({ id: original.id, source: original.source, name: original.name, parameters: original.parameters });
   expect(decodeProject(encodeProject(session.getDocument()!)).document).toEqual(session.getDocument());
@@ -206,4 +215,59 @@ it('Cancel in the dirty import guard retains exact identity, source, mesh and ep
   await upload(new File([svg], 'new.svg', { type: 'image/svg+xml' }));
   await vi.waitFor(() => expect(document.querySelector('dialog[open]')).not.toBeNull()); click('Cancel'); await settled();
   expect(session.getDocument()).toBe(original); expect(session.getDocument()?.source).toBe(original?.source); expect(get(model)?.mesh).toBe(mesh); expect(session.getSessionEpoch()).toBe(epoch);
+});
+
+it('photo import is a reviewed draft, not a silent replacement', async () => {
+  const session = setup(); await tick(); choosePreset('photo'); await tick();
+  await upload(new File(['photo'], 'camera.jpg', { type: 'image/jpeg' }));
+  await vi.waitFor(() => expect(photo.calls).toHaveLength(1), { timeout: 10000 });
+  expect(session.getDocument()).toBeNull(); expect(raster.calls).toHaveLength(0);
+  photo.calls[0].resolve(photoResult(svg));
+  await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Appliquer le contour photo')?.disabled).toBe(false));
+  expect(session.getDocument()).toBeNull();
+  click('Appliquer le contour photo');
+  await vi.waitFor(() => expect(session.getDocument()?.source).toMatchObject({ type: 'raster', fileName: 'camera.jpg', mimeType: 'image/jpeg', vectorizedSvg: svg }));
+  await ready(); expect(session.getDocument()?.sketch.svg).toBe(svg);
+});
+
+it('blocked photo and edited controls cannot apply an unreviewed contour', async () => {
+  const session = setup(fixture()); await ready(); const original = session.getDocument();
+  choosePreset('photo'); await tick(); await upload(new File(['photo'], 'camera.png', { type: 'image/png' }));
+  await vi.waitFor(() => expect(photo.calls).toHaveLength(1), { timeout: 10000 });
+  photo.calls[0].resolve(photoResult(svg, false)); await settled();
+  const apply = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Appliquer le contour photo')!;
+  expect(apply.disabled).toBe(true); apply.click(); expect(session.getDocument()).toBe(original);
+  click('Recalculer l’aperçu photo'); await vi.waitFor(() => expect(photo.calls).toHaveLength(2));
+  photo.calls[1].resolve(photoResult(svg)); await settled(); expect(apply.disabled).toBe(false);
+  const noise = document.querySelector<HTMLInputElement>('[aria-label="Photo noise area"]')!;
+  noise.value = '4'; noise.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+  expect(apply.disabled).toBe(true); expect(session.getDocument()).toBe(original);
+});
+
+it.each(['cancel', 'edit', 'replace', 'unmount'])('photo review discards late output after %s', async transition => {
+  const session = setup(fixture()); await ready(); choosePreset('photo'); await tick();
+  await upload(new File(['photo'], 'camera.jpg', { type: 'image/jpeg' }));
+  await vi.waitFor(() => expect(photo.calls).toHaveLength(1), { timeout: 10000 });
+  const pending = photo.calls[0];
+  if (transition === 'cancel') click('Annuler la préparation photo');
+  if (transition === 'edit') session.rename('Edited while preparing');
+  if (transition === 'replace') session.replace(fixture('Replacement'));
+  if (transition === 'unmount') { await unmount(app!); app = undefined; }
+  const accepted = session.getDocument(); await settled();
+  expect(pending.signal?.aborted).toBe(true);
+  pending.resolve(photoResult(svg.replace('r="20"', 'r="25"'))); await settled();
+  expect(session.getDocument()).toBe(accepted);
+});
+
+it('photo setting changes cancel in-flight computation and ignore its reply', async () => {
+  const session = setup(); await tick(); choosePreset('photo'); await tick();
+  await upload(new File(['photo'], 'camera.jpg', { type: 'image/jpeg' }));
+  await vi.waitFor(() => expect(photo.calls).toHaveLength(1), { timeout: 10000 });
+  const pending = photo.calls[0];
+  const noise = document.querySelector<HTMLInputElement>('[aria-label="Photo noise area"]')!;
+  noise.value = '4'; noise.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+  expect(pending.signal?.aborted).toBe(true);
+  pending.resolve(photoResult(svg)); await settled();
+  const apply = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Appliquer le contour photo')!;
+  expect(apply.disabled).toBe(true); expect(session.getDocument()).toBeNull();
 });

@@ -85,6 +85,13 @@ function decodeWithImageElement(file: File, signal?: AbortSignal): Promise<Image
 /** Decode on the UI thread, then transfer pixels to the vectorization Worker. */
 export async function vectorizeImage(file: File, signal?: AbortSignal, preset: TracingPresetId = DEFAULT_TRACING_PRESET): Promise<string> {
   if (signal?.aborted) throw cancellationError();
+  if (preset === 'photo') {
+    const { preparePhoto } = await import('../import/photoImport');
+    if (signal?.aborted) throw cancellationError();
+    const result = await preparePhoto(file, undefined, signal);
+    if (!result.diagnostics.canApply) throw new Error(result.diagnostics.warnings.join(' ') || 'Préparez la photo et confirmez un contour valide.');
+    return result.svg;
+  }
   const imageData = typeof createImageBitmap === 'function'
     ? await decodeWithImageBitmap(file, signal)
     : await decodeWithImageElement(file, signal);

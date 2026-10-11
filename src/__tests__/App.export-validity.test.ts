@@ -81,7 +81,8 @@ it('collision auto-fix cannot move canonical contours, even through a forced cli
   await vi.waitFor(() => expect(document.querySelector('.project-manager [role="status"]')?.textContent).toBe('Saved locally'));
   const history = get(historyStore), historyIndex = get(historyStore.currentIndex);
   button('Materials and optimization').click();
-  await vi.waitFor(() => expect(document.querySelector('.collision-detector .toggle-btn')).not.toBeNull());
+  // Wait for the actual lazy control, just as ready() waits for real generation.
+  await vi.waitFor(() => expect(document.querySelector('.collision-detector .toggle-btn')).not.toBeNull(), { timeout: 10000 });
   document.querySelector<HTMLButtonElement>('.collision-detector .toggle-btn')!.click();
   await tick();
   const action = document.querySelector<HTMLButtonElement>('.collision-detector .fix-btn');

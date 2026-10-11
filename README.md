@@ -36,9 +36,16 @@ Upload limits:
 - maximum raster side: 8192 px;
 - maximum raster area: 16 megapixels.
 
-Two explicit raster vectorization presets are available in Upload and Advanced Creation: **Dessin contrasté** (historical default) and **Photo — lissage expérimental** (blur radius 2, path omission 16). Selection alone never edits the current design. Revectorize explicitly uses the original raster still held in this session and edits only the sketch; source and identity stay unchanged. Undo restores replaced corrections. V1 does not save raster pixels: after reopening, reimport the original image. Photo may remove wanted small holes/details and does not guarantee improved photographic quality. Measurements and limits: `docs/TRACING_PRESETS_VALIDATION.md`.
+Two explicit raster paths are available in Upload and Advanced Creation:
 
-Raster decoding remains a browser/Canvas operation. The expensive ImageTracer vectorization receives a transferable pixel buffer in a Worker. Requests use IDs, support concurrent processing and cancellation, reject stale responses, and return structured errors.
+- **Dessin contrasté** keeps the historical vectorization settings.
+- **Photo — préparation guidée** opens an original/contour review with normalized crop, automatic or manual threshold, and dark/light foreground. No blur, implicit component removal, or hidden hole filling. Noise filtering and outer-silhouette hole filling are explicit controls; diagnostics report their effects. Empty, clipped, disconnected, ambiguous, or excessively complex contours cannot be applied. Changing settings invalidates the result until recalculation. **Apply** is a separate, explicit confirmation: selecting a preset or preparing/cancelling a photo never replaces the project.
+
+Photo preparation checks the contour, not the final mechanical model: generation still applies all printable-geometry guards and blocks invalid exports. This is guided threshold segmentation, not general-purpose object recognition; choose a distinct subject/background and adjust the crop/contrast when needed.
+
+Revectorize uses the original raster still held in this session and edits only the sketch; source, identity and parameters stay unchanged. Undo restores replaced corrections. V1 does not save raster pixels or photo settings: after reopening, reimport the original image. Qualification and limits: `docs/PHOTO_IMPORT_VALIDATION.md`. Earlier experimental-preset measurements remain historical in `docs/TRACING_PRESETS_VALIDATION.md`.
+
+Contrast decoding uses browser Canvas and transfers pixels to the historical vectorization Worker. Photo decoding, segmentation and ImageTracer vectorization run in a dedicated Worker using createImageBitmap/OffscreenCanvas, bounded to 1024 pixels per side and one megapixel after cropping. Cancellation terminates that request's Worker; late results, timeouts and failures never publish a project. No server or external image service is used.
 
 ## Design modes
 
