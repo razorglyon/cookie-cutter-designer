@@ -342,6 +342,18 @@ describe('cutterRecipe', () => {
     }
   });
 
+  it('transmet les ponts V2 à la recette et ne les substitue pas au SVG', async () => {
+    const svg = '<svg viewBox="-10 -10 120 120"><path d="M0 0 L100 0 L100 100 L0 100 Z"/><path d="M35 35 L65 35 L65 65 L35 65 Z"/></svg>';
+    const bridge = { id: 'bridge-1', from: { x: 0, y: 50 }, to: { x: 35, y: 50 }, widthMm: 2 };
+    const document = { ...createCutterDocument(createDefaultCutterParameters(), svg), schemaVersion: 2 as const, bridges: [bridge] };
+    const artifacts = await cutterRecipe.generate(document, generationContext(new AbortController().signal));
+    try {
+      expect(generateCookieCutterMock).toHaveBeenCalledWith(svg, document.parameters, [bridge]);
+      expect(artifacts[0].validation.shells).toBe(1);
+      expect(artifacts[0].validation.valid).toBe(true);
+    } finally { for (const artifact of artifacts) disposeObject3D(artifact.object); }
+  });
+
   it('propage intact le code d’échec capturé par la fixture legacy', async () => {
     const document = createCutterDocument(
       { ...legacyCutterFixture.failure.parameters },

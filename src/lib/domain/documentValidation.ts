@@ -1,5 +1,8 @@
 import type {
   DesignDocument,
+  DesignDocumentV1,
+  DesignDocumentV2,
+  Bridge,
   DesignSource,
   RasterMimeType,
   SketchDocument,
@@ -454,7 +457,7 @@ function assertUnreachable(value: never): never {
   invalid('kind', `kind non pris en charge: ${String(value)}.`);
 }
 
-export function parseDesignDocumentV1(value: unknown): DesignDocument {
+export function parseDesignDocumentV1(value: unknown): DesignDocumentV1 {
   const record = requireRecord(value, '$');
   requireExactKeys(record, '', DOCUMENT_KEYS);
 
@@ -508,4 +511,62 @@ export function parseDesignDocumentV1(value: unknown): DesignDocument {
     default:
       return assertUnreachable(kind);
   }
+}
+
+const V2_DOCUMENT_KEYS = [...DOCUMENT_KEYS, 'bridges'] as const;
+const BRIDGE_KEYS = ['id', 'from', 'to', 'widthMm'] as const;
+const POINT_KEYS = ['x', 'y'] as const;
+export const BRIDGE_LIMITS = Object.freeze({ maxCount: 32, minWidthMm: 0.8, maxWidthMm: 10, maxCoordinate: 1_000_000 });
+
+function parseBridgePoint(value: unknown, path: string): Bridge['from'] {
+  const record = requireRecord(value, path);
+  requireExactKeys(record, path, POINT_KEYS);
+  const x = readFiniteNumber(record, 'x', path);
+  const y = readFiniteNumber(record, 'y', path);
+  if (Math.abs(x) > BRIDGE_LIMITS.maxCoordinate) invalid(`${path}.x`, 'coordonnée hors limite.');
+  if (Math.abs(y) > BRIDGE_LIMITS.maxCoordinate) invalid(`${path}.y`, 'coordonnée hors limite.');
+  return { x, y };
+}
+
+function parseBridges(value: unknown, kind: DesignDocument['kind']): readonly Bridge[] {
+  if (!Array.isArray(value)) invalid('bridges', 'doit être un tableau.');
+  if (value.length > BRIDGE_LIMITS.maxCount) invalid('bridges', 'trop de ponts.');
+  if (kind !== 'cutter' && value.length > 0) invalid('bridges', 'réservé aux emporte-pièces.');
+  const ids = new Set<string>();
+  return value.map((item: unknown, index: number) => {
+    const path = `bridges.${index}`;
+    const record = requireRecord(item, path);
+    requireExactKeys(record, path, BRIDGE_KEYS);
+    const id = readNonEmptyString(record, 'id', path);
+    if (ids.has(id)) invalid(`${path}.id`, 'identifiant de pont dupliqué.');
+    ids.add(id);
+    const from = parseBridgePoint(record.from, `${path}.from`);
+    const to = parseBridgePoint(record.to, `${path}.to`);
+    if (Math.hypot(from.x - to.x, from.y - to.y) < 0.001) invalid(`${path}.to`, 'les extrémités doivent être distinctes.');
+    const widthMm = readFiniteNumber(record, 'widthMm', path);
+    if (widthMm < BRIDGE_LIMITS.minWidthMm || widthMm > BRIDGE_LIMITS.maxWidthMm) {
+      invalid(`${path}.widthMm`, 'largeur physique hors limites.');
+    }
+    return { id, from, to, widthMm };
+  });
+}
+
+/** V2 is strict, reconstructs every value, and never mutates the input. */
+export function parseDesignDocumentV2(value: unknown): DesignDocumentV2 {
+  const record = requireRecord(value, '$');
+  if (record.schemaVersion !== 2) invalid('schemaVersion', 'doit être exactement 2.');
+  requireExactKeys(record, '', V2_DOCUMENT_KEYS);
+  const { bridges: rawBridges, ...legacyFields } = record;
+  const base = parseDesignDocumentV1({ ...legacyFields, schemaVersion: 1 });
+  // The V1 parser must never see the V2-only field.
+  const bridges = parseBridges(rawBridges, base.kind);
+  return { ...base, schemaVersion: 2, bridges } as DesignDocumentV2;
+}
+
+/** Route by header before checking version-specific fields. V1 remains unchanged. */
+export function parseDesignDocument(value: unknown): DesignDocument {
+  const record = requireRecord(value, '$');
+  if (record.schemaVersion === 1) return parseDesignDocumentV1(value);
+  if (record.schemaVersion === 2) return parseDesignDocumentV2(value);
+  invalid('schemaVersion', 'version de document non prise en charge.');
 }

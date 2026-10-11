@@ -50,4 +50,22 @@ export type DesignDocumentV1<K extends DesignKind = DesignKind> = {
       };
 }[K];
 
-export type DesignDocument = DesignDocumentV1;
+/** Pont dans le repère du SVG courant ; largeur physique en millimètres. */
+export interface Bridge {
+  readonly id: string;
+  readonly from: Readonly<{ x: number; y: number }>;
+  readonly to: Readonly<{ x: number; y: number }>;
+  readonly widthMm: number;
+}
+
+/** V1 est figé : V2 ajoute seulement des ponts, sans dériver ses champs historiques. */
+export type DesignDocumentV2<K extends DesignKind = DesignKind> = {
+  [Kind in K]: [DesignParametersByKind[Kind]] extends [never]
+    ? never
+    : Omit<DesignDocumentV1<Kind>, 'schemaVersion'> & {
+        readonly schemaVersion: 2;
+        readonly bridges: readonly Bridge[];
+      };
+}[K];
+
+export type DesignDocument<K extends DesignKind = DesignKind> = DesignDocumentV1<K> | DesignDocumentV2<K>;

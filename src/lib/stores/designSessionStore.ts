@@ -1,6 +1,6 @@
 import { get, writable, type Readable } from 'svelte/store';
 import type { DesignDocument } from '../domain/designDocument';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import { parseDesignDocument } from '../domain/documentValidation';
 import {
   createDesignDocumentStore,
   type DesignDocumentStore,
@@ -16,6 +16,7 @@ export interface DesignSessionStore extends Readable<DesignDocument | null> {
   restoreHistory(value: unknown, expectedEpoch: number): void;
   rename: DesignDocumentStore['rename'];
   updateSketch: DesignDocumentStore['updateSketch'];
+  updateBridges: DesignDocumentStore['updateBridges'];
   updateViewport: DesignDocumentStore['updateViewport'];
   updateParameters: DesignDocumentStore['updateParameters'];
   changeKind: DesignDocumentStore['changeKind'];
@@ -79,7 +80,7 @@ export function createDesignSessionStore(
       }
       // unknown may run getters/Proxy traps. Detach and validate everything before
       // touching the active store, then re-check both lifetime and snapshot identity.
-      const snapshot = parseDesignDocumentV1(value);
+      const snapshot = parseDesignDocument(value);
       if (epoch !== expectedEpoch || active !== owner || get(internal) !== current) {
         throw new Error('La session a changé pendant la validation de l’historique.');
       }
@@ -95,6 +96,7 @@ export function createDesignSessionStore(
 
     rename: name => mutate(store => store.rename(name)),
     updateSketch: svg => mutate(store => store.updateSketch(svg)),
+    updateBridges: bridges => mutate(store => store.updateBridges(bridges)),
     updateViewport: patch => mutate(store => store.updateViewport(patch)),
     updateParameters: (kind, patch) => mutate(store => store.updateParameters(kind, patch)),
     changeKind: kind => mutate(store => store.changeKind(kind))

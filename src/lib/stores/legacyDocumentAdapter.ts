@@ -3,7 +3,7 @@ import type {
   CutterDesignParameters,
   StampDesignParameters
 } from '../domain/designParameters';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import { parseDesignDocument } from '../domain/documentValidation';
 import type { CookieCutterParams } from '../types/CookieCutter';
 import {
   CutterGenerationError,
@@ -22,7 +22,7 @@ export type LegacyDocumentParameters =
 export function documentParametersToLegacy(
   document: DesignDocument
 ): Readonly<CookieCutterParams> {
-  const validated = parseDesignDocumentV1(document);
+  const validated = parseDesignDocument(document);
   return validateCookieCutterParams(validated.parameters);
 }
 

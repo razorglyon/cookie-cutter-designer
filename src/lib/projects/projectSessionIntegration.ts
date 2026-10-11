@@ -107,7 +107,7 @@ export function createProjectSessionIntegration(
     if (!reconcile && lastDocument === document && epoch === currentEpoch) return;
     const reservation = {
       epoch: currentEpoch,
-      geometry: JSON.stringify([document?.kind, document?.sketch, document?.parameters]),
+      geometry: JSON.stringify([document?.kind, document?.sketch, document?.parameters, document?.schemaVersion === 2 ? document.bridges : []]),
       viewport: JSON.stringify(document?.viewport ?? null)
     };
     const previous = projection;

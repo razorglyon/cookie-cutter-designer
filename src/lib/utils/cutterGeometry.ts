@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { Bridge } from '../domain/designDocument';
+import { createConnectedRegions } from '../geometry/connectors';
 import type { Point2D } from '../types/CookieCutter';
 import {
   normalizeContourPoints,
@@ -167,7 +169,8 @@ function distanceSquared(first: Readonly<Point2D>, second: Readonly<Point2D>): n
 function matchContours(
   bottom: ReadonlyArray<NormalizedContour>,
   top: ReadonlyArray<NormalizedContour>,
-  context: string
+  context: string,
+  matchByArea = false
 ): ReadonlyArray<readonly [NormalizedContour, NormalizedContour]> {
   if (bottom.length !== top.length) {
     throw generationError(
@@ -186,12 +189,28 @@ function matchContours(
 
   for (const bottomContour of bottom) {
     const bottomCenter = polygonCentroid(bottomContour);
+    const bottomArea = Math.abs(signedArea(bottomContour));
+    if (matchByArea && (!Number.isFinite(bottomArea) || bottomArea <= 1e-12)) {
+      throw generationError('OFFSET_FAILED', 'A bridged hole has no measurable area.', { context });
+    }
     let bestPosition = 0;
+    let bestScore = Number.POSITIVE_INFINITY;
     let bestDistance = Number.POSITIVE_INFINITY;
 
     for (let position = 0; position < available.length; position += 1) {
       const candidateDistance = distanceSquared(bottomCenter, available[position].center);
-      if (candidateDistance < bestDistance) {
+      // In a bridged wall, concentric hole centroids can coincide while one
+      // hole wraps the bridge and the other is the island's empty centre.
+      // Match their areas first. Keep legacy centroid-only pairing unchanged.
+      const candidateArea = matchByArea ? Math.abs(signedArea(available[position].contour)) : 0;
+      if (matchByArea && (!Number.isFinite(candidateArea) || candidateArea <= 1e-12)) {
+        throw generationError('OFFSET_FAILED', 'A bridged hole has no measurable area.', { context });
+      }
+      const score = matchByArea
+        ? Math.abs(Math.log(candidateArea / bottomArea))
+        : candidateDistance;
+      if (score < bestScore || (score === bestScore && candidateDistance < bestDistance)) {
+        bestScore = score;
         bestDistance = candidateDistance;
         bestPosition = position;
       }
@@ -513,7 +532,8 @@ function addLoopSides(
   loop: IndexedLoopPair,
   inner: boolean,
   oppositeBottom: ReadonlyArray<NormalizedContour>,
-  oppositeTop: ReadonlyArray<NormalizedContour>
+  oppositeTop: ReadonlyArray<NormalizedContour>,
+  thicknessOverride?: Readonly<{ bottom: number; top: number }>
 ): void {
   // Preserve the historical diagonals, triangle order and thickness metadata
   // whenever offsets retain the same number of vertices.
@@ -529,11 +549,11 @@ function addLoopSides(
       const desiredNormal = inner
         ? new THREE.Vector3(-edgeZ, 0, edgeX)
         : new THREE.Vector3(edgeZ, 0, -edgeX);
-      const bottomThickness = distanceToContours(
+      const bottomThickness = thicknessOverride?.bottom ?? distanceToContours(
         edgeMidpoint(loop.bottomPoints, index),
         oppositeBottom
       );
-      const topThickness = distanceToContours(
+      const topThickness = thicknessOverride?.top ?? distanceToContours(
         edgeMidpoint(loop.topPoints, index),
         oppositeTop
       );
@@ -583,11 +603,11 @@ function addLoopSides(
       : new THREE.Vector3(edgeZ, 0, -edgeX);
     const bottomCurrent = loop.bottomIndices[bottom % loop.bottomIndices.length];
     const topCurrent = loop.topIndices[top % loop.topIndices.length];
-    const boundaryThickness = distanceToContours(
+    const boundaryThickness = thicknessOverride?.[advanceBottom ? 'bottom' : 'top'] ?? distanceToContours(
       edgeMidpoint(points, edge % points.length),
       advanceBottom ? oppositeBottom : oppositeTop
     );
-    const oppositeThickness = distanceToContours(
+    const oppositeThickness = thicknessOverride?.[advanceBottom ? 'top' : 'bottom'] ?? distanceToContours(
       advanceBottom
         ? loop.topPoints[top % loop.topPoints.length]
         : loop.bottomPoints[bottom % loop.bottomPoints.length],
@@ -619,7 +639,8 @@ function addRegionPair(
   bottomHeight: number,
   topHeight: number,
   capBottom: boolean,
-  capTop: boolean
+  capTop: boolean,
+  thicknessOverride?: Readonly<{ bottom: number; top: number }>
 ): void {
   const outerLoop = addLoopPair(
     positions,
@@ -630,7 +651,8 @@ function addRegionPair(
   const holePairs = matchContours(
     pair.bottom.holes,
     pair.top.holes,
-    'inner-rings'
+    'inner-rings',
+    thicknessOverride !== undefined
   );
   const holeLoops = holePairs.map(([bottom, top]) =>
     addLoopPair(positions, prepareLoopPair(bottom, top), bottomHeight, topHeight)
@@ -640,31 +662,16 @@ function addRegionPair(
   const bottomHoles = holeLoops.map(({ bottomPoints }) => bottomPoints);
   const topHoles = holeLoops.map(({ topPoints }) => topPoints);
 
-  setLoopThicknesses(
-    bottomThicknessByIndex,
-    outerLoop.bottomPoints,
-    outerLoop.bottomIndices,
-    bottomHoles
-  );
-  setLoopThicknesses(
-    topThicknessByIndex,
-    outerLoop.topPoints,
-    outerLoop.topIndices,
-    topHoles
-  );
-  for (const holeLoop of holeLoops) {
-    setLoopThicknesses(
-      bottomThicknessByIndex,
-      holeLoop.bottomPoints,
-      holeLoop.bottomIndices,
-      [outerLoop.bottomPoints]
-    );
-    setLoopThicknesses(
-      topThicknessByIndex,
-      holeLoop.topPoints,
-      holeLoop.topIndices,
-      [outerLoop.topPoints]
-    );
+  if (thicknessOverride) {
+    for (const index of [outerLoop.bottomIndices, ...holeLoops.map(loop => loop.bottomIndices)].flat()) bottomThicknessByIndex.set(index, thicknessOverride.bottom);
+    for (const index of [outerLoop.topIndices, ...holeLoops.map(loop => loop.topIndices)].flat()) topThicknessByIndex.set(index, thicknessOverride.top);
+  } else {
+    setLoopThicknesses(bottomThicknessByIndex, outerLoop.bottomPoints, outerLoop.bottomIndices, bottomHoles);
+    setLoopThicknesses(topThicknessByIndex, outerLoop.topPoints, outerLoop.topIndices, topHoles);
+    for (const holeLoop of holeLoops) {
+      setLoopThicknesses(bottomThicknessByIndex, holeLoop.bottomPoints, holeLoop.bottomIndices, [outerLoop.bottomPoints]);
+      setLoopThicknesses(topThicknessByIndex, holeLoop.topPoints, holeLoop.topIndices, [outerLoop.topPoints]);
+    }
   }
 
   if (capBottom) {
@@ -701,7 +708,8 @@ function addRegionPair(
     outerLoop,
     false,
     bottomHoles,
-    topHoles
+    topHoles,
+    thicknessOverride
   );
 
   for (let index = 0; index < holeLoops.length; index += 1) {
@@ -712,7 +720,8 @@ function addRegionPair(
       holeLoops[index],
       true,
       [outerLoop.bottomPoints],
-      [outerLoop.topPoints]
+      [outerLoop.topPoints],
+      thicknessOverride
     );
   }
 }
@@ -855,4 +864,45 @@ export async function createTaperedWallGeometry(
   setTriangleWallThicknesses(geometry, triangleThicknesses);
   validateGeometry(geometry);
   return geometry;
+}
+
+/** Union des bandes et ponts avant triangulation, avec les gardes de loft historiques. */
+export async function createBridgedWallGeometry(
+  contours: readonly NormalizedContour[],
+  bridges: readonly Bridge[],
+  options: Readonly<{
+    scale: number; bottomWidthMm: number; topWidthMm: number;
+    bottomBridgeGrowthMm: number; topBridgeGrowthMm: number;
+    baseHeight: number; height: number; capBottom: boolean; capTop: boolean;
+  }>
+): Promise<THREE.BufferGeometry> {
+  if (!Number.isFinite(options.height) || options.height <= 0 || !Number.isFinite(options.baseHeight) || options.baseHeight < 0) {
+    throw generationError('INVALID_GEOMETRY', 'Invalid bridged wall height.', { field: 'height' });
+  }
+  const [bottom, top] = await Promise.all([
+    createConnectedRegions(contours, bridges, options.scale, options.bottomWidthMm, options.bottomBridgeGrowthMm),
+    createConnectedRegions(contours, bridges, options.scale, options.topWidthMm, options.topBridgeGrowthMm)
+  ]);
+  const pairs = matchRegions(bottom, top);
+  const positions: THREE.Vector3[] = [];
+  const indices: number[] = [];
+  const thicknesses: number[] = [];
+  for (const pair of pairs) {
+    addRegionPair(positions, indices, thicknesses, pair,
+      options.baseHeight, options.baseHeight + options.height,
+      options.capBottom, options.capTop,
+      { bottom: options.bottomWidthMm, top: options.topWidthMm });
+  }
+  const geometry = new THREE.BufferGeometry();
+  try {
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions.flatMap(p => [p.x, p.y, p.z]), 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    setTriangleWallThicknesses(geometry, thicknesses);
+    validateGeometry(geometry);
+    return geometry;
+  } catch (error) {
+    geometry.dispose();
+    throw error;
+  }
 }

@@ -1,5 +1,5 @@
 import type { DesignDocument } from '../domain/designDocument';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import { parseDesignDocument } from '../domain/documentValidation';
 
 export type ProjectStorageOperation =
   | 'save'
@@ -87,9 +87,9 @@ export function createProjectStorage(
   return {
     save(value: unknown): Promise<DesignDocument> {
       return runStorageOperation('save', async () => {
-        const record = parseDesignDocumentV1(value);
+        const record = parseDesignDocument(value);
         await backend.put(record);
-        return parseDesignDocumentV1(record);
+        return parseDesignDocument(record);
       });
     },
 
@@ -99,14 +99,14 @@ export function createProjectStorage(
         const value = await backend.get(id);
         return value === undefined
           ? undefined
-          : parseDesignDocumentV1(value);
+          : parseDesignDocument(value);
       });
     },
 
     list(): Promise<readonly DesignDocument[]> {
       return runStorageOperation('list', async () => {
         const values = await backend.getAll();
-        const records = values.map((value) => parseDesignDocumentV1(value));
+        const records = values.map((value) => parseDesignDocument(value));
         records.sort(
           (left, right) =>
             Date.parse(right.updatedAt) - Date.parse(left.updatedAt)

@@ -4,6 +4,7 @@ import type { GeometryValidationReport } from '../../utils/geometryValidation';
 import type {
   DesignDocument,
   DesignDocumentV1,
+  DesignDocumentV2,
   DesignSource,
   SketchDocument,
   ViewportPreferences
@@ -59,13 +60,13 @@ const stampDocument = {
 
 function verifyParameterNarrowing(document: DesignDocument): void {
   if (document.kind === 'stamp') {
-    expectTypeOf(document).toEqualTypeOf<DesignDocumentV1<'stamp'>>();
+    expectTypeOf(document).toEqualTypeOf<DesignDocument<'stamp'>>();
     expectTypeOf(document.parameters).toEqualTypeOf<StampDesignParameters>();
     expect(document.parameters.mode).toBe('stamp');
     return;
   }
 
-  expectTypeOf(document).toEqualTypeOf<DesignDocumentV1<'cutter'>>();
+  expectTypeOf(document).toEqualTypeOf<DesignDocument<'cutter'>>();
   expectTypeOf(document.parameters).toEqualTypeOf<CutterDesignParameters>();
   expect(document.parameters.mode).toBe('cutter');
 }
@@ -74,7 +75,7 @@ describe('DesignDocumentV1', () => {
   it('exclut les recettes dont les paramètres ne sont pas implémentés', () => {
     expectTypeOf<DesignDocumentV1<'imprint-cutter'>>().toEqualTypeOf<never>();
     expectTypeOf<DesignDocument>().toEqualTypeOf<
-      DesignDocumentV1<'cutter'> | DesignDocumentV1<'stamp'>
+      DesignDocumentV1<'cutter'> | DesignDocumentV1<'stamp'> | DesignDocumentV2<'cutter'> | DesignDocumentV2<'stamp'>
     >();
   });
 

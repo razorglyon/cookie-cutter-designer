@@ -1,17 +1,23 @@
-import type { DesignDocument } from '../domain/designDocument';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import type { DesignDocument, DesignDocumentV1, DesignDocumentV2 } from '../domain/designDocument';
+import { parseDesignDocument } from '../domain/documentValidation';
 import {
   migrateV0ToV1,
   type MigrationV0ToV1Options
 } from '../domain/migrations/v0ToV1';
 
 export const PROJECT_FORMAT = 'cookie-cutter-designer-project' as const;
-export const PROJECT_VERSION = 1 as const;
+export const PROJECT_VERSION = 1 as const; // Historical V1 envelope; never change its meaning.
+export const PROJECT_VERSION_V2 = 2 as const;
 
 export interface ProjectEnvelopeV1 {
   readonly format: typeof PROJECT_FORMAT;
   readonly version: typeof PROJECT_VERSION;
-  readonly document: DesignDocument;
+  readonly document: DesignDocumentV1;
+}
+export interface ProjectEnvelopeV2 {
+  readonly format: typeof PROJECT_FORMAT;
+  readonly version: typeof PROJECT_VERSION_V2;
+  readonly document: DesignDocumentV2;
 }
 
 export interface DecodedProject {
@@ -100,21 +106,18 @@ function validateEnvelopeHeader(record: UnknownRecord): void {
     );
   }
 
-  if (record.version !== PROJECT_VERSION) {
+  if (record.version !== PROJECT_VERSION && record.version !== PROJECT_VERSION_V2) {
     if (
       typeof record.version === 'number' &&
       Number.isFinite(record.version) &&
-      record.version > PROJECT_VERSION
+      record.version > PROJECT_VERSION_V2
     ) {
       invalid(
         'version',
         `version future ${record.version} non prise en charge.`
       );
     }
-    invalid(
-      'version',
-      `version inconnue ; seule la version ${PROJECT_VERSION} est prise en charge.`
-    );
+    invalid('version', 'version inconnue ; seules les versions 1 et 2 sont prises en charge.');
   }
 }
 
@@ -124,13 +127,10 @@ function validateEnvelopeHeader(record: UnknownRecord): void {
  * peut donc calculer aucun checksum du raster et n’invente aucun champ pour lui.
  */
 export function encodeProject(document: unknown): string {
-  const parsedDocument = parseDesignDocumentV1(document);
-  const envelope: ProjectEnvelopeV1 = {
-    format: PROJECT_FORMAT,
-    version: PROJECT_VERSION,
-    document: parsedDocument
-  };
-
+  const parsedDocument = parseDesignDocument(document);
+  const envelope: ProjectEnvelopeV1 | ProjectEnvelopeV2 = parsedDocument.schemaVersion === 1
+    ? { format: PROJECT_FORMAT, version: PROJECT_VERSION, document: parsedDocument }
+    : { format: PROJECT_FORMAT, version: PROJECT_VERSION_V2, document: parsedDocument };
   return JSON.stringify(envelope, null, 2);
 }
 
@@ -148,8 +148,7 @@ export function decodeProject(
   validateEnvelopeHeader(record);
   requireExactEnvelopeKeys(record);
 
-  return {
-    document: parseDesignDocumentV1(record.document),
-    warnings: EMPTY_WARNINGS
-  };
+  const document = parseDesignDocument(record.document);
+  if (record.version !== document.schemaVersion) invalid('document.schemaVersion', 'doit correspondre à la version de l’enveloppe.');
+  return { document, warnings: EMPTY_WARNINGS };
 }

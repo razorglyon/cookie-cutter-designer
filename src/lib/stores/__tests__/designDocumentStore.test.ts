@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import type { DesignDocumentV1 } from '../../domain/designDocument';
+import type { DesignDocument, DesignDocumentV1 } from '../../domain/designDocument';
 import {
   DEFAULT_STAMP_PARAMETERS_V1,
   createDefaultCutterParameters
@@ -40,7 +40,7 @@ function createNow(...timestamps: string[]): () => string {
   };
 }
 
-function expectPersistentSnapshotFrozen(document: DesignDocumentV1): void {
+function expectPersistentSnapshotFrozen(document: DesignDocument): void {
   expect(Object.isFrozen(document)).toBe(true);
   expect(Object.isFrozen(document.source)).toBe(true);
   expect(Object.isFrozen(document.sketch)).toBe(true);

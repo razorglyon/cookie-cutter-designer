@@ -1,4 +1,4 @@
-import type { DesignDocumentV1 } from '../domain/designDocument';
+import type { DesignDocument } from '../domain/designDocument';
 import type { GeneratedArtifact } from '../domain/generatedArtifact';
 import type { ImplementedDesignKind } from '../domain/designKind';
 import type { DesignParametersByKind } from '../domain/designParameters';
@@ -31,7 +31,7 @@ export interface GenerationRecipe<K extends ImplementedDesignKind> {
     value: unknown
   ): RecipeValidationResult<DesignParametersByKind[K]>;
   generate(
-    document: DesignDocumentV1<K>,
+    document: DesignDocument<K>,
     context: GenerationContext
   ): Promise<readonly GeneratedArtifact<K>[]>;
 }

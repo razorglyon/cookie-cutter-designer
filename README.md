@@ -55,6 +55,9 @@ Contrast decoding uses browser Canvas and transfers pixels to the historical vec
 - default target: 75 mm;
 - configurable wall thickness, cutting height, total height, taper, and handle;
 - final measured `width × depth × height` shown in the viewer.
+- **Manual island bridges:** in Advanced Creation, open the bridge editor, choose a width (0.8–10 mm), then click near two different contours. Endpoints snap to contour centrelines. Drag an endpoint (or use arrow keys), delete a bridge, and use the shared Undo/Redo buttons. A complete layout is preflighted against the printable cutter; crossing, overlapping, detached, or non-watertight results are rejected. If further islands remain, each individually valid bridge is saved as an incomplete draft; STL export stays disabled until the last island is connected. Existing Cutter projects remain V1 until the first bridge edit promotes the document to V2. Save, export as `.ccd.json`, and reopen retain even incomplete bridges. Removing a bridge may restore an incomplete cutter; undo restores it.
+
+The editor overlays the sampled contour outlines on a faded original SVG. It is not an automatic bridge planner: choose bridges for every disconnected island, and verify the resulting model in a slicer before printing. If editing the sketch later invalidates several saved bridges, **Supprimer tous les ponts** clears them in one Undo-able action so the project is not trapped.
 
 ### Stamp
 
@@ -180,7 +183,7 @@ Unsupported or unsafe artwork is rejected rather than silently repaired into an 
 ## Current practical limits
 
 - no complete triangle-triangle self-intersection test;
-- no interactive SVG node editor;
+- no full SVG node editor; the sketch workshop supports bounded point edits, and the separate bridge editor only connects existing contours;
 - very small details may disappear or change topology during wall offsets and are rejected;
 - layer preview is not a slicing engine;
 - G-code must be generated externally;

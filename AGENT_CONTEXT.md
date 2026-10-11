@@ -3,10 +3,10 @@
 ## Dépôt et État courant
 
 - `razorglyon/cookie-cutter-designer`, clone `/workspace/cookie-cutter-designer` ; branche principale `main`.
-- Base locale et référence origin/main `8683d16b73e843d5bc04ee149151944788a601fe` (#67). Lots 3/4 intégrés ; cette reprise ne republie pas leurs commits.
-- Branche active `feature/robust-photo-import` : photo guidée **validée localement**. GO courant : commit `add robust guided photo preparation` et push de cette seule branche ; **pas de PR, merge ni déploiement**. Cette note précède le push : relire Git/GitHub pour confirmer sa réalisation.
-- Snapshot final :**1 068/1 068 tests /73 fichiers**, ciblés151/151, check0/0, smoke3/3, build/audit/diff verts. Vraie photo pièce → silhouette seule → STL1 890triangles ; retrace réellement différent/undo/redo et source/id/params invariants, save/reload JSON/STL exacts ; photo ambiguë bloquée,375px sans overflow ; cercle historique3 576triangles/STL inchangé. Worker/fond blanc séparés pour ne pas inventer un cadre ; cap collinéaire réparé sans perte frontières ni relâchement des gardes. Preuves et essais rouges : `docs/PHOTO_IMPORT_VALIDATION.md`. Aucun agent/processus de recette actif, ports fermés aux rapports.
-- Feuille de route : `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`. Presets lot 4 implémentés ; ponts, profils et multi-cutter restent distincts et non réalisés.
+- `origin/main` vérifié au squash `ee647698f4b94e75ba5993460e0f39527cc70f2e` (#68). Photo guidée intégrée et déployée ; voir `docs/PHOTO_IMPORT_VALIDATION.md` pour les preuves. Ancienne branche `feature/robust-photo-import` conservée, note documentaire `6870e9072d68aca269da416027c255d9e8ce01ac` poussée et vérifiée ; aucun commit local en attente lors de la reprise.
+- Branche active `feature/manual-island-bridges` créée depuis `origin/main` vérifié, sans rebase ni suppression. Lot 5 implémenté et qualifié **localement** : ponts persistants V2 avec migration explicite V1, chaîne d'îlots en état intermédiaire non exportable, géométrie, édition Undo/Redo, sauvegarde/réouverture et récupération par suppression globale. Commit et push de `feature/manual-island-bridges` autorisés par Rza ; aucune PR, fusion ou déploiement autorisé pour ce lot.
+- Qualification photo guidée historique (avant lot 5) : **1 068/1 068 tests / 73 fichiers**, ciblés 151/151, check 0/0, smoke 3/3, build/audit/diff verts. Vraie photo pièce → silhouette seule → STL 1 890 triangles ; retrace réellement différent/undo/redo et source/id/params invariants, save/reload JSON/STL exacts ; photo ambiguë bloquée, 375 px sans overflow ; cercle historique 3 576 triangles/STL inchangé. Preuves : `docs/PHOTO_IMPORT_VALIDATION.md`. Ne pas confondre ces chiffres avec la qualification actuelle du lot 5.
+- Feuille de route : `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`. Presets lot 4 implémentés ; ponts lot 5 publiés sur leur branche dédiée, sans PR ni fusion ; profils et multi-cutter restent des chantiers distincts.
 
 ## Stack et commandes
 
@@ -35,6 +35,10 @@ TMP isolé obligatoire ; sérialiser les gates. Le script smoke fixe déjà maxW
 - Gardes lifetime/source/epoch jusqu’à publication. Export geometry exige mesh/epoch/ready/document cohérents ; JSON indépendant. Ownership/disposal Three.js conservés. Batch externe non sauvegardable V1.
 - Loft raster : chemin legacy conservé pour cardinalités égales ; fusion périmétrique monotone pour cardinalités différentes sans rééchantillonnage. Changements du nombre de composants refusés ; validateurs et fixtures historiques inchangés par l’atelier.
 - Budgets finaux UTF-8 après preload Vite : 200 KiB entry, 600 KiB chunks ; découpage runtime/addons ≠ baisse garantie du transfert total.
+
+## Validation lot 5 (locale)
+
+2026-10-11 : **1 083/1 083 tests (77 fichiers)**, check **0 erreur/0 avertissement**, smoke **3/3**, build, audit, budgets JS et diff check verts. Chromium local : pont simple avec drag/clavier/touch/Undo/Redo, JSON et STL exacts après réouverture ; chaîne à deux ponts avec état intermédiaire V2 sauvegardable mais STL bloqué, puis export complet ; suppression globale annulable. Parcours raster V1 rejoué, source/JSON/STL identiques ; ports fermés. Détails, rapports, tailles, limites et preuves : `docs/MANUAL_ISLAND_BRIDGES_VALIDATION.md`. Aucune CI distante sur simple push de branche, aucun test sur device/imprimante et aucune PR/fusion/déploiement.
 
 ## Contrat photo guidée
 

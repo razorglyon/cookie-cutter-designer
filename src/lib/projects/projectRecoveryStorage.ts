@@ -1,12 +1,12 @@
-import type { DesignDocumentV1 } from '../domain/designDocument';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import type { DesignDocument } from '../domain/designDocument';
+import { parseDesignDocument } from '../domain/documentValidation';
 
 export interface ProjectRecoveryEnvelope {
   readonly format: 'cookie-cutter-designer-recovery';
   readonly version: 1;
   readonly draftId: string;
   readonly savedAt: string;
-  readonly document: DesignDocumentV1;
+  readonly document: DesignDocument;
 }
 export class ProjectRecoveryValidationError extends Error {
   constructor(readonly path: string, message: string, readonly cause?: unknown) {
@@ -46,9 +46,9 @@ export function parseProjectRecoveryEnvelope(value: unknown): ProjectRecoveryEnv
   }
   const draftId = record.draftId, savedAt = record.savedAt;
   requireUuid(draftId); requireTimestamp(savedAt);
-  let document: DesignDocumentV1;
-  try { document = parseDesignDocumentV1(record.document); }
-  catch (cause) { throw new ProjectRecoveryValidationError('document', 'Invalid DesignDocumentV1', cause); }
+  let document: DesignDocument;
+  try { document = parseDesignDocument(record.document); }
+  catch (cause) { throw new ProjectRecoveryValidationError('document', 'Invalid DesignDocument', cause); }
   return freezeGraph({ format: 'cookie-cutter-designer-recovery', version: 1, draftId, savedAt, document });
 }
 /** Parser fixes property order throughout the graph, so comparison is independent of input key order. */

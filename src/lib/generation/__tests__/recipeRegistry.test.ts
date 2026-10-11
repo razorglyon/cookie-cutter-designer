@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import type { DesignDocumentV1 } from '../../domain/designDocument';
+import type { DesignDocument, DesignDocumentV1 } from '../../domain/designDocument';
 import type {
   GeneratedArtifact,
   ImplementedArtifactRolesByKind
@@ -145,9 +145,9 @@ describe('GenerationRecipe', () => {
     expectTypeOf<ReturnType<GenerationRecipe<'stamp'>['validateParameters']>>()
       .toEqualTypeOf<RecipeValidationResult<StampDesignParameters>>();
     expectTypeOf<Parameters<GenerationRecipe<'cutter'>['generate']>[0]>()
-      .toEqualTypeOf<DesignDocumentV1<'cutter'>>();
+      .toEqualTypeOf<DesignDocument<'cutter'>>();
     expectTypeOf<Parameters<GenerationRecipe<'stamp'>['generate']>[0]>()
-      .toEqualTypeOf<DesignDocumentV1<'stamp'>>();
+      .toEqualTypeOf<DesignDocument<'stamp'>>();
     expectTypeOf<Parameters<GenerationRecipe<'cutter'>['generate']>[1]>()
       .toEqualTypeOf<GenerationContext>();
     expectTypeOf<ReturnType<GenerationRecipe<'cutter'>['generate']>>()

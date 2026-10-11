@@ -1,9 +1,9 @@
-import type { DesignDocumentV1 } from '../domain/designDocument';
+import type { DesignDocument } from '../domain/designDocument';
 import type { GeneratedArtifact } from '../domain/generatedArtifact';
 import type { ImplementedDesignKind } from '../domain/designKind';
 
 export type ImplementedDesignDocument<K extends ImplementedDesignKind = ImplementedDesignKind> = {
-  [Kind in K]: DesignDocumentV1<Kind>;
+  [Kind in K]: DesignDocument<Kind>;
 }[K];
 
 export type ImplementedGeneratedArtifact<
@@ -17,7 +17,7 @@ export type NonEmptyReadonlyArray<T> = readonly [T, ...T[]];
 export type GenerationResult<K extends ImplementedDesignKind = ImplementedDesignKind> = {
   [Kind in K]: Readonly<{
     revision: number;
-    document: DesignDocumentV1<Kind>;
+    document: DesignDocument<Kind>;
     artifacts: NonEmptyReadonlyArray<GeneratedArtifact<Kind>>;
   }>;
 }[K];
@@ -59,7 +59,7 @@ export type ReadyGenerationState<
   [Kind in K]: Readonly<{
     phase: 'ready';
     revision: number;
-    requestedDocument: DesignDocumentV1<Kind>;
+    requestedDocument: DesignDocument<Kind>;
     result: GenerationResult<Kind>;
     error: null;
   }>;
@@ -94,7 +94,6 @@ function cloneDocument(document: ImplementedDesignDocument): ImplementedDesignDo
     ? Object.freeze({ ...document.source })
     : Object.freeze({ ...document.source });
   const common = {
-    schemaVersion: 1 as const,
     id: document.id,
     name: document.name,
     source,
@@ -103,15 +102,20 @@ function cloneDocument(document: ImplementedDesignDocument): ImplementedDesignDo
     createdAt: document.createdAt,
     updatedAt: document.updatedAt
   };
+  const version = document.schemaVersion === 2
+    ? { schemaVersion: 2 as const, bridges: Object.freeze(document.bridges.map(bridge => Object.freeze({
+        ...bridge, from: Object.freeze({ ...bridge.from }), to: Object.freeze({ ...bridge.to })
+      }))) }
+    : { schemaVersion: 1 as const };
 
   return document.kind === 'cutter'
     ? Object.freeze({
-        ...common,
+        ...common, ...version,
         kind: 'cutter' as const,
         parameters: Object.freeze({ ...document.parameters })
       })
     : Object.freeze({
-        ...common,
+        ...common, ...version,
         kind: 'stamp' as const,
         parameters: Object.freeze({ ...document.parameters })
       });
