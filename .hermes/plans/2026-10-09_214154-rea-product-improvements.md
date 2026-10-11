@@ -10,18 +10,35 @@
 
 ---
 
-## Statut et autorisations
+## Statut vérifié et autorisations — 2026-10-11
 
-**État local actuel, 2026-10-10 :** lots 1/1b/2 consolidés (#62–#65), atelier lot3 (#66) et préréglages lot4 (#67) intégrés dans la base locale `8683d16b`. Priorité utilisateur avant ponts/profils : rendre Photo exploitable. `feature/robust-photo-import` ajoute préparation guidée, corpus caméra, confirmation et gardes d’annulation. Validation locale finale :1 068/1 068 tests, check0/0, smoke3/3, build/audit et recette réelle Photo→STL/retrace/undo/reload réussis. `docs/PHOTO_IMPORT_VALIDATION.md` et `AGENT_CONTEXT.md` priment les notes historiques ci-dessous. Continuer localement autorisé ; aucun commit/push/PR/merge/deploy du nouveau chantier sans accord. Lots5–7 toujours distincts/non réalisés.
+Référence intégrée : `origin/main` / GitHub `bafc4246d5c5789a385f844ea5ff3a1d2d7e99dd`. PR #71 fusionnée ; déploiement Pages vérifié sur ce SHA, 58 fichiers publics identiques au paquet. Aucune PR ouverte lors de la vérification de cette mise à jour. Les anciens plans d’exécution ci-dessous sont des références historiques, pas une liste de tâches à rejouer.
 
-**Mise à jour de livraison, 2026-10-10 :** le GO Discord `1558257545167114381` a depuis autorisé l'ensemble du plan avec commits/push/PR organisés ; aucune fusion ni production sans « GO merge ». Les règles de la phase de planification ci-dessous sont historiques. Lot 1 intégré au commit source `141b774`, conformité PASS, qualité APPROVED, 830 tests et gates locales verts, recette Chromium réussie. Détails : `docs/LOCAL_PROJECT_WORKFLOW_VALIDATION.md`. PR #57 brouillon empilée sur #41 ; publication/CI à vérifier sur le head exact. Recovery lot1b également livré au sourcec3d9fba dans PR #59 brouillon sur #58 : 915 tests,11 étapesChromium, conformitéPASS et qualitéAPPROVED ; détails `docs/LOCAL_PROJECT_RECOVERY_VALIDATION.md`. Lots produit2–7 pas encore réalisés. Organisation actuelle : `.hermes/plans/rea-delivery-organization.md`.
+| Lot | État réel | Preuves dans `docs/` |
+|---|---|---|
+| 1 — projets locaux | Livré au socle consolidé | `LOCAL_PROJECT_WORKFLOW_VALIDATION.md` |
+| 1b — récupération séparée | Livrée | `LOCAL_PROJECT_RECOVERY_VALIDATION.md` |
+| 2 — import unifié/démarrage | Livré | `UNIFIED_IMAGE_IMPORT_VALIDATION.md` |
+| 3 — atelier minimal | Livré (#66), tranche bornée | `SKETCH_WORKSPACE_VALIDATION.md` |
+| 4 — préréglages | Livrés (#67), puis préparation photo guidée (#68) | `TRACING_PRESETS_VALIDATION.md`, `PHOTO_IMPORT_VALIDATION.md` |
+| 5 — ponts manuels | Livrés (#69) | `MANUAL_ISLAND_BRIDGES_VALIDATION.md` |
+| 6 — profils simples | Livrés (#70) | `WALL_PROFILES_VALIDATION.md` |
+| 7a — copies séparées homogènes | Livrées (#71), format V3 reprenable | `CUTTER_SERIES_VALIDATION.md` |
 
-- Ce document est un plan, pas une implémentation ni une autorisation de publication.
-- Seul ce fichier est créé pendant la planification. Aucun changement applicatif, commit, push, PR ou déploiement.
-- Découper en lots vérifiables. Détailler les lots ultérieurs à partir du code réellement livré, pas coder toute la feuille de route d’un coup.
-- Avant chaque commit : présenter les fichiers et le message anglais. Push seulement sur demande explicite ; fusion seulement sur « GO merge ».
+### Extensions non engagées
 
-## Baseline observée
+- Atelier : primitives/snapping/calques/plume complète et restauration dédiée de l’original restent hors tranche livrée.
+- Ponts : suggestions automatiques non livrées ; elles devront être visibles et confirmées.
+- Paroi : socle/paroi/tranchant indépendants à étudier ; les profils actuels utilisent les paramètres existants.
+- Lot 7b : connexions entre copies/outil monobloc non livrés. Aucun besoin confirmé ni accord d’implémentation à ce stade. Dessins/tailles différents et Stamp hors lot 7a.
+- Validation restante : Safari/Firefox et téléphone physique, lecteur d’écran, slicer/impression ; performance des séries maximales non qualifiée. Le vert CI et la preuve HTTP ne couvrent pas ces essais.
+- Après reload, le raster original n’est pas conservé : réimport nécessaire pour revectoriser. L’historique Undo ne traverse pas le reload. Pas de collaboration multi-onglets implicite.
+
+### Autorisation courante
+
+Rza a autorisé la réconciliation documentaire puis le **commit et push** des cinq documents sur `docs/refresh-product-roadmap`, avec préservation des notes. Aucun changement applicatif, ouverture de PR, fusion ou déploiement de ce lot documentaire n’est autorisé. Les GO précédents concernent uniquement leurs livraisons déjà exécutées. La prochaine décision est la validation d’usage et/ou le choix d’une extension, pas la réexécution des lots terminés.
+
+## Baseline historique — avant les lots livrés
 
 - Clone : `/workspace/cookie-cutter-designer` ; remote : `https://github.com/razorglyon/cookie-cutter-designer.git`.
 - Branche : `feature/design-domain-foundation`, HEAD `399d762`, propre avant ce plan, un commit local en avance sur son upstream.
@@ -48,7 +65,7 @@ REA a vérifié l’ouverture de l’atelier et ses contrôles. Ses exports stat
 
 ## Feuille de route et dépendances
 
-### Lot 1 — Projet local reprenable (priorité immédiate)
+### Lot 1 — Projet local reprenable (livré)
 
 **Résultat :** nommer, enregistrer, lister, ouvrir, supprimer avec confirmation, exporter/importer `.ccd.json`, signaler les modifications non enregistrées et les erreurs.
 
@@ -99,7 +116,7 @@ Fichiers proposés : `src/lib/sketch/sketchCommands.ts`, `src/lib/sketch/__tests
 
 ### Lot 4 — Préréglages de vectorisation
 
-**État local 2026-10-10 :** implémenté sur `feature/tracing-presets`, non commité/non publié. 995 tests/68 fichiers, check 0/0, smoke 3/3, build, corpus Worker et recette Chromium réussis avec limites explicitement documentées dans `docs/TRACING_PRESETS_VALIDATION.md`. Corpus original procédural, pas de photographie ; undo/annulation tardive couverts par tests App à Worker simulé. Pas de changement V1.
+**Qualification historique avant publication, 2026-10-10 :** implémenté sur `feature/tracing-presets`, non commité/non publié. 995 tests/68 fichiers, check 0/0, smoke 3/3, build, corpus Worker et recette Chromium réussis avec limites explicitement documentées dans `docs/TRACING_PRESETS_VALIDATION.md`. Corpus original procédural, pas de photographie ; undo/annulation tardive couverts par tests App à Worker simulé. Pas de changement V1.
 
 **Dépendance :** lot 2 ; intégré à l’atelier après lot 3.
 
@@ -150,7 +167,7 @@ Fichiers existants : `src/lib/domain/designParameters.ts`, `src/lib/components/p
 - Copies, espacement, encombrement du plateau, puis connexions si justifiées.
 - Aucun démarrage automatique : le besoin doit être confirmé par Rza après livraison du parcours principal.
 
-## Lot 1 — plan d’implémentation détaillé
+## Lot 1 — plan d’implémentation historique (livré, ne pas rejouer)
 
 ### Contrats à respecter
 
@@ -330,4 +347,4 @@ Pour chaque tâche : écrire le test → exécuter le fichier précis avec Vites
 
 ## Prochaine autorisation
 
-Demander le GO pour implémenter **le lot 1 uniquement**, sur branche dédiée, sans publication. Les autres lots restent une feuille de route ; ils recevront un détail actualisé et une validation avant exécution.
+Le lot 1 est livré. L’accord courant couvre cette actualisation documentaire, son commit et son push. Demander un GO distinct avant ouverture de PR, fusion ou implémentation d’une extension ; ne pas réutiliser une autorisation historique.

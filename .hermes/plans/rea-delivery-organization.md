@@ -1,6 +1,8 @@
-# Organisation des livraisons — plan REA complet
+# Organisation historique des livraisons — plan REA
 
-## Autorisation actuelle
+> **Historique supersédé — 2026-10-11.** La pile de PR décrite ci-dessous n’est plus le chemin de livraison courant. Le parcours REA est intégré jusqu’au lot 7a (PR #71, main `bafc4246d5c5789a385f844ea5ff3a1d2d7e99dd`) ; aucune PR ouverte au relevé final. Consulter la section de statut de `2026-10-09_214154-rea-product-improvements.md` et `AGENT_CONTEXT.md`. Les autorisations, numéros de branches/PR et compteurs qui suivent sont historiques, pas des instructions actives. Accord courant : documentation, commit et push de la branche documentaire uniquement ; aucune PR, fusion ou production.
+
+## Autorisation historique
 
 Rza a autorisé l’ensemble du plan, commits et PR compris, dans son message Discord `1558257545167114381`. Cette autorisation remplace la limite au lot 1 et l’interdiction de push précédente pour ce chantier uniquement. Aucune fusion ni mise en production sans « GO merge » ; ne pas modifier les règles de protection ni les workflows de déploiement pour contourner cette limite.
 
