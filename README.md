@@ -54,8 +54,11 @@ Contrast decoding uses browser Canvas and transfers pixels to the historical vec
 - physical target dimension: width, height, or longest side;
 - default target: 75 mm;
 - configurable wall thickness, cutting height, total height, taper, and handle;
+- **Wall profiles:** in Parameters → Cutter, choose **Fin** (0.8 mm wall / 5° taper), **Standard** (1.0 mm / 7°), or **Robuste** (1.5 mm / 10°). One selection changes only those two existing parameters; size, heights, handle, sketch, and manual bridges are preserved. All values remain editable. The active label is derived from the current thickness and angle, or shown as **Personnalisé** when they differ; no preset name is saved in the project. Preview, exports, local saves, and `.ccd.json` use the same document values. Existing V1 projects remain V1; bridge projects remain V2.
 - final measured `width × depth × height` shown in the viewer.
 - **Manual island bridges:** in Advanced Creation, open the bridge editor, choose a width (0.8–10 mm), then click near two different contours. Endpoints snap to contour centrelines. Drag an endpoint (or use arrow keys), delete a bridge, and use the shared Undo/Redo buttons. A complete layout is preflighted against the printable cutter; crossing, overlapping, detached, or non-watertight results are rejected. If further islands remain, each individually valid bridge is saved as an incomplete draft; STL export stays disabled until the last island is connected. Existing Cutter projects remain V1 until the first bridge edit promotes the document to V2. Save, export as `.ccd.json`, and reopen retain even incomplete bridges. Removing a bridge may restore an incomplete cutter; undo restores it.
+
+These wall profiles are starting settings, not a new base/wall/cutting-edge geometry, a mechanical-strength rating, or a food-safety certification. Printing and material suitability must be assessed separately. See [wall-profile validation](docs/WALL_PROFILES_VALIDATION.md) for the tested scope and remaining limitations.
 
 The editor overlays the sampled contour outlines on a faded original SVG. It is not an automatic bridge planner: choose bridges for every disconnected island, and verify the resulting model in a slicer before printing. If editing the sketch later invalidates several saved bridges, **Supprimer tous les ponts** clears them in one Undo-able action so the project is not trapped.
 
@@ -144,8 +147,10 @@ Focused export smoke test:
 
 ```bash
 pnpm run test:smoke
-unzip -t /tmp/cookie-cutter-export-smoke/cookie-cutter.3mf
-unzip -Z1 /tmp/cookie-cutter-export-smoke/cookie-cutter.3mf
+# Use the exact private directory printed as "Export smoke artifacts".
+SMOKE_DIR="/absolute/path/from/test/output"
+unzip -t "$SMOKE_DIR/cookie-cutter.3mf"
+unzip -Z1 "$SMOKE_DIR/cookie-cutter.3mf"
 ```
 
 Pipeline benchmark:
@@ -154,7 +159,7 @@ Pipeline benchmark:
 pnpm run benchmark
 ```
 
-The benchmark writes `/tmp/cookie-cutter-pipeline-benchmark.json`. Its timings are local regression signals, not printer-time estimates.
+Each smoke/benchmark run creates a unique private directory using `mkdtemp` under the OS temporary directory (respecting `TMPDIR` when set). Artifacts are retained for inspection; their exact paths are printed by the tests. The benchmark writes `report.json` in its private directory. These paths are not stable across runs; no shared directory is deleted or reused. Timings are local regression signals, not printer-time estimates.
 
 ## Usage
 
