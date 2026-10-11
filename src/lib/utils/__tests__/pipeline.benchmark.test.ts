@@ -1,6 +1,8 @@
 /// <reference types="node" />
 
 import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS } from '../../types/CookieCutter';
@@ -13,7 +15,7 @@ import { serializeSTL } from '../stlExporter';
 import { compoundHoleSvg, concaveSvg } from './fixtures';
 import { installSvgLoaderDomParserAdapter } from './svgDomTestSupport';
 
-const BENCHMARK_OUTPUT = '/tmp/cookie-cutter-pipeline-benchmark.json';
+const BENCHMARK_OUTPUT = join(tmpdir(), 'cookie-cutter-pipeline-benchmark.json');
 
 interface Metric {
   iterations: number;

@@ -2,6 +2,7 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { strFromU8, unzipSync } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS } from '../../types/CookieCutter';
@@ -11,7 +12,7 @@ import { disposeObject3D } from '../disposeThree';
 import { serializeSTL } from '../stlExporter';
 import { installSvgLoaderDomParserAdapter } from './svgDomTestSupport';
 
-export const SMOKE_OUTPUT_DIR = '/tmp/cookie-cutter-export-smoke';
+export const SMOKE_OUTPUT_DIR = join(tmpdir(), 'cookie-cutter-export-smoke');
 
 let restoreDomParser: (() => void) | undefined;
 
