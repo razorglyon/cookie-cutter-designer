@@ -12,11 +12,15 @@
 
 ## Règles d’exécution
 
-### Synchronisation avec le chantier REA — 2026-10-10
+### Synchronisation vérifiée avec REA — 2026-10-11
 
-La bibliothèque locale, la récupération de brouillon séparée et l’import unifié sont intégrés au socle actuel, selon `.hermes/plans/2026-10-09_214154-rea-product-improvements.md`. Base locale relue : `8037df8` (#62–#65). L’atelier minimal du lot 3 est implémenté et validé **localement, non commité/non publié** sur `feature/sketch-workspace` : sketch canonique, édition bornée M/L/C/Q/Z, undo/redo, génération, sauvegarde/réouverture. Preuves et limites : `../SKETCH_WORKSPACE_VALIDATION.md`. Cela ne clôt pas toute la phase 4 : primitives/snapping/calques/plume complète/restore-original restent hors tranche ; presets, ponts, profils et multi-cutter restent à livrer.
+La feuille de route REA (`.hermes/plans/2026-10-09_214154-rea-product-improvements.md`, depuis la racine du dépôt) distingue désormais lots livrés et extensions. Main intégré : `bafc4246d5c5789a385f844ea5ff3a1d2d7e99dd` ; dernière PR #71 fusionnée et Pages vérifié. Les fondations document/codec/registry/orchestration, projets locaux, récupération, import unifié, atelier minimal, presets/photo guidée, ponts et profils simples sont intégrés. La recette multi-cutter est livrée **uniquement pour des copies homogènes séparées**, avec V3, disposition, histoire et reprise.
 
-Les autorisations historiques de publication ne s’appliquent pas à la validation actuelle du lot 3 : instruction courante **aucun commit/push/PR/merge/deploy**. Les anciennes PR empilées ont été remplacées par la consolidation ; ne pas les reprendre comme branches de livraison. Toute publication ultérieure exige une nouvelle autorisation applicable.
+Preuves : `../SKETCH_WORKSPACE_VALIDATION.md`, `../PHOTO_IMPORT_VALIDATION.md`, `../MANUAL_ISLAND_BRIDGES_VALIDATION.md`, `../WALL_PROFILES_VALIDATION.md`, `../CUTTER_SERIES_VALIDATION.md`. Invariants : `../PROJECT_INVARIANTS.md` (compagnon inclus dans ce lot documentaire).
+
+**Ne pas considérer toutes les phases de ce plan comme terminées.** Les recettes élargies, catalogue/recherche, presets métier versionnés, atelier avancé, PWA et exports multi-artefacts restent des propositions à auditer/détailler avant exécution, pas des absences intégralement revérifiées dans ce lot documentaire. Les copies reliées/monobloc et la paroi à zones indépendantes ne sont pas livrées. La bibliothèque projet livrée ne clôt pas automatiquement la phase des presets métier.
+
+Les tâches détaillées ci-dessous sont la spécification d’origine : vérifier leur raccordement et le périmètre déjà livré avant de les reprendre. Les anciennes PR empilées sont supersédées. Accord actuel : mise à jour documentaire, commit et push uniquement, sans PR/merge/deploy ni nouvelle fonction ; les accords de livraison antérieurs ne s’étendent pas à ce lot.
 
 - Branche dédiée, jamais `main`.
 - Un commit local cohérent par tâche ou petit groupe de tâches.
