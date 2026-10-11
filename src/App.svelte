@@ -108,7 +108,7 @@
 
   function geometryKey(document: DesignDocument): string {
     // Match the integration's semantic generation key, not name/timestamps/view.
-    return JSON.stringify([document.kind, document.sketch, document.parameters]);
+    return JSON.stringify([document.kind, document.sketch, document.parameters, document.schemaVersion === 2 ? document.bridges : []]);
   }
 
   function captureGeometryExport(): { mesh: ModelObject; params: Readonly<CookieCutterParams> | undefined; filename: string } | null {
@@ -783,7 +783,7 @@
     const epoch = session.getSessionEpoch();
     const geometry = () => {
       const document = session.getDocument();
-      return JSON.stringify([document?.kind, document?.sketch, document?.parameters]);
+      return JSON.stringify([document?.kind, document?.sketch, document?.parameters, document?.schemaVersion === 2 ? document.bridges : []]);
     };
     const key = geometry();
     return () => alive && revision === sourceRevision
@@ -850,7 +850,7 @@
     const epoch = session.getSessionEpoch();
     const geometry = () => {
       const document = session.getDocument();
-      return JSON.stringify([document?.kind, document?.sketch, document?.parameters]);
+      return JSON.stringify([document?.kind, document?.sketch, document?.parameters, document?.schemaVersion === 2 ? document.bridges : []]);
     };
     const key = geometry();
     return () => alive && revision === sourceRevision
@@ -1252,6 +1252,15 @@
           {:catch}
             <div class="panel-load-error" role="alert">The sketch workshop could not be loaded.</div>
           {/await}
+          {#if unavailableReason === null && $session?.kind === 'cutter'}
+            {#await import('./lib/components/ui/BridgeWorkspace.svelte')}
+              <div class="panel-loading" role="status">Loading bridge editor…</div>
+            {:then component}
+              {#key $session?.id}<component.default {session} />{/key}
+            {:catch}
+              <div class="panel-load-error" role="alert">The bridge editor could not be loaded.</div>
+            {/await}
+          {/if}
           {#await import('./lib/components/ui/PatternGenerator.svelte')}
             <div class="panel-loading" role="status">Loading pattern generator…</div>
           {:then component}

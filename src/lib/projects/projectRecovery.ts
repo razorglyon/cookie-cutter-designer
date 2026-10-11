@@ -1,6 +1,6 @@
 import type { Readable, Subscriber, Unsubscriber } from 'svelte/store';
 import type { DesignDocument } from '../domain/designDocument';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import { parseDesignDocument } from '../domain/documentValidation';
 import { parseProjectRecoveryEnvelope, type ProjectRecoveryEnvelope, type ProjectRecoveryStorage } from './projectRecoveryStorage';
 
 export interface ProjectRecoveryError {
@@ -171,7 +171,7 @@ export function createProjectRecovery(storage: ProjectRecoveryStorage, deps: Pro
     try {
       if (!Number.isSafeInteger(nextEpoch) || nextEpoch < 0) throw new Error('Invalid session epoch');
       // Treat getters, UUID factory and clock as reentrant boundaries; no state adoption before validation.
-      const detached = parseDesignDocumentV1(document);
+      const detached = parseDesignDocument(document);
       if (closing || token !== operation) return;
       const existing = slots.get(nextEpoch);
       const id = existing?.id ?? createId();

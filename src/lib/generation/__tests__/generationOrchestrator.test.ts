@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import type { DesignDocumentV1 } from '../../domain/designDocument';
+import type { DesignDocument, DesignDocumentV1 } from '../../domain/designDocument';
 import type { GeneratedArtifact } from '../../domain/generatedArtifact';
 import type { ImplementedDesignKind } from '../../domain/designKind';
 import {
@@ -182,7 +182,7 @@ function registerStamp(
 describe('GenerationState', () => {
   it('expose des unions document/artefact/résultat corrélées aux seuls kinds implémentés', () => {
     expectTypeOf<ImplementedDesignDocument>().toEqualTypeOf<
-      DesignDocumentV1<'cutter'> | DesignDocumentV1<'stamp'>
+      DesignDocument<'cutter'> | DesignDocument<'stamp'>
     >();
     expectTypeOf<ImplementedGeneratedArtifact>().toEqualTypeOf<
       GeneratedArtifact<'cutter'> | GeneratedArtifact<'stamp'>

@@ -4,6 +4,7 @@ import { DesignDocumentValidationError } from '../../domain/documentValidation';
 import {
   PROJECT_FORMAT,
   PROJECT_VERSION,
+  PROJECT_VERSION_V2,
   ProjectCodecError,
   decodeProject,
   encodeProject
@@ -108,6 +109,17 @@ describe('codec projet portable V1', () => {
     });
   });
 
+  it('sérialise V2 sans altérer V1 et refuse une enveloppe qui ne correspond pas au document', () => {
+    const v1 = cutterDocument();
+    const v2 = { ...v1, schemaVersion: 2, bridges: [{ id: 'bridge-1', from: { x: 0, y: 5 }, to: { x: 3, y: 5 }, widthMm: 2 }] };
+    const encoded = encodeProject(v2);
+    expect(JSON.parse(encoded).version).toBe(PROJECT_VERSION_V2);
+    expect(decodeProject(encoded).document).toEqual(v2);
+    expect(decodeProject(encodeProject(v1)).document).toEqual(v1);
+    expectCodecError(JSON.stringify({ format: PROJECT_FORMAT, version: 1, document: v2 }), 'document.schemaVersion');
+    expectCodecError(JSON.stringify({ format: PROJECT_FORMAT, version: 2, document: v1 }), 'document.schemaVersion');
+  });
+
   it('fait un round-trip Stamp/raster sans inventer blob ni checksum', () => {
     const decoded = decodeProject(encodeProject(rasterStampDocument()));
 
@@ -188,14 +200,14 @@ describe('codec projet portable V1', () => {
       'format'
     );
     expectCodecError(
-      JSON.stringify({ format: PROJECT_FORMAT, version: 2, document: cutterDocument() }),
+      JSON.stringify({ format: PROJECT_FORMAT, version: 3, document: cutterDocument() }),
       'version',
       'future'
     );
     expectCodecError(
       JSON.stringify({
         format: PROJECT_FORMAT,
-        version: 2,
+        version: 3,
         document: cutterDocument(),
         futureMetadata: true
       }),

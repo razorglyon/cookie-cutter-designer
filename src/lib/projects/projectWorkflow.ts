@@ -1,6 +1,6 @@
 import { writable, type Readable } from 'svelte/store';
 import type { DesignDocument } from '../domain/designDocument';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import { parseDesignDocument } from '../domain/documentValidation';
 import type { DesignSessionStore } from '../stores/designSessionStore';
 import type { MigrationV0ToV1Options } from '../domain/migrations/v0ToV1';
 import { encodeProject } from './projectCodec';
@@ -152,7 +152,7 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
     try { return await work; } finally { reads.delete(work); }
   }
   function validate(value: unknown): DesignDocument {
-    const doc = parseDesignDocumentV1(value);
+    const doc = parseDesignDocument(value);
     options.assertRepresentable?.(doc);
     return doc;
   }
@@ -169,7 +169,7 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
       const doc = session.getDocument();
       if (doc === null) throw new Error('Aucun document actif à sauvegarder.');
       // Parsing clones the whole persistent graph before entering the write queue.
-      const snapshot = parseDesignDocumentV1(doc);
+      const snapshot = parseDesignDocument(doc);
       const encoded = encodeProject(snapshot);
       await queue(() => storage.save(snapshot));
       if (!valid(capturedEpoch)) return false;
@@ -369,7 +369,7 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
         if (disposed) return false;
         const documents = await read(() => storage.list());
         if (disposed || sequence !== listSequence) return false;
-        publish({ library: { documents: Object.freeze(documents.map(parseDesignDocumentV1)), loaded: true, loading: false, listError: null } });
+        publish({ library: { documents: Object.freeze(documents.map(parseDesignDocument)), loaded: true, loading: false, listError: null } });
         return true;
       } catch (cause) {
         if (!disposed && sequence === listSequence) publish({ library: { ...state.library, loading: false, listError: failure('list', cause) } });
@@ -404,7 +404,7 @@ export function createProjectWorkflow(options: ProjectWorkflowOptions): ProjectW
       try {
         const doc = session.getDocument();
         if (doc === null) throw new Error('Aucun document actif à exporter.');
-        await (options.download ?? downloadProjectFile)(parseDesignDocumentV1(doc));
+        await (options.download ?? downloadProjectFile)(parseDesignDocument(doc));
         finish(ticket, capturedEpoch, 'export');
         return valid(capturedEpoch);
       } catch (cause) {

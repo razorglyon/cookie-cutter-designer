@@ -1,6 +1,7 @@
 import { get, writable, type Readable } from 'svelte/store';
 import type {
   DesignDocument,
+  Bridge,
   ViewportPreferences
 } from '../domain/designDocument';
 import type { ImplementedDesignKind } from '../domain/designKind';
@@ -9,7 +10,8 @@ import {
   createDefaultStampParameters,
   type DesignParametersByKind
 } from '../domain/designParameters';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import { parseDesignDocument } from '../domain/documentValidation';
+import { migrateV1ToV2 } from '../domain/migrations/v1ToV2';
 
 export interface DesignDocumentStoreOptions {
   readonly now?: () => string;
@@ -20,6 +22,8 @@ export interface DesignDocumentStore extends Readable<DesignDocument> {
   replace(value: unknown): void;
   rename(name: string): void;
   updateSketch(svg: string): void;
+  /** Promote V1 only on the first bridge edit; the input is validated and detached. */
+  updateBridges(bridges: readonly Bridge[]): void;
   updateViewport(patch: Partial<ViewportPreferences>): void;
   updateParameters<K extends ImplementedDesignKind>(
     kind: K,
@@ -33,11 +37,19 @@ function freezePersistentSnapshot(document: DesignDocument): DesignDocument {
   Object.freeze(document.sketch);
   Object.freeze(document.parameters);
   Object.freeze(document.viewport);
+  if (document.schemaVersion === 2) {
+    for (const bridge of document.bridges) {
+      Object.freeze(bridge.from);
+      Object.freeze(bridge.to);
+      Object.freeze(bridge);
+    }
+    Object.freeze(document.bridges);
+  }
   return Object.freeze(document);
 }
 
 function createSnapshot(value: unknown): DesignDocument {
-  return freezePersistentSnapshot(parseDesignDocumentV1(value));
+  return freezePersistentSnapshot(parseDesignDocument(value));
 }
 
 function createDefaultParameters(kind: ImplementedDesignKind) {
@@ -101,6 +113,14 @@ export function createDesignDocumentStore(
       });
     },
 
+    updateBridges(bridges: readonly Bridge[]): void {
+      const current = get(internal);
+      if (current.kind !== 'cutter') throw new Error('Les ponts sont réservés aux emporte-pièces.');
+      if (current.schemaVersion === 1 && bridges.length === 0) return;
+      if (current.schemaVersion === 2 && JSON.stringify(current.bridges) === JSON.stringify(bridges)) return;
+      const base = current.schemaVersion === 1 ? migrateV1ToV2(current) : current;
+      publishMutation(current, { ...base, bridges });
+    },
     updateViewport(patch: Partial<ViewportPreferences>): void {
       const current = get(internal);
       publishMutation(current, {
@@ -129,6 +149,9 @@ export function createDesignDocumentStore(
     changeKind(kind: ImplementedDesignKind): void {
       const current = get(internal);
       if (current.kind === kind) return;
+      if (current.schemaVersion === 2 && current.bridges.length > 0) {
+        throw new Error('Supprimez explicitement les ponts avant de changer de type de design.');
+      }
 
       publishMutation(current, {
         ...current,

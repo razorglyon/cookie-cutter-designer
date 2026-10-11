@@ -122,10 +122,10 @@ export const cutterRecipe = Object.freeze({
     let ownedObject: Awaited<ReturnType<typeof generateCookieCutter>> | undefined;
 
     try {
-      ownedObject = await generateCookieCutter(
-        document.sketch.svg,
-        validation.parameters
-      );
+      const bridges = document.schemaVersion === 2 ? document.bridges : [];
+      ownedObject = bridges.length > 0
+        ? await generateCookieCutter(document.sketch.svg, validation.parameters, bridges)
+        : await generateCookieCutter(document.sketch.svg, validation.parameters);
       context.signal.throwIfAborted();
 
       const report = validatePrintableObject(ownedObject);

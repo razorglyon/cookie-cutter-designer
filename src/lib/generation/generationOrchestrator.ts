@@ -1,6 +1,6 @@
 import type { Object3D } from 'three';
-import type { DesignDocumentV1 } from '../domain/designDocument';
-import { parseDesignDocumentV1 } from '../domain/documentValidation';
+import type { DesignDocument } from '../domain/designDocument';
+import { parseDesignDocument } from '../domain/documentValidation';
 import type { GeneratedArtifact } from '../domain/generatedArtifact';
 import { disposeObject3D as defaultDisposeObject3D } from '../utils/disposeThree';
 import type { GeometryValidationReport } from '../utils/geometryValidation';
@@ -89,6 +89,14 @@ function freezeDocument(document: ImplementedDesignDocument): ImplementedDesignD
   Object.freeze(document.sketch);
   Object.freeze(document.parameters);
   Object.freeze(document.viewport);
+  if (document.schemaVersion === 2) {
+    for (const bridge of document.bridges) {
+      Object.freeze(bridge.from);
+      Object.freeze(bridge.to);
+      Object.freeze(bridge);
+    }
+    Object.freeze(document.bridges);
+  }
   return Object.freeze(document);
 }
 
@@ -137,7 +145,7 @@ function cloneArtifacts<K extends 'cutter' | 'stamp'>(
 
 function createResult<K extends 'cutter' | 'stamp'>(
   revision: number,
-  document: DesignDocumentV1<K>,
+  document: DesignDocument<K>,
   artifacts: readonly GeneratedArtifact<K>[]
 ): GenerationResult<K> {
   return Object.freeze({
@@ -219,7 +227,7 @@ export class GenerationOrchestrator {
     let snapshot: ImplementedDesignDocument;
 
     try {
-      snapshot = freezeDocument(parseDesignDocumentV1(document));
+      snapshot = freezeDocument(parseDesignDocument(document));
     } catch (error: unknown) {
       if (!this.isOperationCurrent(operation) || this.hasBeenDisposed()) {
         if (this.hasBeenDisposed()) throw new GenerationOrchestratorError('DISPOSED');

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Bridge } from '../domain/designDocument';
 import {
   mergeGeometries,
   mergeVertices
@@ -9,7 +10,7 @@ import type {
   SizeMode
 } from '../types/CookieCutter';
 import { extractClosedContours, type NormalizedContour } from './contourExtraction';
-import { createTaperedWallGeometry } from './cutterGeometry';
+import { createTaperedWallGeometry, createBridgedWallGeometry } from './cutterGeometry';
 import {
   CutterGenerationError,
   validateCookieCutterParams
@@ -209,7 +210,7 @@ function selectedPlanarDimension(
   return Math.max(width, height);
 }
 
-function sourceDimension(
+export function sourceDimension(
   contours: ReadonlyArray<NormalizedContour>,
   mode: SizeMode
 ): number {
@@ -244,21 +245,60 @@ function measuredPlanarDimension(group: THREE.Group, mode: SizeMode): number {
   return selectedPlanarDimension(size.x, size.z, mode);
 }
 
+async function createBridgedContourGeometry(
+  contours: ReadonlyArray<NormalizedContour>, bridges: readonly Bridge[],
+  params: Readonly<CookieCutterParams>, scale: number
+): Promise<THREE.BufferGeometry> {
+  const activeHandle = hasActiveHandle(params);
+  const taper = Math.tan(params.taperAngle * Math.PI / 180) * params.cuttingHeight;
+  const topWidth = params.wallThickness + 2 * taper;
+  const body = await createBridgedWallGeometry(contours, bridges, {
+    scale, bottomWidthMm: params.wallThickness, topWidthMm: topWidth,
+    bottomBridgeGrowthMm: 0, topBridgeGrowthMm: 2 * taper,
+    baseHeight: 0, height: params.cuttingHeight,
+    capBottom: true, capTop: !activeHandle
+  });
+  if (!activeHandle) {
+    try { assertWatertightGeometry(body); return body; }
+    catch (error) { body.dispose(); throw error; }
+  }
+  const handleHeight = params.totalHeight - params.cuttingHeight;
+  const spread = HANDLE_SPREAD[params.handleStyle as Exclude<HandleStyle, 'none'>];
+  let handle: THREE.BufferGeometry | null = null;
+  try {
+    handle = await createBridgedWallGeometry(contours, bridges, {
+      scale, bottomWidthMm: topWidth, topWidthMm: topWidth + 2 * spread,
+      bottomBridgeGrowthMm: 2 * taper, topBridgeGrowthMm: 2 * (taper + spread),
+      baseHeight: params.cuttingHeight, height: handleHeight,
+      capBottom: false, capTop: true
+    });
+    return finalizeJoinedGeometry([body, handle]);
+  } finally { body.dispose(); handle?.dispose(); }
+}
+
 async function buildCutterGroup(
   contours: ReadonlyArray<NormalizedContour>,
   params: Readonly<CookieCutterParams>,
-  scale: number
+  scale: number,
+  bridges: readonly Bridge[] = []
 ): Promise<THREE.Group> {
   const group = new THREE.Group();
   group.name = 'cookieCutter';
 
   try {
-    for (let index = 0; index < contours.length; index += 1) {
-      const geometry = await createContourGeometry(contours[index], params, scale);
+    if (bridges.length > 0) {
+      const geometry = await createBridgedContourGeometry(contours, bridges, params, scale);
       const mesh = new THREE.Mesh(geometry, createCutterMaterial());
-      mesh.name = `cutter-body-${index}`;
-      mesh.userData.contourIndex = index;
+      mesh.name = 'cutter-body-bridged';
       group.add(mesh);
+    } else {
+      for (let index = 0; index < contours.length; index += 1) {
+        const geometry = await createContourGeometry(contours[index], params, scale);
+        const mesh = new THREE.Mesh(geometry, createCutterMaterial());
+        mesh.name = `cutter-body-${index}`;
+        mesh.userData.contourIndex = index;
+        group.add(mesh);
+      }
     }
 
     return group;
@@ -270,7 +310,8 @@ async function buildCutterGroup(
 
 async function buildFittedCutterGroup(
   contours: ReadonlyArray<NormalizedContour>,
-  params: Readonly<CookieCutterParams>
+  params: Readonly<CookieCutterParams>,
+  bridges: readonly Bridge[] = []
 ): Promise<{ group: THREE.Group; scale: number }> {
   let scale = params.targetSize / sourceDimension(contours, params.sizeMode);
   const tolerance = Math.max(0.02, params.targetSize * 0.0005);
@@ -284,7 +325,7 @@ async function buildFittedCutterGroup(
       );
     }
 
-    const group = await buildCutterGroup(contours, params, scale);
+    const group = await buildCutterGroup(contours, params, scale, bridges);
     const measured = measuredPlanarDimension(group, params.sizeMode);
     const difference = Math.abs(measured - params.targetSize);
 
@@ -347,14 +388,15 @@ function assertFitsBuildPlate(
  */
 export async function generateCookieCutter(
   svgString: string,
-  paramsValue: Readonly<CookieCutterParams>
+  paramsValue: Readonly<CookieCutterParams>,
+  bridges: readonly Bridge[] = []
 ): Promise<THREE.Group> {
   const params = validateCookieCutterParams(paramsValue);
   const contours = extractClosedContours(svgString);
   let group: THREE.Group | null = null;
 
   try {
-    const fitted = await buildFittedCutterGroup(contours, params);
+    const fitted = await buildFittedCutterGroup(contours, params, bridges);
     group = fitted.group;
 
     const bounds = assertFitsBuildPlate(group, params);

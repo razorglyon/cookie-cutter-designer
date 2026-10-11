@@ -73,6 +73,22 @@ describe('GenerationState', () => {
     expectTypeOf<InvalidReadyState>().not.toMatchTypeOf<GenerationState>();
   });
 
+  it('préserve le schéma V2 et ses ponts dans les snapshots publics de génération', () => {
+    const source = mutableReadyState(new THREE.Group());
+    if (source.state.phase !== 'ready' || source.state.requestedDocument.kind !== 'cutter' || source.state.result.artifacts[0].role !== 'cutter') throw new Error('Fixture cutter ready attendue.');
+    const bridge = { id: 'b', from: { x: 0, y: 50 }, to: { x: 35, y: 50 }, widthMm: 2 };
+    const v2 = { ...source.state.requestedDocument, schemaVersion: 2 as const, bridges: [bridge] };
+    const snapshot = freezeGenerationState({ ...source.state, requestedDocument: v2, result: { ...source.state.result, document: v2, artifacts: [source.state.result.artifacts[0]] } });
+    bridge.from.y = 99;
+    expect(snapshot.phase).toBe('ready');
+    if (snapshot.phase !== 'ready') throw new Error('Snapshot ready attendu.');
+    expect(snapshot.result.document.schemaVersion).toBe(2);
+    expect(snapshot.requestedDocument.schemaVersion).toBe(2);
+    if (snapshot.result.document.schemaVersion !== 2) throw new Error('V2 attendu.');
+    expect(snapshot.result.document.bridges[0].from.y).toBe(50);
+    expect(Object.isFrozen(snapshot.result.document.bridges[0].from)).toBe(true);
+  });
+
   it('détache et gèle profondément le snapshot sans geler Object3D', () => {
     const object = new THREE.Group();
     const source = mutableReadyState(object);
