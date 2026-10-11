@@ -17,6 +17,7 @@ export interface DesignSessionStore extends Readable<DesignDocument | null> {
   rename: DesignDocumentStore['rename'];
   updateSketch: DesignDocumentStore['updateSketch'];
   updateBridges: DesignDocumentStore['updateBridges'];
+  updateSeries: DesignDocumentStore['updateSeries'];
   updateViewport: DesignDocumentStore['updateViewport'];
   updateParameters: DesignDocumentStore['updateParameters'];
   changeKind: DesignDocumentStore['changeKind'];
@@ -97,6 +98,7 @@ export function createDesignSessionStore(
     rename: name => mutate(store => store.rename(name)),
     updateSketch: svg => mutate(store => store.updateSketch(svg)),
     updateBridges: bridges => mutate(store => store.updateBridges(bridges)),
+    updateSeries: layout => mutate(store => store.updateSeries(layout)),
     updateViewport: patch => mutate(store => store.updateViewport(patch)),
     updateParameters: (kind, patch) => mutate(store => store.updateParameters(kind, patch)),
     changeKind: kind => mutate(store => store.changeKind(kind))

@@ -182,10 +182,10 @@ function registerStamp(
 describe('GenerationState', () => {
   it('expose des unions document/artefact/résultat corrélées aux seuls kinds implémentés', () => {
     expectTypeOf<ImplementedDesignDocument>().toEqualTypeOf<
-      DesignDocument<'cutter'> | DesignDocument<'stamp'>
+      DesignDocument<'cutter'> | DesignDocument<'stamp'> | DesignDocument<'multi-cutter'>
     >();
     expectTypeOf<ImplementedGeneratedArtifact>().toEqualTypeOf<
-      GeneratedArtifact<'cutter'> | GeneratedArtifact<'stamp'>
+      GeneratedArtifact<'cutter'> | GeneratedArtifact<'stamp'> | GeneratedArtifact<'multi-cutter'>
     >();
     expectTypeOf<GenerationResult['artifacts'][number]>().toEqualTypeOf<
       ImplementedGeneratedArtifact

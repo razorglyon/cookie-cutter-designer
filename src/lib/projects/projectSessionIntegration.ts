@@ -107,7 +107,7 @@ export function createProjectSessionIntegration(
     if (!reconcile && lastDocument === document && epoch === currentEpoch) return;
     const reservation = {
       epoch: currentEpoch,
-      geometry: JSON.stringify([document?.kind, document?.sketch, document?.parameters, document?.schemaVersion === 2 ? document.bridges : []]),
+      geometry: JSON.stringify([document?.kind, document?.sketch, document?.parameters, document && document.schemaVersion !== 1 ? document.bridges : [], document?.schemaVersion === 3 ? document.layout : null]),
       viewport: JSON.stringify(document?.viewport ?? null)
     };
     const previous = projection;
@@ -213,13 +213,19 @@ export function createProjectSessionIntegration(
       }
       // Equality also ignores queued restoration notifications without clearing
       // the useful error from the rejected UI edit that caused that restoration.
-      if (candidate.kind === document.kind && sameFields(candidate.parameters, document.parameters)) return true;
-      if (candidate.kind !== document.kind) session.changeKind(candidate.kind);
-      if (!currentSession()) {
-        throw new Error('La session a changé pendant la modification des paramètres.');
+      const sameKind = candidate.kind === document.kind || (document.kind === 'multi-cutter' && candidate.kind === 'cutter');
+      if (sameKind && sameFields(candidate.parameters, document.parameters)) return true;
+      if (document.kind === 'multi-cutter' && candidate.kind === 'cutter') {
+        // The Cutter UI edits the series source, never demotes the arrangement.
+        session.updateParameters('multi-cutter', candidate.parameters);
+      } else {
+        if (candidate.kind !== document.kind) session.changeKind(candidate.kind);
+        if (!currentSession()) {
+          throw new Error('La session a changé pendant la modification des paramètres.');
+        }
+        if (candidate.kind === 'cutter') session.updateParameters('cutter', candidate.parameters);
+        else session.updateParameters('stamp', candidate.parameters);
       }
-      if (candidate.kind === 'cutter') session.updateParameters('cutter', candidate.parameters);
-      else session.updateParameters('stamp', candidate.parameters);
       if (!currentSession()) {
         throw new Error('La session a changé pendant la modification des paramètres.');
       }

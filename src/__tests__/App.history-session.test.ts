@@ -19,7 +19,7 @@ function fixture(id: string) {
 }
 function setup() {
   const session = createDesignSessionStore(fixture('A'), { now: () => '2026-10-09T12:00:00.000Z' });
-  const records = new Map([['B', fixture('B')]]);
+  const records = new Map<string, import('../lib/domain/designDocument').DesignDocument>([['B', fixture('B')]]);
   const storage = createProjectStorage({ put: async doc => { records.set(doc.id, doc); }, get: async id => records.get(id), getAll: async () => [...records.values()], delete: async id => { records.delete(id); } });
   app = mount(App, { target: document.body.appendChild(document.createElement('div')), props: { projectSession: session, projectStorage: storage } });
   return { session, records };

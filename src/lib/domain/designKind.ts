@@ -14,7 +14,7 @@ export const DESIGN_KINDS = [
 
 export type DesignKind = (typeof DESIGN_KINDS)[number];
 
-export const IMPLEMENTED_DESIGN_KINDS = ['cutter', 'stamp'] as const;
+export const IMPLEMENTED_DESIGN_KINDS = ['cutter', 'stamp', 'multi-cutter'] as const;
 
 export type ImplementedDesignKind = (typeof IMPLEMENTED_DESIGN_KINDS)[number];
 

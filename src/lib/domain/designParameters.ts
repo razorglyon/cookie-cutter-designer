@@ -42,6 +42,11 @@ export interface DesignParametersByKind {
   'practice-cookie': never;
 }
 
+/** Runtime recipes may extend the frozen V1 parameter map without changing V1. */
+export type ActiveDesignParametersByKind = Omit<DesignParametersByKind, 'multi-cutter'> & {
+  'multi-cutter': CutterDesignParameters;
+};
+
 export const DEFAULT_CUTTER_PARAMETERS_V1: CutterDesignParameters = Object.freeze({
   wallThickness: 1,
   cuttingHeight: 12,

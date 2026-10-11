@@ -1,7 +1,7 @@
 import type { DesignDocument } from '../domain/designDocument';
 import type { GeneratedArtifact } from '../domain/generatedArtifact';
 import type { ImplementedDesignKind } from '../domain/designKind';
-import type { DesignParametersByKind } from '../domain/designParameters';
+import type { ActiveDesignParametersByKind } from '../domain/designParameters';
 
 export interface RecipeValidationIssue {
   readonly path: string;
@@ -26,10 +26,10 @@ export interface GenerationContext {
 
 export interface GenerationRecipe<K extends ImplementedDesignKind> {
   readonly kind: K;
-  createDefaultParameters(): DesignParametersByKind[K];
+  createDefaultParameters(): ActiveDesignParametersByKind[K];
   validateParameters(
     value: unknown
-  ): RecipeValidationResult<DesignParametersByKind[K]>;
+  ): RecipeValidationResult<ActiveDesignParametersByKind[K]>;
   generate(
     document: DesignDocument<K>,
     context: GenerationContext

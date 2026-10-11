@@ -8,7 +8,8 @@ import type {
   SketchDocument,
   ViewportPreferences
 } from './designDocument';
-import { isDesignKind, isImplementedDesignKind } from './designKind';
+import { CUTTER_SERIES_LIMITS } from './cutterSeries';
+import { isDesignKind } from './designKind';
 import type {
   CutterDesignParameters,
   DesignHandleStyleV1,
@@ -470,7 +471,7 @@ export function parseDesignDocumentV1(value: unknown): DesignDocumentV1 {
   if (!isDesignKind(record.kind)) {
     invalid('kind', "n'est pas un type de design reconnu.");
   }
-  if (!isImplementedDesignKind(record.kind)) {
+  if (record.kind !== 'cutter' && record.kind !== 'stamp') {
     invalid('kind', 'est un type de design reconnu mais pas encore implémenté.');
   }
   const kind = record.kind;
@@ -563,10 +564,31 @@ export function parseDesignDocumentV2(value: unknown): DesignDocumentV2 {
   return { ...base, schemaVersion: 2, bridges } as DesignDocumentV2;
 }
 
+/** Strict V3 input; reuse frozen V2 Cutter fields rather than loosening legacy parsers. */
+export function parseMultiCutterDocument(value: unknown): import('./designDocument').MultiCutterDocument {
+  const record = requireRecord(value, '$');
+  if (record.schemaVersion !== 3) invalid('schemaVersion', 'doit être exactement 3.');
+  if (record.kind !== 'multi-cutter') invalid('kind', 'doit être multi-cutter en V3.');
+  requireExactKeys(record, '', [...V2_DOCUMENT_KEYS, 'layout']);
+  const { layout: rawLayout, ...fields } = record;
+  const base = parseDesignDocumentV2({ ...fields, schemaVersion: 2, kind: 'cutter' });
+  if (base.kind !== 'cutter') invalid('kind', 'Cutter requis.');
+  const layout = requireRecord(rawLayout, 'layout');
+  requireExactKeys(layout, 'layout', ['copies', 'columns', 'spacingMm']);
+  const copies = readFiniteNumber(layout, 'copies', 'layout');
+  const columns = readFiniteNumber(layout, 'columns', 'layout');
+  const spacingMm = readFiniteNumber(layout, 'spacingMm', 'layout');
+  if (!Number.isInteger(copies) || copies < 1 || copies > CUTTER_SERIES_LIMITS.maxCopies) invalid('layout.copies', 'entier de 1 à 24 requis.');
+  if (!Number.isInteger(columns) || columns < 1 || columns > copies) invalid('layout.columns', 'entier de 1 au nombre de copies requis.');
+  if (spacingMm < CUTTER_SERIES_LIMITS.minSpacingMm || spacingMm > CUTTER_SERIES_LIMITS.maxSpacingMm) invalid('layout.spacingMm', 'espacement de 0,5 à 40 mm requis.');
+  return { ...base, schemaVersion: 3, kind: 'multi-cutter', layout: { copies, columns, spacingMm } };
+}
+
 /** Route by header before checking version-specific fields. V1 remains unchanged. */
 export function parseDesignDocument(value: unknown): DesignDocument {
   const record = requireRecord(value, '$');
   if (record.schemaVersion === 1) return parseDesignDocumentV1(value);
   if (record.schemaVersion === 2) return parseDesignDocumentV2(value);
+  if (record.schemaVersion === 3) return parseMultiCutterDocument(value);
   invalid('schemaVersion', 'version de document non prise en charge.');
 }

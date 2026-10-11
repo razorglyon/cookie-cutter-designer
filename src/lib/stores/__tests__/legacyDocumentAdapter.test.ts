@@ -104,7 +104,7 @@ describe('legacyDocumentAdapter', () => {
     const source = document('stamp');
     const value = { ...source.parameters, totalHeight: 1 };
     expect(legacyParametersToDocument(value)).toEqual({ kind: 'stamp', parameters: value });
-    expect(documentParametersToLegacy({ ...source, kind: 'stamp', parameters: { ...value, mode: 'stamp' } })).toEqual(value);
+    expect(documentParametersToLegacy({ ...source, schemaVersion: 1, kind: 'stamp', parameters: { ...value, mode: 'stamp' } })).toEqual(value);
   });
 
   it('accepts inactive cutter options without normalizing their stored values', () => {

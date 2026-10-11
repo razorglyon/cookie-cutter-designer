@@ -108,7 +108,7 @@
 
   function geometryKey(document: DesignDocument): string {
     // Match the integration's semantic generation key, not name/timestamps/view.
-    return JSON.stringify([document.kind, document.sketch, document.parameters, document.schemaVersion === 2 ? document.bridges : []]);
+    return JSON.stringify([document.kind, document.sketch, document.parameters, document.schemaVersion !== 1 ? document.bridges : [], document.schemaVersion === 3 ? document.layout : null]);
   }
 
   function captureGeometryExport(): { mesh: ModelObject; params: Readonly<CookieCutterParams> | undefined; filename: string } | null {
@@ -147,6 +147,9 @@
   const recipeRegistry = new RecipeRegistry();
   recipeRegistry.register('cutter', async () =>
     (await import('./lib/generation/recipes/cutterRecipe')).cutterRecipe
+  );
+  recipeRegistry.register('multi-cutter', async () =>
+    (await import('./lib/generation/recipes/multiCutterRecipe')).multiCutterRecipe
   );
   recipeRegistry.register('stamp', async () =>
     (await import('./lib/generation/recipes/stampRecipe')).stampRecipe
@@ -278,6 +281,8 @@
   const session = projectSession;
   let alive = true;
   let unavailableReason: string | null = null;
+  // Series edits remain available when the current document has no valid geometry yet.
+  $: batchAvailable = Boolean($model) || (unavailableReason === null && ($session?.kind === 'cutter' || $session?.kind === 'multi-cutter'));
   let viewport: ViewportPreferences = { showGrid: true, showAxes: false, showWallThickness: false };
   type Confirmation = { title: string; description: string; choices: readonly { id: string; label: string; destructive?: boolean }[]; resolve: (choice: string) => void };
   let confirmation: Confirmation | null = null;
@@ -783,7 +788,7 @@
     const epoch = session.getSessionEpoch();
     const geometry = () => {
       const document = session.getDocument();
-      return JSON.stringify([document?.kind, document?.sketch, document?.parameters, document?.schemaVersion === 2 ? document.bridges : []]);
+      return JSON.stringify([document?.kind, document?.sketch, document?.parameters, document && document.schemaVersion !== 1 ? document.bridges : [], document?.schemaVersion === 3 ? document.layout : null]);
     };
     const key = geometry();
     return () => alive && revision === sourceRevision
@@ -850,7 +855,7 @@
     const epoch = session.getSessionEpoch();
     const geometry = () => {
       const document = session.getDocument();
-      return JSON.stringify([document?.kind, document?.sketch, document?.parameters, document?.schemaVersion === 2 ? document.bridges : []]);
+      return JSON.stringify([document?.kind, document?.sketch, document?.parameters, document && document.schemaVersion !== 1 ? document.bridges : [], document?.schemaVersion === 3 ? document.layout : null]);
     };
     const key = geometry();
     return () => alive && revision === sourceRevision
@@ -1113,6 +1118,8 @@
             <span class="nav-label" aria-hidden="true">Preview</span>
           </button>
 
+        {/if}
+        {#if batchAvailable}
           <button
             class="category-btn"
             class:active={activeCategory === 'batch'}
@@ -1126,6 +1133,8 @@
             </svg>
             <span class="nav-label" aria-hidden="true">Batch</span>
           </button>
+        {/if}
+        {#if $model}
 
           <button
             class="category-btn"
@@ -1252,7 +1261,7 @@
           {:catch}
             <div class="panel-load-error" role="alert">The sketch workshop could not be loaded.</div>
           {/await}
-          {#if unavailableReason === null && $session?.kind === 'cutter'}
+          {#if unavailableReason === null && ($session?.kind === 'cutter' || $session?.kind === 'multi-cutter')}
             {#await import('./lib/components/ui/BridgeWorkspace.svelte')}
               <div class="panel-loading" role="status">Loading bridge editor…</div>
             {:then component}
@@ -1353,7 +1362,7 @@
             <div class="panel-load-error" role="alert">Printability details could not be loaded.</div>
           {/await}
 
-        {:else if activeCategory === 'batch' && $model}
+        {:else if activeCategory === 'batch' && batchAvailable}
           {#await import('./lib/components/ui/BatchMode.svelte')}
             <div class="panel-loading" role="status">Loading batch mode…</div>
           {:then component}
@@ -1361,6 +1370,9 @@
               currentSvg={svgCache}
               currentParams={$params}
               buildPlateSize={$params.buildPlateSize}
+              currentDocument={$session}
+              onUpdateSeries={layout => { if (alive && unavailableReason === null) session.updateSeries(layout); }}
+              onSingleCutter={() => { if (alive && unavailableReason === null) session.changeKind('cutter'); }}
               captureOperationValidity={captureBatchOperationValidity}
               onBatchCreated={handleContextualBatchCreated}
               on:batchCreated={handleBatchCreated}
