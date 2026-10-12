@@ -54,13 +54,13 @@
       class:disabled={!$canUndo}
       on:click={handleUndo}
       disabled={!$canUndo}
-      title="Undo (Ctrl+Z)"
+      title="Annuler (Ctrl+Z)"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 7v6h6" />
         <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13" />
       </svg>
-      <span class="btn-label">Undo</span>
+      <span class="btn-label">Annuler</span>
     </button>
 
     <button
@@ -68,20 +68,20 @@
       class:disabled={!$canRedo}
       on:click={handleRedo}
       disabled={!$canRedo}
-      title="Redo (Ctrl+Shift+Z)"
+      title="Rétablir (Ctrl+Maj+Z)"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 7v6h-6" />
         <path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7" />
       </svg>
-      <span class="btn-label">Redo</span>
+      <span class="btn-label">Rétablir</span>
     </button>
 
     <button
       class="control-btn info-btn"
       on:click={() => showHistory = !showHistory}
-      title="Show history"
-      aria-label={`History, ${historyLength} states`}
+      title="Afficher l’historique"
+      aria-label={`Historique, ${historyLength} états`}
       aria-expanded={showHistory}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -94,7 +94,7 @@
 
   {#if showHistory && historyLength > 0}
     <div class="history-list">
-      <h4>History</h4>
+      <h4>Historique</h4>
       <div class="history-items">
         {#each $historyStore as state, index}
           <div
@@ -253,6 +253,11 @@
     margin-top: var(--spacing-1);
     color: var(--text-muted);
     font-size: var(--font-size-xs);
+  }
+
+  @media (max-width: 768px) {
+    /* A sticky toolbar covered the sketch after scrollIntoView on narrow screens. */
+    .history-panel { position: static; }
   }
 
   @media (max-width: 480px) {

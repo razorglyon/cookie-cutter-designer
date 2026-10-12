@@ -14,15 +14,15 @@
 </script>
 
 <div class="boolean-operations">
-  <h3>Boolean Operations</h3>
-  <p class="description">Combine multiple shapes or cut out areas</p>
+  <h3>Opérations booléennes</h3>
+  <p class="description">Combinez des formes ou découpez des zones</p>
 
   <div class="operations-grid">
     <button
       class="operation-btn"
       class:active={selectedOperation === 'union'}
       on:click={() => handleOperation('union')}
-      title="Combine shapes together"
+      title="Fusionner les formes"
     >
       <svg width="40" height="40" viewBox="0 0 40 40">
         <circle cx="15" cy="20" r="10" fill="currentColor" opacity="0.5" />
@@ -35,20 +35,20 @@
       class="operation-btn"
       class:active={selectedOperation === 'subtract'}
       on:click={() => handleOperation('subtract')}
-      title="Subtract one shape from another"
+      title="Soustraire une forme d’une autre"
     >
       <svg width="40" height="40" viewBox="0 0 40 40">
         <circle cx="15" cy="20" r="10" fill="currentColor" />
         <circle cx="25" cy="20" r="10" fill="white" stroke="currentColor" stroke-width="1" />
       </svg>
-      <span>Subtract</span>
+      <span>Soustraction</span>
     </button>
 
     <button
       class="operation-btn"
       class:active={selectedOperation === 'intersect'}
       on:click={() => handleOperation('intersect')}
-      title="Keep only overlapping areas"
+      title="Conserver uniquement les zones communes"
     >
       <svg width="40" height="40" viewBox="0 0 40 40">
         <defs>
@@ -58,12 +58,12 @@
         </defs>
         <circle cx="15" cy="20" r="10" fill="currentColor" clip-path="url(#intersect-clip)" />
       </svg>
-      <span>Intersect</span>
+      <span>Intersection</span>
     </button>
   </div>
 
   <div class="upload-secondary">
-    <p>Upload a second shape to combine</p>
+    <p>Importez une deuxième forme à combiner</p>
     <input
       type="file"
       accept=".svg,image/svg+xml"

@@ -68,11 +68,11 @@
 
 <div class="pattern-generator">
   <div class="panel-header">
-    <h3>🔄 Pattern Generator</h3>
+    <h3>🔄 Générateur de motifs</h3>
     <button
       class="toggle-btn"
       on:click={() => showPanel = !showPanel}
-      aria-label={showPanel ? 'Collapse Pattern Generator' : 'Expand Pattern Generator'}
+      aria-label={showPanel ? 'Réduire le générateur de motifs' : 'Développer le générateur de motifs'}
       aria-expanded={showPanel}
       aria-controls="pattern-generator-content"
     >
@@ -82,9 +82,9 @@
 
   {#if showPanel}
     <div class="panel-content" id="pattern-generator-content">
-      <!-- Pattern Type Selection -->
+      <!-- Pattern type selection -->
       <div class="preset-section">
-        <h4>Pattern Type</h4>
+        <h4>Type de motif</h4>
         <div class="preset-grid">
           {#each presets as preset}
             <button
@@ -99,32 +99,32 @@
         </div>
       </div>
 
-      <!-- Base Shape Selection -->
+      <!-- Base shape selection -->
       <div class="shape-section">
-        <h4>Base Shape</h4>
+        <h4>Forme de base</h4>
         <div class="shape-buttons">
           <button class="shape-btn" on:click={() => changeBaseShape('circle')}>
-            ⚪ Circle
+            ⚪ Cercle
           </button>
           <button class="shape-btn" on:click={() => changeBaseShape('square')}>
-            ⬜ Square
+            ⬜ Carré
           </button>
           <button class="shape-btn" on:click={() => changeBaseShape('star')}>
-            ⭐ Star
+            ⭐ Étoile
           </button>
           <button class="shape-btn" on:click={() => changeBaseShape('heart')}>
-            ❤️ Heart
+            ❤️ Cœur
           </button>
         </div>
       </div>
 
       <!-- Pattern Controls -->
       <div class="controls-section">
-        <h4>Pattern Settings</h4>
+        <h4>Réglages du motif</h4>
 
         <div class="control-group">
           <label for="count">
-            Count: {config.count}
+            Nombre : {config.count}
           </label>
           <input
             id="count"
@@ -138,7 +138,7 @@
 
         <div class="control-group">
           <label for="spacing">
-            Spacing: {config.spacing.toFixed(1)}
+            Espacement : {config.spacing.toFixed(1)}
           </label>
           <input
             id="spacing"
@@ -152,7 +152,7 @@
 
         <div class="control-group">
           <label for="scale">
-            Scale: {config.scale.toFixed(2)}
+            Échelle : {config.scale.toFixed(2)}
           </label>
           <input
             id="scale"
@@ -167,7 +167,7 @@
         {#if selectedPreset.type === 'radial' || selectedPreset.type === 'spiral'}
           <div class="control-group">
             <label for="rotation">
-              Rotation: {config.rotation}°
+              Rotation : {config.rotation}°
             </label>
             <input
               id="rotation"
@@ -183,7 +183,7 @@
 
       <!-- Preview -->
       <div class="preview-section">
-        <h4>Preview</h4>
+        <h4>Aperçu</h4>
         <div class="preview-container">
           {@html previewSVG}
         </div>
@@ -192,7 +192,7 @@
       <!-- Apply Button -->
       <div class="action-section">
         <button class="apply-btn" on:click={applyPattern}>
-          Apply Pattern
+          Appliquer le motif
         </button>
       </div>
     </div>

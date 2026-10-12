@@ -32,7 +32,7 @@ it('restores grid, axes and heatmap without user notification; emits only user e
     expect(mesh.geometry).not.toBe(geometry);
     expect(onViewportChange).not.toHaveBeenCalled();
     const cloneDispose = vi.spyOn(mesh.geometry, 'dispose');
-    const grid = document.querySelector<HTMLInputElement>('input[aria-label="Show grid"]');
+    const grid = document.querySelector<HTMLInputElement>('input[aria-label="Afficher la grille"]');
     expect(grid).not.toBeNull(); grid!.checked = true; grid!.dispatchEvent(new Event('change', { bubbles: true }));
     await tick();
     expect(onViewportChange).toHaveBeenCalledExactlyOnceWith({ showGrid: true, showAxes: true, showWallThickness: true });
@@ -55,17 +55,17 @@ it('read-only preview retains selection, two contours and heatmap when deletion 
   const app = mount(Viewer, { target, props: { mesh, allowObjectDeletion: false, viewport: { showGrid: true, showAxes: false, showWallThickness: true } }, events: { deleteObject: deleted } });
   try {
     await vi.waitFor(() => expect(target.querySelector('canvas')).not.toBeNull());
-    target.querySelector<HTMLButtonElement>('[aria-label="Enter selection mode"]')!.click(); await tick();
+    target.querySelector<HTMLButtonElement>('[aria-label="Activer le mode sélection"]')!.click(); await tick();
     target.querySelector('canvas')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); await tick();
-    const button = target.querySelector<HTMLButtonElement>('[aria-label="Delete selected element"]')!;
+    const button = target.querySelector<HTMLButtonElement>('[aria-label="Supprimer l’élément sélectionné"]')!;
     expect(button).not.toBeNull(); expect(button.disabled).toBe(true);
-    expect(target.querySelector('#viewer-deletion-reason')?.textContent).toContain('read-only');
+    expect(target.querySelector('#viewer-deletion-reason')?.textContent).toContain('lecture seule');
     expect(first.geometry).not.toBe(geometry);
     const displayed = first.geometry, cloneDisposed = vi.spyOn(displayed, 'dispose');
     button.dispatchEvent(new MouseEvent('click', { bubbles: true })); await tick();
     expect(deleted).not.toHaveBeenCalled(); expect(mesh.children).toHaveLength(2);
     expect(first.geometry).toBe(displayed); expect(cloneDisposed).not.toHaveBeenCalled(); expect(disposed).not.toHaveBeenCalled();
-    expect(target.querySelector('[aria-label="Delete selected element"]')).toBe(button);
+    expect(target.querySelector('[aria-label="Supprimer l’élément sélectionné"]')).toBe(button);
     await unmount(app); expect(cloneDisposed).toHaveBeenCalledTimes(1); expect(first.geometry).toBe(geometry);
   } finally { if (target.childNodes.length) await unmount(app); target.remove(); intersect.mockRestore(); geometry.dispose(); material.dispose(); }
 });

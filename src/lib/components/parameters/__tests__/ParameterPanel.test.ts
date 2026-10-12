@@ -57,7 +57,7 @@ describe('ParameterPanel découpé par sections', () => {
     expect(document.querySelector('details[data-section="handle"]')).not.toBeNull();
     expect(document.querySelector('details[data-section="advanced"]')).not.toBeNull();
 
-    const modeGroup = document.querySelector('[role="group"][aria-label="Design type"]');
+    const modeGroup = document.querySelector('[role="group"][aria-label="Type de création"]');
     expect(modeGroup?.getAttribute('aria-describedby')).toBe('mode-hint');
     expect(document.getElementById('mode-hint')).not.toBeNull();
 
@@ -152,7 +152,7 @@ describe('ParameterPanel découpé par sections', () => {
     parameterIssue.set({ message: 'The mode parameter is invalid.', field: 'mode' });
     renderPanel();
 
-    const modeGroup = document.querySelector('[role="group"][aria-label="Design type"]');
+    const modeGroup = document.querySelector('[role="group"][aria-label="Type de création"]');
     expect(modeGroup?.classList.contains('invalid')).toBe(true);
     expect(modeGroup?.getAttribute('aria-describedby')?.split(/\s+/)).toEqual([
       'mode-hint',

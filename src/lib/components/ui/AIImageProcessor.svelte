@@ -108,11 +108,11 @@
 
 <div class="ai-processor">
   <div class="panel-header">
-    <h3>🤖 AI Image Processor</h3>
+    <h3>🤖 Traitement d’images par IA</h3>
     <button
       class="toggle-btn"
       on:click={() => showPanel = !showPanel}
-      aria-label={showPanel ? 'Collapse AI Image Processor' : 'Expand AI Image Processor'}
+      aria-label={showPanel ? 'Replier le traitement d’images par IA' : 'Déplier le traitement d’images par IA'}
       aria-expanded={showPanel}
       aria-controls="ai-image-processor-content"
     >
@@ -123,8 +123,8 @@
   {#if showPanel}
     <div class="panel-content" id="ai-image-processor-content">
       <p class="description">
-        Enhance your images with AI before converting to cookie cutters.
-        Perfect for photos and complex graphics.
+        Améliorez vos images avec l’IA avant de les convertir en emporte-pièces.
+        Idéal pour les photos et les illustrations complexes.
       </p>
 
       <div class="upload-section">
@@ -136,7 +136,7 @@
             style="display: none;"
           />
           <div class="upload-button">
-            📁 {selectedFile ? selectedFile.name : 'Select Image'}
+            📁 {selectedFile ? selectedFile.name : 'Choisir une image'}
           </div>
         </label>
       </div>
@@ -144,52 +144,52 @@
       {#if selectedFile}
         <div class="preset-selector">
           <label>
-            <span>Processing Preset:</span>
+            <span>Préréglage de traitement :</span>
             <select bind:value={selectedPreset}>
-              <option value="simple">Simple (Best for logos)</option>
-              <option value="detailed">Detailed (Best for photos)</option>
-              <option value="outline">Outline (Edge detection)</option>
-              <option value="clean">Clean (Black & white)</option>
+              <option value="simple">Simple (idéal pour les logos)</option>
+              <option value="detailed">Détaillé (idéal pour les photos)</option>
+              <option value="outline">Contours (détection des bords)</option>
+              <option value="clean">Épuré (noir et blanc)</option>
             </select>
           </label>
         </div>
 
         <div class="advanced-options">
-          <h4>Advanced Options:</h4>
+          <h4>Options avancées :</h4>
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={options.enhanceContrast} />
-            <span>Enhance Contrast</span>
+            <span>Améliorer le contraste</span>
           </label>
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={options.removeBackground} />
-            <span>Remove Background</span>
+            <span>Supprimer l’arrière-plan</span>
           </label>
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={options.edgeDetection} />
-            <span>Edge Detection</span>
+            <span>Détection des bords</span>
           </label>
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={options.denoise} />
-            <span>Denoise</span>
+            <span>Réduire le bruit</span>
           </label>
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={options.autoThreshold} />
-            <span>Auto Threshold</span>
+            <span>Seuil automatique</span>
           </label>
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={options.simplifyColors} />
-            <span>Simplify Colors</span>
+            <span>Simplifier les couleurs</span>
           </label>
 
           {#if options.simplifyColors}
             <label>
-              <span>Max Colors: {options.maxColors || 8}</span>
+              <span>Nombre maximal de couleurs : {options.maxColors || 8}</span>
               <input
                 type="range"
                 bind:value={options.maxColors}
@@ -206,17 +206,17 @@
           on:click={processImage}
           disabled={processing}
         >
-          {processing ? '⏳ Processing...' : '🚀 Process Image'}
+          {processing ? '⏳ Traitement…' : '🚀 Traiter l’image'}
         </button>
       {/if}
 
       {#if result}
         <div class="results">
-          <h4>Processing Results:</h4>
+          <h4>Résultats du traitement :</h4>
 
           <div class="preview">
             <div class="preview-item">
-              <strong>Processed Image:</strong>
+              <strong>Image traitée :</strong>
               <canvas
                 use:renderPreview={result}
                 style="max-width: 100%; border: 1px solid #e2e8f0; border-radius: 4px;"
@@ -225,22 +225,22 @@
           </div>
 
           <div class="stats">
-            <h4>Statistics:</h4>
+            <h4>Statistiques :</h4>
             <div class="stat-grid">
               <div class="stat-item">
-                <span>Brightness:</span>
+                <span>Luminosité :</span>
                 <strong>{(result.stats.brightness * 100).toFixed(1)}%</strong>
               </div>
               <div class="stat-item">
-                <span>Contrast:</span>
+                <span>Contraste :</span>
                 <strong>{(result.stats.contrast * 100).toFixed(1)}%</strong>
               </div>
               <div class="stat-item">
-                <span>Colors:</span>
+                <span>Couleurs :</span>
                 <strong>{result.stats.colorCount}</strong>
               </div>
               <div class="stat-item">
-                <span>Edge Strength:</span>
+                <span>Intensité des bords :</span>
                 <strong>{(result.stats.edgeStrength * 100).toFixed(1)}%</strong>
               </div>
             </div>
@@ -248,10 +248,10 @@
 
           <div class="actions">
             <button class="use-btn" on:click={useProcessedImage}>
-              ✅ Use This Image
+              ✅ Utiliser cette image
             </button>
             <button class="reset-btn" on:click={resetProcessor}>
-              🔄 Start Over
+              🔄 Recommencer
             </button>
           </div>
         </div>

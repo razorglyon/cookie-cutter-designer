@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Mesh, Group } from 'three';
   import {
     exportToOBJ,
@@ -17,13 +18,16 @@
   export let unavailableReason: string | null = null;
 
   let showPanel = false;
+  onMount(() => {
+    if (window.matchMedia?.('(max-width: 768px)').matches) showPanel = true;
+  });
   let selectedFormat: ExportFormat = 'stl';
   let binaryFormat = true;
 
   const formats = [
-    { id: 'stl' as ExportFormat, name: 'STL', icon: '📦', description: 'Validated mesh in slicer-compatible Z-up coordinates' },
-    { id: 'obj' as ExportFormat, name: 'OBJ', icon: '🔷', description: 'Validated Wavefront mesh for compatible 3D tools' },
-    { id: '3mf' as ExportFormat, name: '3MF', icon: '📐', description: 'Standards-compliant package with millimeter units and metadata' }
+    { id: 'stl' as ExportFormat, name: 'STL', icon: '📦', description: 'Maillage validé, axe Z vertical, compatible avec les logiciels de découpe' },
+    { id: 'obj' as ExportFormat, name: 'OBJ', icon: '🔷', description: 'Maillage Wavefront validé pour les outils 3D compatibles' },
+    { id: '3mf' as ExportFormat, name: '3MF', icon: '📐', description: 'Fichier conforme aux normes, en millimètres, avec métadonnées' }
   ];
 
   function handleExport() {
@@ -56,8 +60,10 @@
 
 <div class="advanced-export">
   <div class="panel-header">
-    <h3>💾 Advanced Export</h3>
-    <button class="toggle-btn" on:click={() => showPanel = !showPanel}>
+    <h3>💾 Export avancé</h3>
+    <button type="button" class="toggle-btn" aria-expanded={showPanel}
+      aria-label={showPanel ? 'Masquer les options d’export' : 'Afficher les options d’export'}
+      on:click={() => showPanel = !showPanel}>
       {showPanel ? '▼' : '▶'}
     </button>
   </div>
@@ -66,7 +72,7 @@
     <div class="panel-content">
       <!-- Format Selection -->
       <div class="format-section">
-        <h4>Export Format</h4>
+        <h4>Format d’export</h4>
         <div class="format-grid">
           {#each formats as format}
             <button
@@ -87,19 +93,19 @@
       <!-- Format-specific Options -->
       {#if selectedFormat === 'stl'}
         <div class="options-section">
-          <h4>STL Options</h4>
+          <h4>Options STL</h4>
           <label class="checkbox-option">
             <input type="checkbox" bind:checked={binaryFormat} />
-            <span>Binary Format (smaller file size)</span>
+            <span>Format binaire (fichier plus léger)</span>
           </label>
           <p class="format-note">
-            STL files are unitless; this application exports dimensions for slicers that interpret them as millimeters.
+            Les fichiers STL ne définissent pas d’unité ; les dimensions exportées sont destinées aux logiciels de découpe qui les interprètent en millimètres.
           </p>
         </div>
       {/if}
 
       <p class="slicer-note">
-        Generate printer-specific G-code with a trusted slicer such as OrcaSlicer, PrusaSlicer, Bambu Studio, or Cura.
+        Générez le G-code adapté à votre imprimante avec un logiciel de découpe fiable comme OrcaSlicer, PrusaSlicer, Bambu Studio ou Cura.
       </p>
 
       <!-- Export Info -->
@@ -109,11 +115,11 @@
           <span class="info-value">{formats.find(f => f.id === selectedFormat)?.name}</span>
         </div>
         <div class="info-row">
-          <span class="info-label">Estimated Size:</span>
+          <span class="info-label">Taille estimée :</span>
           <span class="info-value">{estimatedSize}</span>
         </div>
         <div class="info-row">
-          <span class="info-label">Filename:</span>
+          <span class="info-label">Nom du fichier :</span>
           <span class="info-value filename-preview">
             {filename.replace(/\.[^/.]+$/, '')}.{selectedFormat}
           </span>
@@ -127,7 +133,7 @@
       <button class="export-btn" on:click={handleExport} disabled={!mesh || unavailableReason !== null}
         aria-describedby={unavailableReason ? 'geometry-export-reason' : undefined}>
         <span class="btn-icon">💾</span>
-        <span>Export as {selectedFormat.toUpperCase()}</span>
+        <span>Exporter en {selectedFormat.toUpperCase()}</span>
       </button>
     </div>
   {/if}
@@ -135,7 +141,8 @@
 
 <style>
   .advanced-export {
-    background: white;
+    background: var(--surface-card);
+    color: var(--text-primary);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -151,14 +158,14 @@
   h3 {
     margin: 0;
     font-size: 1rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
   h4 {
     margin: 0 0 0.75rem;
     font-size: 0.9rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     font-weight: 600;
   }
 
@@ -171,7 +178,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    color: #a0aec0;
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 0.8rem;
   }
@@ -185,7 +192,7 @@
   .format-section,
   .options-section {
     padding: 1rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -200,8 +207,8 @@
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    background: white;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    border: 2px solid var(--border-default);
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
@@ -209,13 +216,13 @@
   }
 
   .format-card:hover {
-    border-color: #4299e1;
+    border-color: var(--color-primary-500);
     transform: translateX(4px);
   }
 
   .format-card.selected {
-    border-color: #4299e1;
-    background: #ebf8ff;
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
   }
 
   .format-icon {
@@ -230,13 +237,13 @@
   .format-name {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #2d3748;
+    color: var(--text-primary);
     margin-bottom: 0.25rem;
   }
 
   .format-description {
     font-size: 0.8rem;
-    color: #718096;
+    color: var(--text-secondary);
   }
 
   .checkbox-option {
@@ -244,7 +251,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem;
-    background: white;
+    background: var(--surface-input);
     border-radius: 6px;
     margin-bottom: 0.5rem;
     cursor: pointer;
@@ -262,14 +269,14 @@
 
   .checkbox-option span {
     font-size: 0.9rem;
-    color: #4a5568;
+    color: var(--text-secondary);
   }
 
 
   .format-note,
   .slicer-note {
     margin: 0.75rem 0 0;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 0.8rem;
     line-height: 1.45;
   }
@@ -283,7 +290,7 @@
 
   .export-info {
     padding: 1rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -298,18 +305,18 @@
 
   .info-label {
     font-size: 0.85rem;
-    color: #718096;
+    color: var(--text-secondary);
   }
 
   .info-value {
     font-size: 0.85rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
   .filename-preview {
     font-family: monospace;
-    background: white;
+    background: var(--surface-input);
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     font-size: 0.8rem;
@@ -318,8 +325,8 @@
   .export-btn {
     width: 100%;
     padding: 1rem;
-    background: #48bb78;
-    color: white;
+    background: var(--color-secondary-700);
+    color: var(--text-on-brand);
     border: none;
     border-radius: 6px;
     font-size: 1rem;
@@ -333,15 +340,22 @@
   }
 
   .export-btn:hover:not(:disabled) {
-    background: #38a169;
+    background: var(--color-secondary-800);
   }
 
   .export-btn:disabled {
-    background: #cbd5e0;
+    background: var(--surface-muted);
+    color: var(--text-muted);
     cursor: not-allowed;
   }
 
   .btn-icon {
     font-size: 1.2rem;
+  }
+  @media (max-width: 768px) {
+    .toggle-btn { width: 44px; height: 44px; color: var(--text-primary); font-size: 1rem; }
+    .format-card { min-height: 44px; min-width: 0; }
+    .format-info, .info-row { min-width: 0; overflow-wrap: anywhere; }
+    .info-row { gap: 0.5rem; }
   }
 </style>

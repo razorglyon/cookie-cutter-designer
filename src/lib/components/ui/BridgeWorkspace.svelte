@@ -134,7 +134,7 @@
   {#if bridges.length > 1}
     <button type="button" disabled={busy} on:click={() => { if (document) void publish(document, session.getSessionEpoch(), []); }}>Supprimer tous les ponts</button>
   {/if}
-  <p class="notice">Glisse une extrémité pour la déplacer, ou utilise les flèches au clavier. Les boutons Undo/Redo au-dessus annulent chaque modification.</p>
+  <p class="notice">Glisse une extrémité pour la déplacer, ou utilise les flèches au clavier. Les boutons Annuler/Rétablir au-dessus permettent de revenir sur chaque modification.</p>
   {#if busy}<p role="status">Vérification de l’impression du pont…</p>{/if}
   {#if message && !start}<p role="alert">{message}</p>{/if}
 </section>

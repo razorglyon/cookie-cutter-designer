@@ -60,25 +60,25 @@ it('lists recovery on startup without auto-restoring or writing', async () => {
   const { session, put, expected } = setup(); await listed();
   expect(document.body.textContent).toContain(expected.document.name);
   expect(session.getDocument()).toBeNull(); expect(put).not.toHaveBeenCalled();
-  expect(document.querySelectorAll('[aria-label="Recovery drafts"]')).toHaveLength(1);
+  expect(document.querySelectorAll('[aria-label="Brouillons de récupération"]')).toHaveLength(1);
 });
 it('keeps empty startup unobstructed and exposes the empty recovery list from Local projects', async () => {
   const { session, put } = setup(null, { empty: true }); await tick(); await tick();
-  expect(document.querySelector('[aria-label="Recovery drafts"]')).toBeNull(); expect(session.getDocument()).toBeNull(); expect(put).not.toHaveBeenCalled();
-  click('Local projects'); await vi.waitFor(() => expect(document.body.textContent).toContain('No recovery drafts in this browser'));
-  expect(button('Refresh recovery drafts').disabled).toBe(false);
+  expect(document.querySelector('[aria-label="Brouillons de récupération"]')).toBeNull(); expect(session.getDocument()).toBeNull(); expect(put).not.toHaveBeenCalled();
+  click('Projets locaux'); await vi.waitFor(() => expect(document.body.textContent).toContain('Aucun brouillon de récupération dans ce navigateur'));
+  expect(button('Actualiser les brouillons de récupération').disabled).toBe(false);
 });
 it('resumes the exact stored document through the real orchestrator as dirty, retaining library and source draft', async () => {
   const { session, expected, saved, drafts, projectPut } = setup(); const libraryBefore = JSON.stringify([...saved]); await listed(); resume().click();
   await vi.waitFor(() => expect(session.getDocument()).toEqual(expected.document)); await ready();
   expect(get(generationState).result?.document).toEqual(expected.document);
   expect(drafts.get(expected.draftId)).toEqual(expected); expect(JSON.stringify([...saved])).toBe(libraryBefore); expect(projectPut).not.toHaveBeenCalled();
-  click('Local projects'); await tick(); expect(document.body.textContent).toContain('Unsaved changes');
+  click('Projets locaux'); await tick(); expect(document.body.textContent).toContain('Modifications non enregistrées');
 });
 it('cancel resume retains document, epoch, history, generation and drafts', async () => {
   const { session, drafts, expected } = setup(fixture('Current')); await ready(); await listed();
   const doc = session.getDocument(), epoch = session.getSessionEpoch(), mesh = get(model)?.mesh, history = get(historyStore);
-  resume().click(); await prompt(); expect(document.activeElement?.getAttribute('data-choice')).toBe('cancel'); click('Cancel');
+  resume().click(); await prompt(); expect(document.activeElement?.getAttribute('data-choice')).toBe('cancel'); click('Annuler');
   await vi.waitFor(() => expect(resume().disabled).toBe(false));
   expect(session.getDocument()).toBe(doc); expect(session.getSessionEpoch()).toBe(epoch); expect(get(historyStore)).toEqual(history); expect(get(model)?.mesh).toBe(mesh); expect(drafts.get(expected.draftId)).toEqual(expected);
 });
@@ -89,7 +89,7 @@ it.each(['rename', 'viewport', 'params', 'replace', 'raster', 'open'] as const)(
   else if (change === 'viewport') session.updateViewport({ showGrid: true, showAxes: false, showWallThickness: false });
   else if (change === 'params') session.updateParameters('cutter', { totalHeight: 37 });
   else if (change === 'replace') session.replace(fixture('B'));
-  else if (change === 'open') { click('Local projects'); await vi.waitFor(() => expect(document.querySelector('button[aria-label="Open Library B"]')).not.toBeNull()); click('Open Library B'); await prompt(); click('Discard changes'); await vi.waitFor(() => expect(session.getDocument()?.id).toBe('B')); }
+  else if (change === 'open') { click('Projets locaux'); await vi.waitFor(() => expect(document.querySelector('button[aria-label="Ouvrir Library B"]')).not.toBeNull()); click('Ouvrir Library B'); await prompt(); click('Ignorer les modifications'); await vi.waitFor(() => expect(session.getDocument()?.id).toBe('B')); }
   else { const input = document.querySelector<HTMLInputElement>('input[type="file"]')!; Object.defineProperty(input, 'files', { value: [new File(['x'], 'new.png', { type: 'image/png' })] }); input.dispatchEvent(new Event('change', { bubbles: true })); await vi.waitFor(() => expect(raster.started).toHaveBeenCalledTimes(1)); }
   const latest = session.getDocument(), epoch = session.getSessionEpoch(); gate.resolve();
   await vi.waitFor(() => expect(resume().disabled).toBe(false));
@@ -98,7 +98,7 @@ it.each(['rename', 'viewport', 'params', 'replace', 'raster', 'open'] as const)(
 it('refuses a changed record rather than restoring a newer undisplayed version and refreshes', async () => {
   const { session, expected, drafts } = setup(); await listed();
   drafts.set(expected.draftId, parseProjectRecoveryEnvelope({ ...expected, savedAt: '2026-10-10T12:00:00Z', document: fixture('Changed draft') })); resume().click();
-  await vi.waitFor(() => expect(document.body.textContent).toContain('changed')); expect(session.getDocument()).toBeNull();
+  await vi.waitFor(() => expect(document.body.textContent).toContain('a changé')); expect(session.getDocument()).toBeNull();
   await vi.waitFor(() => expect(resume().getAttribute('aria-label')).toContain('Changed draft'));
 });
 it('locks resume before the next Svelte tick', async () => {
@@ -106,25 +106,25 @@ it('locks resume before the next Svelte tick', async () => {
   await vi.waitFor(() => expect(resume().disabled).toBe(false));
 });
 it('the synchronous handler rejects a stale enabled resume button once the workflow is busy', async () => {
-  const { read } = setup(fixture('Current')); await listed(); const stale = resume(); click('Start a new design'); stale.click();
-  expect(read).not.toHaveBeenCalled(); await prompt(); expect(resume().disabled).toBe(true); click('Cancel'); await vi.waitFor(() => expect(resume().disabled).toBe(false));
+  const { read } = setup(fixture('Current')); await listed(); const stale = resume(); click('Créer un nouveau dessin'); stale.click();
+  expect(read).not.toHaveBeenCalled(); await prompt(); expect(resume().disabled).toBe(true); click('Annuler'); await vi.waitFor(() => expect(resume().disabled).toBe(false));
 });
 it('delete cancellation performs no mutation; confirmation deletes and focuses refresh', async () => {
-  const { drafts, deletion } = setup(); await listed(); remove().click(); await prompt(); click('Cancel');
+  const { drafts, deletion } = setup(); await listed(); remove().click(); await prompt(); click('Annuler');
   await vi.waitFor(() => expect(remove().disabled).toBe(false)); expect(deletion).not.toHaveBeenCalled(); expect(drafts.size).toBe(1);
-  remove().focus(); remove().click(); await prompt(); click('Delete draft');
-  await vi.waitFor(() => expect(drafts.size).toBe(0)); await vi.waitFor(() => expect(document.activeElement).toBe(button('Refresh recovery drafts')));
+  remove().focus(); remove().click(); await prompt(); click('Supprimer le brouillon');
+  await vi.waitFor(() => expect(drafts.size).toBe(0)); await vi.waitFor(() => expect(document.activeElement).toBe(button('Actualiser les brouillons de récupération')));
 });
 it('delete binds the displayed version through the prompt and guards double click', async () => {
   const { expected, drafts, deletion } = setup(); await listed(); const control = remove(); control.click(); control.click(); await prompt();
-  drafts.set(expected.draftId, parseProjectRecoveryEnvelope({ ...expected, document: fixture('Changed draft') })); click('Delete draft');
+  drafts.set(expected.draftId, parseProjectRecoveryEnvelope({ ...expected, document: fixture('Changed draft') })); click('Supprimer le brouillon');
   await vi.waitFor(() => expect(deletion).toHaveBeenCalledTimes(1)); expect(drafts.get(expected.draftId)?.document.name).toBe('Changed draft');
-  await vi.waitFor(() => expect(document.body.textContent).toContain('changed')); await vi.waitFor(() => expect(resume().getAttribute('aria-label')).toContain('Changed draft'));
+  await vi.waitFor(() => expect(document.body.textContent).toContain('Recovery snapshot changed or missing')); await vi.waitFor(() => expect(resume().getAttribute('aria-label')).toContain('Changed draft'));
 });
 it('unmount drains a pending accepted snapshot before storage close, without waiting 750ms', async () => {
   const gate = deferred(); const { session, put, close, drafts } = setup(null, { put: () => gate.promise }); await listed();
   session.replace(fixture('Last gesture')); const expected = JSON.parse(JSON.stringify(session.getDocument()));
-  await tick(); expect(document.body.textContent).toContain('Recovery pending'); expect(put).not.toHaveBeenCalled();
+  await tick(); expect(document.body.textContent).toContain('Récupération en attente'); expect(put).not.toHaveBeenCalled();
   await unmount(app!); app = undefined; await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(1)); expect(close).not.toHaveBeenCalled(); gate.resolve();
   await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1)); expect([...drafts.values()].some(d => JSON.stringify(d.document) === JSON.stringify(expected))).toBe(true);
 });
@@ -142,14 +142,14 @@ it.each(['get', 'dialog'] as const)('unmount cancels late %s without replacing o
 it('explicit save retains recovery drafts and independent saved-local status', async () => {
   const { expected, drafts } = setup(); await listed(); resume().click(); await ready();
   window.dispatchEvent(new Event('pagehide')); await vi.waitFor(() => expect(drafts.size).toBe(2));
-  click('Local projects'); await tick(); click('Save project'); await vi.waitFor(() => expect(document.body.textContent).toContain('Saved locally'));
-  expect(drafts.get(expected.draftId)).toEqual(expected); expect(drafts.size).toBe(2); expect(document.body.textContent).toContain('Recovery saved');
+  click('Projets locaux'); await tick(); click('Enregistrer le projet'); await vi.waitFor(() => expect(document.body.textContent).toContain('Enregistré localement'));
+  expect(drafts.get(expected.draftId)).toEqual(expected); expect(drafts.size).toBe(2); expect(document.body.textContent).toContain('Récupération enregistrée');
 });
 it('recovery storage failure keeps project export backup available and retry works', async () => {
   let fail = true; const { drafts } = setup(fixture('Current'), { put: async () => { if (fail) throw new Error('recovery disk full'); } }); await listed();
-  click('Retry recovery save'); await vi.waitFor(() => expect(document.body.textContent).toContain('recovery disk full')); click('Local projects'); await tick();
-  expect(button('Export project').disabled).toBe(false); const anchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {}); click('Export project');
-  await vi.waitFor(() => expect(anchor).toHaveBeenCalledTimes(1)); fail = false; click('Retry recovery save'); await vi.waitFor(() => expect(drafts.size).toBe(2)); anchor.mockRestore();
+  click('Réessayer l’enregistrement de récupération'); await vi.waitFor(() => expect(document.body.textContent).toContain('recovery disk full')); click('Projets locaux'); await tick();
+  expect(button('Exporter le projet').disabled).toBe(false); const anchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {}); click('Exporter le projet');
+  await vi.waitFor(() => expect(anchor).toHaveBeenCalledTimes(1)); fail = false; click('Réessayer l’enregistrement de récupération'); await vi.waitFor(() => expect(drafts.size).toBe(2)); anchor.mockRestore();
 });
 it.each(['rename', 'raster'] as const)('rejects edits and source starts during the unsaved-changes resume prompt (%s)', async change => {
   const { session, expected, drafts } = setup(fixture('Current')); await listed(); resume().click(); await prompt();
@@ -159,18 +159,18 @@ it.each(['rename', 'raster'] as const)('rejects edits and source starts during t
     Object.defineProperty(input, 'files', { value: [new File(['x'], 'latest.png', { type: 'image/png' })] });
     input.dispatchEvent(new Event('change', { bubbles: true })); await vi.waitFor(() => expect(raster.started).toHaveBeenCalledTimes(1));
   }
-  const latest = session.getDocument(), epoch = session.getSessionEpoch(); click('Discard changes');
+  const latest = session.getDocument(), epoch = session.getSessionEpoch(); click('Ignorer les modifications');
   await vi.waitFor(() => expect(resume().disabled).toBe(false)); expect(session.getDocument()).toBe(latest); expect(session.getSessionEpoch()).toBe(epoch); expect(drafts.get(expected.draftId)).toEqual(expected);
 });
 it('failed save-and-resume keeps the workflow error visible on startup and never replaces the session', async () => {
   const { session, expected, drafts } = setup(fixture('Current'), { projectPut: async () => { throw new Error('project write blocked'); } }); await listed();
-  const latest = session.getDocument(), epoch = session.getSessionEpoch(); resume().click(); await prompt(); click('Save and continue');
+  const latest = session.getDocument(), epoch = session.getSessionEpoch(); resume().click(); await prompt(); click('Enregistrer et continuer');
   await vi.waitFor(() => expect(resume().disabled).toBe(false)); expect(document.querySelector('[role="alert"]')?.textContent).toContain('project write blocked'); expect(session.getDocument()).toBe(latest); expect(session.getSessionEpoch()).toBe(epoch); expect(drafts.get(expected.draftId)).toEqual(expected);
 });
 it('read failure is local to the recovery action and refresh allows an explicit retry', async () => {
   let fail = true; const { session } = setup(null, { read: async () => { if (fail) throw new Error('recovery read blocked'); } }); await listed(); resume().click();
   await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('recovery read blocked')); expect(session.getDocument()).toBeNull(); expect(document.querySelector('.alert-error')).toBeNull();
-  fail = false; click('Refresh recovery drafts'); await vi.waitFor(() => expect(resume().disabled).toBe(false)); resume().click(); await vi.waitFor(() => expect(session.getDocument()?.name).toBe('Recovered A'));
+  fail = false; click('Actualiser les brouillons de récupération'); await vi.waitFor(() => expect(resume().disabled).toBe(false)); resume().click(); await vi.waitFor(() => expect(session.getDocument()?.name).toBe('Recovered A'));
 });
 it('hidden/pagehide flush accepted writes best-effort and removes both listeners on unmount', async () => {
   const { session, put, close } = setup(); await listed();
@@ -189,8 +189,8 @@ it('observes the latest canonical snapshot after a reentrant same-epoch edit, ne
   finally { unsubscribe(); }
 });
 it('a nonrepresentable batch suspends new captures without losing the last accepted canonical draft', async () => {
-  const { session, put, close } = setup(fixture('Current')); await ready(); session.rename('Accepted before batch'); const expected = JSON.parse(JSON.stringify(session.getDocument())); batch.mesh = new Group(); click('Batch production');
-  await vi.waitFor(() => expect(document.querySelector('.batch-mode .toggle-btn')).not.toBeNull()); document.querySelector<HTMLButtonElement>('.batch-mode .toggle-btn')!.click(); await tick(); click('+ Add Current Design'); await tick(); click('Generate Atomic Batch');
+  const { session, put, close } = setup(fixture('Current')); await ready(); session.rename('Accepted before batch'); const expected = JSON.parse(JSON.stringify(session.getDocument())); batch.mesh = new Group(); click('Production en série');
+  await vi.waitFor(() => expect(document.querySelector('.batch-mode .toggle-btn')).not.toBeNull()); document.querySelector<HTMLButtonElement>('.batch-mode .toggle-btn')!.click(); await tick(); click('+ Ajouter le dessin actuel'); await tick(); click('Générer la série complète');
   await vi.waitFor(() => expect(get(model)?.mesh).toBe(batch.mesh)); session.rename('Not representable now'); await tick();
   await unmount(app!); app = undefined; await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1)); expect(put.mock.calls.at(-1)?.[0].document).toEqual(expected);
 });

@@ -6,7 +6,7 @@
   <div class="printability-info">
     {#if $printability.warnings.length > 0}
       <div class="warnings">
-        <h4>⚠️ Warnings</h4>
+        <h4>⚠️ Avertissements</h4>
         <ul>
           {#each $printability.warnings as warning}
             <li>{warning}</li>
@@ -17,7 +17,7 @@
 
     {#if $printability.recommendations.length > 0}
       <div class="recommendations">
-        <h4>💡 Print Recommendations</h4>
+        <h4>💡 Conseils d’impression</h4>
         <ul>
           {#each $printability.recommendations as recommendation}
             <li>{recommendation}</li>
@@ -28,8 +28,8 @@
 
     {#if $printability.isValid && $printability.warnings.length === 0}
       <div class="success">
-        <h4>✅ Ready to Print</h4>
-        <p>Your cookie cutter parameters look good!</p>
+        <h4>✅ Prêt à imprimer</h4>
+        <p>Les paramètres de votre emporte-pièce semblent corrects !</p>
       </div>
     {/if}
   </div>
@@ -39,7 +39,8 @@
   .printability-info {
     margin-top: 0;
     padding: 0.75rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
+    color: var(--text-primary);
     border-radius: 8px;
   }
 
@@ -52,40 +53,40 @@
   .warnings {
     margin-bottom: 0.75rem;
     padding: 0.6rem;
-    background: #fff5f5;
-    border-left: 3px solid #fc8181;
+    background: var(--color-error-light);
+    border-left: 3px solid var(--color-error);
     border-radius: 4px;
   }
 
   .warnings h4 {
-    color: #c53030;
+    color: var(--text-error);
   }
 
   .recommendations {
     padding: 0.6rem;
-    background: #f0fff4;
-    border-left: 3px solid #68d391;
+    background: var(--surface-success);
+    border-left: 3px solid var(--color-success);
     border-radius: 4px;
   }
 
   .recommendations h4 {
-    color: #2f855a;
+    color: var(--text-success);
   }
 
   .success {
     padding: 0.6rem;
-    background: #ebf8ff;
-    border-left: 3px solid #4299e1;
+    background: var(--surface-callout);
+    border-left: 3px solid var(--color-primary-500);
     border-radius: 4px;
   }
 
   .success h4 {
-    color: #2c5282;
+    color: var(--text-primary);
   }
 
   .success p {
     margin: 0;
-    color: #2d3748;
+    color: var(--text-primary);
     font-size: 0.85rem;
   }
 
@@ -98,15 +99,15 @@
   li {
     margin: 0.35rem 0;
     font-size: 0.8rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     line-height: 1.4;
   }
 
   .warnings li {
-    color: #742a2a;
+    color: var(--text-error);
   }
 
   .recommendations li {
-    color: #22543d;
+    color: var(--text-success);
   }
 </style>

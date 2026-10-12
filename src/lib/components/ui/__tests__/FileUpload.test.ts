@@ -13,7 +13,7 @@ function setup() {
 it('advertises all supported MIME types/extensions without multiple selection', () => {
   const { input, zone } = setup();
   expect(input.accept).toContain('image/webp'); expect(input.accept).toContain('.jpeg'); expect(input.multiple).toBe(false);
-  expect(zone.getAttribute('aria-label')).toBe('Import image');
+  expect(zone.getAttribute('aria-label')).toBe('Importer une image');
 });
 it('passes invalid types through to owner validation, never a browser alert', () => {
   const { input, upload } = setup(); const file = new File(['x'], 'image.png', { type: 'application/pdf' });

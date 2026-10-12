@@ -21,7 +21,7 @@
   }
 
   function removeLayer(id: string) {
-    if (confirm('Delete this layer?')) {
+    if (confirm('Supprimer ce calque ?')) {
       dispatch('removeLayer', id);
     }
   }
@@ -90,15 +90,15 @@
 
 <div class="layer-manager">
   <div class="header">
-    <h3>Layers</h3>
+    <h3>Calques</h3>
     <div class="add-buttons">
-      <button class="add-btn cutter" on:click={() => addNewLayer('cutter')} title="Add Cutter Layer">
+      <button class="add-btn cutter" on:click={() => addNewLayer('cutter')} title="Ajouter un calque de découpe">
         ✂️
       </button>
-      <button class="add-btn stamp" on:click={() => addNewLayer('stamp')} title="Add Stamp Layer">
+      <button class="add-btn stamp" on:click={() => addNewLayer('stamp')} title="Ajouter un calque de tampon">
         🔖
       </button>
-      <button class="add-btn emboss" on:click={() => addNewLayer('emboss')} title="Add Emboss Layer">
+      <button class="add-btn emboss" on:click={() => addNewLayer('emboss')} title="Ajouter un calque de gravure">
         ⚡
       </button>
     </div>
@@ -107,8 +107,8 @@
   <div class="layers-list">
     {#if layers.length === 0}
       <div class="empty-state">
-        <p>No layers yet</p>
-        <span>Add a layer to start designing</span>
+        <p>Aucun calque pour le moment</p>
+        <span>Ajoutez un calque pour commencer</span>
       </div>
     {:else}
       {#each layers as layer (layer.id)}
@@ -129,7 +129,7 @@
             class="visibility-btn"
             class:visible={layer.visible}
             on:click|stopPropagation={() => toggleLayerVisibility(layer.id)}
-            title={layer.visible ? 'Hide layer' : 'Show layer'}
+            title={layer.visible ? 'Masquer le calque' : 'Afficher le calque'}
           >
             {layer.visible ? '👁️' : '👁️‍🗨️'}
           </button>
@@ -143,9 +143,9 @@
               value={layer.name}
               on:click|stopPropagation
               on:input={(e) => handleLayerUpdate({ ...layer, name: e.currentTarget.value })}
-              placeholder="Layer name"
+              placeholder="Nom du calque"
             />
-            <span class="layer-type">{layer.type}</span>
+            <span class="layer-type">{layer.type === 'cutter' ? 'Découpe' : layer.type === 'stamp' ? 'Tampon' : 'Gravure'}</span>
           </div>
 
           {#if layer.type !== 'cutter'}
@@ -158,14 +158,14 @@
               step="0.5"
               on:click|stopPropagation
               on:input={(e) => handleLayerUpdate({ ...layer, depth: parseFloat(e.currentTarget.value) })}
-              title="Depth (mm)"
+              title="Profondeur (mm)"
             />
           {/if}
 
           <button
             class="delete-btn"
             on:click|stopPropagation={() => removeLayer(layer.id)}
-            title="Delete layer"
+            title="Supprimer le calque"
           >
             🗑️
           </button>
@@ -176,10 +176,10 @@
 
   <div class="layer-info-panel">
     <p class="hint">
-      💡 Drag layers to reorder<br/>
-      ✂️ Cutter: Main cutting shape<br/>
-      🔖 Stamp: Raised design<br/>
-      ⚡ Emboss: Indented design
+      💡 Glissez les calques pour les réorganiser<br/>
+      ✂️ Découpe : forme principale<br/>
+      🔖 Tampon : motif en relief<br/>
+      ⚡ Gravure : motif en creux
     </p>
   </div>
 </div>

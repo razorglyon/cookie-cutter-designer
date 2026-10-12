@@ -29,7 +29,7 @@ describe('App UX states', () => {
       expect(document.documentElement.classList.contains('dark-mode')).toBe(true);
     });
 
-    const themeButton = document.querySelector<HTMLButtonElement>('button[aria-label="Use light mode"]');
+    const themeButton = document.querySelector<HTMLButtonElement>('button[aria-label="Activer le thème clair"]');
     expect(themeButton?.getAttribute('aria-pressed')).toBe('true');
     themeButton?.click();
 
@@ -37,21 +37,21 @@ describe('App UX states', () => {
     expect(localStorage.getItem('cookie-cutter-theme')).toBe('light');
   });
 
-  it('opens Shape Library directly and exposes its active navigation state', async () => {
+  it('opens Bibliothèque de formes directly and exposes its active navigation state', async () => {
     renderApp();
 
-    const navigationButton = document.querySelector<HTMLButtonElement>('button[title="Shape Library"]');
+    const navigationButton = document.querySelector<HTMLButtonElement>('button[title="Bibliothèque de formes"]');
     navigationButton?.click();
 
     await vi.waitFor(() => {
-      expect(document.getElementById('shape-library-title')?.textContent).toBe('Shape Library');
+      expect(document.getElementById('shape-library-title')?.textContent).toBe('Bibliothèque de formes');
     });
 
     expect(navigationButton?.getAttribute('aria-current')).toBe('page');
-    expect(document.querySelector('button[aria-label^="Use "][aria-label$=" shape"]')).not.toBeNull();
+    expect(document.querySelector('button[aria-label^="Utiliser la forme "]')).not.toBeNull();
 
     const seasonalFilter = Array.from(document.querySelectorAll<HTMLButtonElement>('.category-filter'))
-      .find((button) => button.textContent?.trim() === 'Seasonal');
+      .find((button) => button.textContent?.trim() === 'Saisons');
     seasonalFilter?.click();
     await vi.waitFor(() => {
       expect(seasonalFilter?.getAttribute('aria-pressed')).toBe('true');
@@ -61,18 +61,18 @@ describe('App UX states', () => {
   it('explains Gemini data handling before enabling the connection action', async () => {
     renderApp();
 
-    document.querySelector<HTMLButtonElement>('button[title="AI Tools (Gemini)"]')?.click();
+    document.querySelector<HTMLButtonElement>('button[title="Outils IA (Gemini)"]')?.click();
 
     await vi.waitFor(() => {
-      expect(document.querySelector('summary')?.textContent).toContain('How to get a free API key');
+      expect(document.querySelector('summary')?.textContent).toContain('Obtenir une clé API gratuite');
     });
 
     const guide = document.querySelector<HTMLDetailsElement>('details.info-box');
     const connectButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Connect Gemini');
+      .find((button) => button.textContent?.trim() === 'Connecter Gemini');
 
     expect(guide?.open).toBe(false);
-    expect(document.getElementById('gemini-key-privacy')?.textContent).toContain('design or SVG data');
+    expect(document.getElementById('gemini-key-privacy')?.textContent).toContain('données pertinentes');
     expect(connectButton?.disabled).toBe(true);
   });
 });

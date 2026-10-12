@@ -57,12 +57,12 @@
 
   async function generateImage() {
     if (!apiKey) {
-      error = 'Please configure your Gemini API key first';
+      error = 'Configurez d’abord votre clé API Gemini';
       return;
     }
 
     if (!prompt || prompt.trim() === '') {
-      error = 'Please enter a description for the cookie cutter';
+      error = 'Décrivez l’emporte-pièce souhaité';
       return;
     }
 
@@ -102,13 +102,13 @@
       else dispatch('imageGenerated', svgString);
       if (!local()) return;
 
-      error = '✅ Image generated and vectorized successfully!';
+      error = '✅ Image générée et vectorisée avec succès !';
       successTimer = setTimeout(() => {
         if (local() && error.startsWith('✅')) error = '';
       }, 5000);
     } catch (err) {
       if (!current()) { if (local()) releasePreview(); return; }
-      error = err instanceof Error ? err.message : 'Failed to generate image';
+      error = err instanceof Error ? err.message : 'Impossible de générer l’image';
       console.error('Image generation error:', err);
     } finally {
       if (controller === operationController) controller = null;
@@ -133,6 +133,15 @@
     'Moon and stars',
   ];
 
+  const exampleLabels: Record<string, string> = {
+    'Christmas tree with star on top': 'Sapin de Noël avec une étoile',
+    'Cute cat sitting': 'Joli chat assis',
+    'Simple heart shape': 'Cœur simple',
+    'Snowflake with 6 points': 'Flocon de neige à 6 branches',
+    'Smiling sun': 'Soleil souriant',
+    'Moon and stars': 'Lune et étoiles',
+  };
+
   function useExample(example: string) {
     prompt = example;
   }
@@ -140,23 +149,23 @@
 
 <div class="image-generator">
   <div class="header">
-    <h3>🎨 AI Image Generator</h3>
-    <p class="subtitle">Generate cookie cutter designs with AI</p>
+    <h3>🎨 Générateur d’images IA</h3>
+    <p class="subtitle">Créez des emporte-pièces avec l’IA</p>
   </div>
 
   {#if !apiKey}
     <div class="warning-box">
-      <p><strong>⚠️ API Key Required</strong></p>
-      <p>Please configure your Gemini API key in the settings to use this feature.</p>
+      <p><strong>⚠️ Clé API requise</strong></p>
+      <p>Configurez votre clé API Gemini dans les paramètres pour utiliser cette fonction.</p>
     </div>
   {:else}
     <div class="content">
       <div class="input-section">
-        <label for="prompt">Describe your cookie cutter design:</label>
+        <label for="prompt">Décrivez votre emporte-pièce :</label>
         <textarea
           id="prompt"
           bind:value={prompt}
-          placeholder="Example: A cute cartoon dinosaur with simple outline"
+          placeholder="Exemple : un joli dinosaure aux contours simples"
           rows="3"
           disabled={isGenerating}
         ></textarea>
@@ -169,26 +178,26 @@
           >
             {#if isGenerating}
               <span class="spinner"></span>
-              Generating...
+              Génération…
             {:else}
-              ✨ Generate Image
+              ✨ Générer une image
             {/if}
           </button>
 
           {#if prompt}
             <button class="btn-secondary" onclick={clearPrompt} disabled={isGenerating}>
-              Clear
+              Effacer
             </button>
           {/if}
         </div>
       </div>
 
       <div class="examples">
-        <p class="examples-title">Quick examples:</p>
+        <p class="examples-title">Exemples rapides :</p>
         <div class="example-chips">
           {#each examples as example}
             <button class="chip" onclick={() => useExample(example)} disabled={isGenerating}>
-              {example}
+              {exampleLabels[example]}
             </button>
           {/each}
         </div>
@@ -196,9 +205,9 @@
 
       {#if generatedImageUrl}
         <div class="preview">
-          <p class="preview-title">Generated Image:</p>
-          <img src={generatedImageUrl} alt="AI generated cookie cutter design" />
-          <p class="hint">Image has been automatically vectorized and loaded as your design!</p>
+          <p class="preview-title">Image générée :</p>
+          <img src={generatedImageUrl} alt="Dessin d’emporte-pièce généré par l’IA" />
+          <p class="hint">L’image a été vectorisée automatiquement et chargée comme dessin !</p>
         </div>
       {/if}
 
@@ -209,12 +218,12 @@
       {/if}
 
       <div class="info-box">
-        <p><strong>How it works:</strong></p>
+        <p><strong>Fonctionnement :</strong></p>
         <ol>
-          <li>Describe the design you want (simple shapes work best)</li>
-          <li>AI generates a black & white silhouette image</li>
-          <li>Image is automatically converted to SVG paths</li>
-          <li>Your 3D cookie cutter is created!</li>
+          <li>Décrivez le dessin souhaité (les formes simples donnent de meilleurs résultats)</li>
+          <li>L’IA génère une silhouette en noir et blanc</li>
+          <li>L’image est automatiquement convertie en tracés SVG</li>
+          <li>Votre emporte-pièce 3D est créé !</li>
         </ol>
       </div>
     </div>

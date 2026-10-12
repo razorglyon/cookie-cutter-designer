@@ -10,11 +10,11 @@
 
   const categories = getAllCategories();
   const categoryLabels: Record<ShapeDefinition['category'], string> = {
-    basic: 'Basic',
-    seasonal: 'Seasonal',
-    animals: 'Animals',
-    letters: 'Letters',
-    numbers: 'Numbers'
+    basic: 'Formes de base',
+    seasonal: 'Saisons',
+    animals: 'Animaux',
+    letters: 'Lettres',
+    numbers: 'Chiffres'
   };
 
   $: shapes = getShapesByCategory(selectedCategory);
@@ -35,12 +35,12 @@
       </svg>
     </div>
     <div>
-      <h2 id="shape-library-title">Shape Library</h2>
-      <p>Choose a ready-made shape to start your design.</p>
+      <h2 id="shape-library-title">Bibliothèque de formes</h2>
+      <p>Choisissez une forme prête à l’emploi pour commencer votre dessin.</p>
     </div>
   </header>
 
-  <div class="categories" role="group" aria-label="Shape categories">
+  <div class="categories" role="group" aria-label="Catégories de formes">
     {#each categories as category}
       <button
         class="category-filter"
@@ -59,7 +59,7 @@
         class="shape-card"
         data-shape-id={shape.id}
         on:click={() => selectShape(shape)}
-        aria-label={`Use ${shape.name} shape`}
+        aria-label={`Utiliser la forme ${shape.name}`}
       >
         <span class="shape-icon" aria-hidden="true">{shape.icon}</span>
         <span class="shape-name">{shape.name}</span>

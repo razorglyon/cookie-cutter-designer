@@ -43,7 +43,7 @@
 
 <div class="optimization-panel">
   <div class="panel-header">
-    <h3>🔧 Print Optimization</h3>
+    <h3>🔧 Optimisation de l’impression</h3>
     <button class="toggle-btn" on:click={() => showDetails = !showDetails}>
       {showDetails ? '▼' : '▶'}
     </button>
@@ -59,7 +59,7 @@
 
     <div class="status-info">
       <div class="status-badge" class:ready={report.canPrint} class:issues={!report.canPrint}>
-        {report.canPrint ? '✓ Ready to Print' : '✗ Has Issues'}
+        {report.canPrint ? '✓ Prêt à imprimer' : '✗ Problèmes détectés'}
       </div>
       <div class="print-stats">
         <div class="stat">
@@ -95,7 +95,7 @@
       </div>
 
       <button class="auto-fix-btn" on:click={applyAutoFix}>
-        🔧 Auto-Fix All
+        🔧 Tout corriger automatiquement
       </button>
     </div>
 
@@ -115,14 +115,15 @@
     {/if}
   {:else}
     <div class="no-issues">
-      ✨ Perfect! No optimization issues detected.
+      ✨ Parfait ! Aucun problème d’optimisation détecté.
     </div>
   {/if}
 </div>
 
 <style>
   .optimization-panel {
-    background: white;
+    background: var(--surface-card);
+    color: var(--text-primary);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -138,7 +139,7 @@
   h3 {
     margin: 0;
     font-size: 1rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
@@ -150,7 +151,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    color: #a0aec0;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.8rem;
   }
@@ -181,7 +182,7 @@
 
   .score-label {
     font-size: 0.7rem;
-    color: #718096;
+    color: var(--text-secondary);
   }
 
   .status-info {
@@ -197,13 +198,13 @@
   }
 
   .status-badge.ready {
-    background: #c6f6d5;
-    color: #22543d;
+    background: var(--surface-success);
+    color: var(--text-success);
   }
 
   .status-badge.issues {
-    background: #fed7d7;
-    color: #742a2a;
+    background: var(--color-error-light);
+    color: var(--text-error);
   }
 
   .print-stats {
@@ -216,7 +217,7 @@
     align-items: center;
     gap: 0.25rem;
     font-size: 0.85rem;
-    color: #4a5568;
+    color: var(--text-secondary);
   }
 
   .stat-icon {
@@ -228,7 +229,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
     margin-bottom: 0.5rem;
   }
@@ -245,8 +246,8 @@
 
   .auto-fix-btn {
     padding: 0.5rem 1rem;
-    background: #4299e1;
-    color: white;
+    background: var(--color-primary-700);
+    color: var(--text-on-brand);
     border: none;
     border-radius: 6px;
     font-size: 0.85rem;
@@ -256,7 +257,7 @@
   }
 
   .auto-fix-btn:hover {
-    background: #3182ce;
+    background: var(--color-primary-800);
   }
 
   .issues-list {
@@ -269,17 +270,17 @@
     padding: 0.75rem;
     border-radius: 6px;
     border-left: 4px solid;
-    background: #f7fafc;
+    background: var(--surface-muted);
   }
 
   .issue-card.error {
-    border-left-color: #f56565;
-    background: #fff5f5;
+    border-left-color: var(--color-error);
+    background: var(--color-error-light);
   }
 
   .issue-card.warning {
-    border-left-color: #ed8936;
-    background: #fffaf0;
+    border-left-color: var(--color-warning);
+    background: var(--surface-warning);
   }
 
   .issue-header {
@@ -292,18 +293,18 @@
   .issue-message {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #2d3748;
+    color: var(--text-primary);
   }
 
   .issue-suggestion {
     font-size: 0.85rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     margin-bottom: 0.5rem;
   }
 
   .issue-category {
     font-size: 0.75rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
     text-transform: uppercase;
     font-weight: 600;
   }
@@ -311,9 +312,9 @@
   .no-issues {
     padding: 1rem;
     text-align: center;
-    color: #48bb78;
+    color: var(--text-success);
     font-weight: 600;
-    background: #c6f6d5;
+    background: var(--surface-success);
     border-radius: 6px;
   }
 </style>

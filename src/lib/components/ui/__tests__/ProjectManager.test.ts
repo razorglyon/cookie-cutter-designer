@@ -47,49 +47,49 @@ describe('ProjectManager session UI', () => {
   });
   it('saves explicitly, announces dirty/saved and offers portable backup after storage failure', async () => {
     const { workflow, backend, download } = setup();
-    expect(document.querySelector('[role=status]')?.textContent).toContain('Unsaved');
-    button('Save project').click();
-    await vi.waitFor(() => expect(document.querySelector('[role=status]')?.textContent).toContain('Saved'));
+    expect(document.querySelector('[role=status]')?.textContent).toContain('Modifications non enregistrées');
+    button('Enregistrer le projet').click();
+    await vi.waitFor(() => expect(document.querySelector('[role=status]')?.textContent).toContain('Enregistré localement'));
     edit('Dirty'); await tick();
     vi.mocked(backend.put).mockRejectedValueOnce(new Error('quota'));
-    button('Save project').click();
+    button('Enregistrer le projet').click();
     await vi.waitFor(() => expect(document.querySelector('[role=alert]')?.textContent).toContain('quota'));
     expect(workflow.getState().dirty).toBe(true);
-    expect(button('Export project').disabled).toBe(false);
-    button('Export project').click(); await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    expect(button('Exporter le projet').disabled).toBe(false);
+    button('Exporter le projet').click(); await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1));
     expect(document.querySelector('[role=alert]')?.textContent).toContain('quota');
-    expect(document.body.textContent).toContain('same browser'); expect(document.body.textContent).toContain('portable');
+    expect(document.body.textContent).toContain('ce navigateur'); expect(document.body.textContent).toContain('transférable');
   });
   it('disables save while saving but keeps export available even when foreground changes', async () => {
     const { backend, workflow } = setup();
     let release!: () => void;
     vi.mocked(backend.put).mockReturnValueOnce(new Promise<void>(resolve => { release = resolve; }));
-    button('Save project').click(); await tick();
-    expect(button('Save project').disabled).toBe(true);
-    expect(button('Import project file').disabled).toBe(true);
-    expect(button('Export project').disabled).toBe(false);
+    button('Enregistrer le projet').click(); await tick();
+    expect(button('Enregistrer le projet').disabled).toBe(true);
+    expect(button('Importer un fichier projet').disabled).toBe(true);
+    expect(button('Exporter le projet').disabled).toBe(false);
     await workflow.export(); await tick();
-    expect(button('Save project').disabled).toBe(true);
-    release(); await vi.waitFor(() => expect(button('Save project').disabled).toBe(false));
+    expect(button('Enregistrer le projet').disabled).toBe(true);
+    release(); await vi.waitFor(() => expect(button('Enregistrer le projet').disabled).toBe(false));
   });
   it('blocks only save/export for unrepresented models and disables name without a document', () => {
     setup('This model cannot be represented.');
-    expect(button('Save project').disabled).toBe(true); expect(button('Export project').disabled).toBe(true);
-    expect(button('Import project file').disabled).toBe(false);
+    expect(button('Enregistrer le projet').disabled).toBe(true); expect(button('Exporter le projet').disabled).toBe(true);
+    expect(button('Importer un fichier projet').disabled).toBe(false);
     expect(document.body.textContent).toContain('This model cannot be represented.');
   });
   it('has a disabled name and no save/export when the session is empty', () => {
     setup(null, true); expect(nameInput().disabled).toBe(true);
-    expect(button('Save project').disabled).toBe(true); expect(button('Export project').disabled).toBe(true);
-    expect(button('Import project file').disabled).toBe(false);
+    expect(button('Enregistrer le projet').disabled).toBe(true); expect(button('Exporter le projet').disabled).toBe(true);
+    expect(button('Importer un fichier projet').disabled).toBe(false);
   });
   it('imports through the workflow and resets the picker for the same file, including failure', async () => {
     const { session, workflow } = setup(null, true);
     await tick();
     const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
     expect(input.accept).toBe('.ccd.json,.json');
-    button('Import project file').focus();
-    const click = vi.spyOn(input, 'click'); button('Import project file').click(); expect(click).toHaveBeenCalledTimes(1);
+    button('Importer un fichier projet').focus();
+    const click = vi.spyOn(input, 'click'); button('Importer un fichier projet').click(); expect(click).toHaveBeenCalledTimes(1);
     const imported = { size: 1, text: async () => encodeProject(projectDocument()) };
     Object.defineProperty(input, 'files', { configurable: true, value: [imported] });
     const reset = vi.spyOn(input, 'value', 'set');

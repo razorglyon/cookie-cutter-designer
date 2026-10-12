@@ -53,7 +53,7 @@
 
     const newItem: BatchItem = {
       id: `item_${Date.now()}`,
-      name: `Design ${batchItems.length + 1}`,
+      name: `Dessin ${batchItems.length + 1}`,
       svgData: currentSvg,
       params: { ...currentParams }
     };
@@ -66,7 +66,7 @@
 
     const baseItem: BatchItem = {
       id: `item_${Date.now()}`,
-      name: `Design`,
+      name: `Dessin`,
       svgData: currentSvg,
       params: { ...currentParams }
     };
@@ -124,7 +124,7 @@
       });
       owned = result.mesh;
       if (!current() || controller.signal.aborted) return;
-      batchStatus = `${result.report.succeeded} items · ${result.totalDimensions.width.toFixed(1)} × ${result.totalDimensions.height.toFixed(1)} mm`;
+      batchStatus = `${result.report.succeeded} éléments · ${result.totalDimensions.width.toFixed(1)} × ${result.totalDimensions.height.toFixed(1)} mm`;
       // No await between validity and handoff. After handoff only the receiver disposes.
       owned = null;
       if (receiver) receiver(result.mesh, context, commonParams);
@@ -132,11 +132,11 @@
     } catch (error) {
       if (!current()) return;
       if (controller.signal.aborted) {
-        batchStatus = 'Cancelled — no partial batch was kept.';
+        batchStatus = 'Annulé — aucune série partielle n’a été conservée.';
       } else if (error instanceof BatchGenerationError) {
         batchStatus = error.failures.map((failure) => `${failure.name}: ${failure.message}`).join(' · ');
       } else {
-        batchStatus = error instanceof Error ? error.message : 'Batch generation failed.';
+        batchStatus = error instanceof Error ? error.message : 'Échec de la génération de la série.';
       }
     } finally {
       // Release only this producer's local lock, even when its external context expired.
@@ -157,7 +157,7 @@
 {/if}
 <div class="batch-mode" hidden={Boolean(onUpdateSeries) && !showLegacy}>
   <div class="panel-header">
-    <h3>🏭 Batch Mode</h3>
+    <h3>🏭 Production en série</h3>
     <button class="toggle-btn" on:click={() => showPanel = !showPanel}>
       {showPanel ? '▼' : '▶'}
     </button>
@@ -167,29 +167,29 @@
     <div class="panel-content">
       <div class="controls">
         <button class="btn" on:click={addCurrentDesign} disabled={!currentSvg}>
-          + Add Current Design
+          + Ajouter le dessin actuel
         </button>
         <button class="btn" on:click={() => duplicateCurrent(5)} disabled={!currentSvg}>
-          + Add 5 Copies
+          + Ajouter 5 copies
         </button>
       </div>
 
       <div class="layout-controls">
         <label>
-          <span>Layout:</span>
+          <span>Disposition :</span>
           <select bind:value={layout.type}>
-            <option value="grid">Grid</option>
-            <option value="optimized">Optimized</option>
+            <option value="grid">Grille</option>
+            <option value="optimized">Optimisée</option>
           </select>
         </label>
         <label>
-          <span>Spacing: {layout.spacing}mm</span>
+          <span>Espacement : {layout.spacing}mm</span>
           <input type="range" bind:value={layout.spacing} min="10" max="40" />
         </label>
       </div>
 
       <div class="items-list">
-        <h4>Items ({batchItems.length})</h4>
+        <h4>Éléments ({batchItems.length})</h4>
         {#each batchItems as item}
           <div class="item">
             <span>{item.name}</span>
@@ -206,7 +206,7 @@
       {#if batchStatus}<div class="batch-status">{batchStatus}</div>{/if}
 
       <button class="generate-btn" on:click={generateBatch} disabled={!processing && batchItems.length === 0}>
-        {processing ? `Cancel (${completedItems}/${batchItems.length})` : 'Generate Atomic Batch'}
+        {processing ? `Annuler (${completedItems}/${batchItems.length})` : 'Générer la série complète'}
       </button>
     </div>
   {/if}

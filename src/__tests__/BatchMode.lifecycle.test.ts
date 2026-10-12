@@ -36,7 +36,7 @@ it('captures context before production and disposes an obsolete result without d
   expect(capture).toHaveBeenCalledTimes(1);
   valid = false;
   vi.mocked(createBatch).mock.calls.at(-1)![3]?.onProgress?.(1, 1, { id: 'progress', name: 'Design 1', svgData: '<svg/>', params: DEFAULT_PARAMS });
-  await tick(); expect(document.body.textContent).toContain('Cancel (0/1)');
+  await tick(); expect(document.body.textContent).toContain('Annuler (0/1)');
   resolve(result);
   await vi.waitFor(() => expect(result.geometry).toHaveBeenCalledTimes(1));
   expect(result.material).toHaveBeenCalledTimes(1); expect(created).not.toHaveBeenCalled();
@@ -73,7 +73,7 @@ it('cancelled producer returning success is disposed without handoff', async () 
 it('a spontaneous AbortError is reported as an actual error, not proof of cancellation', async () => {
   vi.mocked(createBatch).mockRejectedValueOnce(new DOMException('unexpected abort', 'AbortError'));
   await start(); await vi.waitFor(() => expect(document.body.textContent).toContain('unexpected abort'));
-  expect(document.body.textContent).not.toContain('Cancelled');
+  expect(document.body.textContent).not.toContain('Annulé');
 });
 it('contextual handoff passes the captured predicate and transfers ownership exactly once', async () => {
   const resolve = pending(), result = artifact(), validity = () => true, receiver = vi.fn();
@@ -88,7 +88,7 @@ it('stale rejection cannot publish an error or progress into the still-mounted p
   vi.mocked(createBatch).mockReturnValueOnce(new Promise((_, no) => { reject = no; }));
   const created = await start({ captureOperationValidity: () => () => valid });
   valid = false; reject(new Error('obsolete failure'));
-  await vi.waitFor(() => expect(document.querySelector('.generate-btn')?.textContent?.trim()).toBe('Generate Atomic Batch'));
+  await vi.waitFor(() => expect(document.querySelector('.generate-btn')?.textContent?.trim()).toBe('Générer la série complète'));
   expect(document.body.textContent).not.toContain('obsolete failure'); expect(created).not.toHaveBeenCalled();
 });
 it('a reentrant capture cannot start production after destroying the component', async () => {

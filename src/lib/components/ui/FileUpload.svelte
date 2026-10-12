@@ -14,7 +14,7 @@
       // Validation belongs to the common App pipeline, not this input surface.
       if (file) dispatch('upload', file);
     } catch (cause) {
-      dispatch('reject', cause instanceof Error ? cause.message : 'Could not select image.');
+      dispatch('reject', cause instanceof Error ? cause.message : 'Impossible de sélectionner l’image.');
     }
   }
   function handleDrop(e: DragEvent) {
@@ -34,7 +34,7 @@
   class="upload-container"
   class:drag-over={dragOver}
   role="button"
-  aria-label="Import image"
+  aria-label="Importer une image"
   tabindex="0"
   on:click={triggerFileInput}
   on:keydown={(e) => {
@@ -51,7 +51,7 @@
     bind:this={fileInput}
     type="file"
     accept={IMAGE_ACCEPT}
-    aria-label="Image file"
+    aria-label="Fichier image"
     on:click|stopPropagation
     on:change={handleFileSelect}
     style="display: none"
@@ -73,9 +73,9 @@
       <line x1="12" y1="3" x2="12" y2="15" />
     </svg>
 
-    <h3>Upload Your Design</h3>
-    <p>Drag and drop, paste an image, or click to browse</p>
-    <p class="file-types">Supported: SVG, PNG, JPEG, WebP (max 10 MiB)</p>
+    <h3>Importer votre dessin</h3>
+    <p>Glissez-déposez ou collez une image, ou cliquez pour parcourir les fichiers</p>
+    <p class="file-types">Formats pris en charge : SVG, PNG, JPEG, WebP (10 Mio maximum)</p>
   </div>
 </div>
 

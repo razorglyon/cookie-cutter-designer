@@ -67,7 +67,7 @@ async function setup(validity = () => true) {
   return { handoff, legacy };
 }
 async function process() {
-  click('Process Image');
+  click('Traiter l’image');
   await vi.waitFor(() => expect(document.querySelector('canvas')).not.toBeNull());
   await tick();
 }
@@ -83,7 +83,7 @@ it('preserves the source, draws into a separate correctly-sized preview, and ser
   expect(preview).not.toBe(supplied.source);
   expect([supplied.source.width, supplied.source.height]).toEqual([7, 5]);
   expect(draws).toEqual([{ target: preview, source: supplied.source, args: [0, 0, 7, 5], size: [7, 5] }]);
-  click('Use This Image');
+  click('Utiliser cette image');
   expect(supplied.toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/png');
   expect(previewToBlob).not.toHaveBeenCalled();
   const blob = new Blob(['source-output']);
@@ -105,7 +105,7 @@ it('replacement draws and serializes only the latest source without mutating eit
   expect(latest.result.processedCanvas).toBe(latest.source);
   expect([first.source.width, first.source.height]).toEqual([7, 5]);
   expect([latest.source.width, latest.source.height]).toEqual([11, 3]);
-  click('Use This Image');
+  click('Utiliser cette image');
   expect(first.toBlob).not.toHaveBeenCalled();
   expect(latest.toBlob).toHaveBeenCalledOnce();
   expect(previewToBlob).not.toHaveBeenCalled();
@@ -117,9 +117,9 @@ it.each(['reset', 'unmount', 'invalid'])('rejects pending serialization after %s
   let valid = true;
   const { handoff, legacy } = await setup(() => valid);
   await process();
-  click('Use This Image');
+  click('Utiliser cette image');
   draws.length = 0;
-  if (boundary === 'reset') click('Start Over');
+  if (boundary === 'reset') click('Recommencer');
   else if (boundary === 'unmount') { await unmount(component!); component = undefined; }
   else valid = false;
   await tick();

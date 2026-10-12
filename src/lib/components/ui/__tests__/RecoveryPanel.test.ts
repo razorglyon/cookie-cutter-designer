@@ -24,34 +24,34 @@ function button(text: string) { return [...document.querySelectorAll<HTMLButtonE
 afterEach(async () => { if (panel) await unmount(panel); if (recovery) await recovery.dispose(); panel = undefined; recovery = undefined; document.body.innerHTML = ''; });
 it('renders listed drafts without invoking restore and passes exact contextual actions to the owner', async () => {
   const { draft, onResume, onDelete } = setup(); await recovery!.list(); await tick();
-  expect(document.querySelector('section')?.getAttribute('aria-label')).toBe('Recovery drafts');
-  const resume = button('Resume draft'), remove = button('Delete draft');
-  expect(resume.getAttribute('aria-label')).toBe(`Resume draft ${draft.document.name}, ${draft.savedAt}`);
-  expect(remove.getAttribute('aria-label')).toBe(`Delete draft ${draft.document.name}, ${draft.savedAt}`);
+  expect(document.querySelector('section')?.getAttribute('aria-label')).toBe('Brouillons de récupération');
+  const resume = button('Reprendre le brouillon'), remove = button('Supprimer le brouillon');
+  expect(resume.getAttribute('aria-label')).toBe(`Reprendre le brouillon ${draft.document.name}, ${draft.savedAt}`);
+  expect(remove.getAttribute('aria-label')).toBe(`Supprimer le brouillon ${draft.document.name}, ${draft.savedAt}`);
   expect(onResume).not.toHaveBeenCalled(); expect(onDelete).not.toHaveBeenCalled(); resume.click(); remove.click();
   expect(onResume).toHaveBeenCalledWith(draft); expect(onDelete).toHaveBeenCalledWith(draft);
 });
 it('does not claim a recovery save until the actual storage write resolves, prioritizes saving over older savedAt', async () => {
   let gate = deferred(); const { put } = setup({ put: () => gate.promise }); recovery!.observe(fixture(), 1, true); await tick();
-  expect(document.body.textContent).toContain('Recovery pending'); expect(document.body.textContent).not.toContain('Recovery saved at');
+  expect(document.body.textContent).toContain('Récupération en attente'); expect(document.body.textContent).not.toContain('Récupération enregistrée à');
   const flush = recovery!.flush(); await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(1)); await tick();
-  expect(document.body.textContent).toContain('Saving recovery draft'); expect(document.body.textContent).not.toContain('Recovery saved at');
-  gate.resolve(); await flush; await tick(); expect(document.body.textContent).toContain('Recovery saved at');
+  expect(document.body.textContent).toContain('Enregistrement du brouillon de récupération'); expect(document.body.textContent).not.toContain('Récupération enregistrée à');
+  gate.resolve(); await flush; await tick(); expect(document.body.textContent).toContain('Récupération enregistrée à');
   gate = deferred(); recovery!.observe(fixture(), 1, true); const second = recovery!.flush(); await tick();
-  expect(document.body.textContent).toContain('Saving recovery draft'); expect(document.body.textContent).not.toContain('Recovery saved at'); gate.resolve(); await second;
+  expect(document.body.textContent).toContain('Enregistrement du brouillon de récupération'); expect(document.body.textContent).not.toContain('Récupération enregistrée à'); gate.resolve(); await second;
 });
 it('renders an empty list with a functional refresh action and separate local-first backup hint', async () => {
   const { onRefresh } = setup({ empty: true }); await recovery!.list(); await tick();
-  expect(document.body.textContent).toContain('No recovery drafts in this browser'); button('Refresh recovery drafts').click(); expect(onRefresh).toHaveBeenCalledTimes(1);
-  expect(document.body.textContent).toContain('remain after Save project'); expect(document.body.textContent).toContain('.ccd.json');
+  expect(document.body.textContent).toContain('Aucun brouillon de récupération dans ce navigateur'); button('Actualiser les brouillons de récupération').click(); expect(onRefresh).toHaveBeenCalledTimes(1);
+  expect(document.body.textContent).toContain('restent disponibles après l’enregistrement du projet'); expect(document.body.textContent).toContain('.ccd.json');
 });
 it('announces list failure and retries the real list', async () => {
   let fail = true; const { onRefresh } = setup({ list: async () => { if (fail) throw new Error('list unavailable'); } }); await recovery!.list(); await tick();
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('list unavailable'); fail = false; button('Retry loading recovery drafts').click();
-  await vi.waitFor(() => expect(button('Resume draft')).toBeDefined()); expect(onRefresh).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('list unavailable'); fail = false; button('Réessayer le chargement des brouillons de récupération').click();
+  await vi.waitFor(() => expect(button('Reprendre le brouillon')).toBeDefined()); expect(onRefresh).toHaveBeenCalledTimes(1);
 });
 it('announces failed write and exposes independent retry instead of optimistic success', async () => {
   let fail = true; const { records, onFlush } = setup({ empty: true, put: async () => { if (fail) throw new Error('disk full'); } }); recovery!.observe(fixture(), 1, true); await recovery!.flush(); await tick();
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('disk full'); expect(document.body.textContent).not.toContain('Recovery saved at');
-  fail = false; button('Retry recovery save').click(); await vi.waitFor(() => expect(records.size).toBe(1)); expect(onFlush).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('disk full'); expect(document.body.textContent).not.toContain('Récupération enregistrée à');
+  fail = false; button('Réessayer l’enregistrement de récupération').click(); await vi.waitFor(() => expect(records.size).toBe(1)); expect(onFlush).toHaveBeenCalledTimes(1);
 });
