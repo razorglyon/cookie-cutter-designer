@@ -72,7 +72,7 @@
   }
 
   function handleDelete(id: string) {
-    if (confirm('Are you sure you want to delete this design?')) {
+    if (confirm('Voulez-vous vraiment supprimer ce modèle ?')) {
       deleteDesign(id);
       selectedDesigns.delete(id);
       selectedDesigns = selectedDesigns;
@@ -85,8 +85,8 @@
     if (count === 0) return;
 
     const message = count === 1
-      ? 'Are you sure you want to delete this design?'
-      : `Are you sure you want to delete ${count} designs?`;
+      ? 'Voulez-vous vraiment supprimer ce modèle ?'
+      : `Voulez-vous vraiment supprimer ${count} modèles ?`;
 
     if (confirm(message)) {
       selectedDesigns.forEach(id => deleteDesign(id));
@@ -173,10 +173,10 @@
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days} days ago`;
-    if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+    if (days === 0) return 'Aujourd’hui';
+    if (days === 1) return 'Hier';
+    if (days < 7) return `${days} jours`;
+    if (days < 30) return `${Math.floor(days / 7)} semaines`;
     return date.toLocaleDateString();
   }
 </script>
@@ -185,11 +185,11 @@
 
 <div class="cloud-gallery">
   <div class="gallery-header">
-    <h3>☁️ Cloud Gallery</h3>
+    <h3>☁️ Galerie en ligne</h3>
     <div class="header-actions">
       {#if currentSvg}
         <button class="save-btn" on:click={openSaveDialog}>
-          💾 Save Design
+          💾 Enregistrer le modèle
         </button>
       {/if}
       <button class="toggle-btn" on:click={() => showGallery = !showGallery}>
@@ -207,14 +207,14 @@
           class:active={activeTab === 'community'}
           on:click={() => activeTab = 'community'}
         >
-          🌍 Community ({communityDesigns.length})
+          🌍 Communauté ({communityDesigns.length})
         </button>
         <button
           class="tab"
           class:active={activeTab === 'myDesigns'}
           on:click={() => activeTab = 'myDesigns'}
         >
-          📁 My Designs ({myDesigns.length})
+          📁 Mes modèles ({myDesigns.length})
         </button>
       </div>
 
@@ -224,21 +224,21 @@
           <input
             type="text"
             class="search-input"
-            placeholder="Search designs..."
+            placeholder="Rechercher des modèles…"
             bind:value={searchQuery}
           />
 
           <div class="sort-controls">
-            <label for="sortBy">Sort by:</label>
+            <label for="sortBy">Trier par :</label>
             <select id="sortBy" bind:value={sortBy}>
-              <option value="popular">Most Popular</option>
-              <option value="recent">Most Recent</option>
-              <option value="downloads">Most Downloaded</option>
+              <option value="popular">Les plus populaires</option>
+              <option value="recent">Les plus récents</option>
+              <option value="downloads">Les plus téléchargés</option>
             </select>
           </div>
 
           <div class="tags-filter">
-            <div class="tags-label">Popular Tags:</div>
+            <div class="tags-label">Étiquettes populaires :</div>
             <div class="tags-list">
               {#each popularTags as tag}
                 <button
@@ -264,7 +264,7 @@
                 <h4 class="design-name">{design.metadata.name}</h4>
                 <p class="design-description">{design.metadata.description}</p>
                 <div class="design-meta">
-                  <span class="author">By {design.metadata.author}</span>
+                  <span class="author">Par {design.metadata.author}</span>
                   <span class="date">{formatDate(design.metadata.createdAt)}</span>
                 </div>
                 <div class="design-tags">
@@ -277,7 +277,7 @@
                     ❤️ {design.metadata.likes}
                   </button>
                   <button class="action-btn" on:click={() => handleLoad(design)}>
-                    📥 Load
+                    📥 Charger
                   </button>
                 </div>
               </div>
@@ -288,9 +288,9 @@
         <!-- My Designs -->
         {#if selectedDesigns.size > 0}
           <div class="selection-toolbar">
-            <span class="selection-count">{selectedDesigns.size} selected</span>
+            <span class="selection-count">{selectedDesigns.size} sélectionné(s)</span>
             <button class="btn-delete-selected" on:click={handleDeleteSelected}>
-              🗑️ Delete Selected
+              🗑️ Supprimer la sélection
             </button>
           </div>
         {/if}
@@ -304,7 +304,7 @@
               <button
                 type="button"
                 class="selection-indicator"
-                aria-label={`Select ${design.metadata.name}`}
+                aria-label={`Sélectionner ${design.metadata.name}`}
                 aria-pressed={selectedDesigns.has(design.metadata.id)}
                 on:click={(e) => handleDesignClick(design, index, e)}
               >
@@ -325,10 +325,10 @@
                 </div>
                 <div class="card-actions">
                   <button class="action-btn primary" on:click|stopPropagation={() => handlePublish(design)}>
-                    📤 Publish
+                    📤 Publier
                   </button>
                   <button class="action-btn" on:click|stopPropagation={() => handleLoad(design)}>
-                    📥 Load
+                    📥 Charger
                   </button>
                   <button class="action-btn danger" on:click|stopPropagation={() => handleDelete(design.metadata.id)}>
                     🗑️
@@ -340,8 +340,8 @@
 
           {#if myDesigns.length === 0}
             <div class="empty-state">
-              <p>No saved designs yet.</p>
-              <p class="hint">Save your current design to get started!</p>
+              <p>Aucun modèle enregistré.</p>
+              <p class="hint">Enregistrez votre modèle actuel pour commencer !</p>
             </div>
           {/if}
         </div>
@@ -354,15 +354,15 @@
 {#if showSaveDialog}
   <div class="modal-overlay">
     <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="save-dialog-title">
-      <h3 id="save-dialog-title">Save Design</h3>
+      <h3 id="save-dialog-title">Enregistrer le modèle</h3>
 
       <div class="form-group">
-        <label for="designName">Design Name *</label>
+        <label for="designName">Nom du modèle *</label>
         <input
           id="designName"
           type="text"
           bind:value={saveName}
-          placeholder="My Awesome Cookie Cutter"
+          placeholder="Mon emporte-pièce"
         />
       </div>
 
@@ -371,27 +371,27 @@
         <textarea
           id="designDescription"
           bind:value={saveDescription}
-          placeholder="Describe your design..."
+          placeholder="Décrivez votre modèle…"
           rows="3"
         ></textarea>
       </div>
 
       <div class="form-group">
-        <label for="designTags">Tags (comma-separated)</label>
+        <label for="designTags">Étiquettes (séparées par des virgules)</label>
         <input
           id="designTags"
           type="text"
           bind:value={saveTags}
-          placeholder="christmas, star, festive"
+          placeholder="Noël, étoile, fête"
         />
       </div>
 
       <div class="modal-actions">
         <button class="btn-cancel" on:click={() => showSaveDialog = false}>
-          Cancel
+          Annuler
         </button>
         <button class="btn-save" on:click={handleSave} disabled={!saveName}>
-          Save Design
+          Enregistrer le modèle
         </button>
       </div>
     </div>
@@ -400,7 +400,8 @@
 
 <style>
   .cloud-gallery {
-    background: white;
+    background: var(--surface-card);
+    color: var(--text-primary);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -422,14 +423,14 @@
   h3 {
     margin: 0;
     font-size: 1rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
   .save-btn {
     padding: 0.5rem 1rem;
-    background: #48bb78;
-    color: white;
+    background: var(--color-secondary-700);
+    color: var(--text-on-brand);
     border: none;
     border-radius: 6px;
     font-size: 0.85rem;
@@ -439,7 +440,7 @@
   }
 
   .save-btn:hover {
-    background: #38a169;
+    background: var(--color-secondary-800);
   }
 
   .toggle-btn {
@@ -450,7 +451,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    color: #a0aec0;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.8rem;
   }
@@ -464,7 +465,7 @@
   .tabs {
     display: flex;
     gap: 0.5rem;
-    border-bottom: 2px solid #e2e8f0;
+    border-bottom: 2px solid var(--border-default);
   }
 
   .tab {
@@ -472,7 +473,7 @@
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: #718096;
+    color: var(--text-secondary);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -480,17 +481,17 @@
   }
 
   .tab:hover {
-    color: #4299e1;
+    color: var(--text-link);
   }
 
   .tab.active {
-    color: #4299e1;
-    border-bottom-color: #4299e1;
+    color: var(--text-link);
+    border-bottom-color: var(--color-primary-500);
   }
 
   .filters-section {
     padding: 1rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -499,7 +500,9 @@
 
   .search-input {
     padding: 0.75rem;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    color: var(--text-primary);
+    border: 2px solid var(--border-default);
     border-radius: 6px;
     font-size: 0.9rem;
     width: 100%;
@@ -507,7 +510,7 @@
 
   .search-input:focus {
     outline: none;
-    border-color: #4299e1;
+    border-color: var(--color-primary-500);
   }
 
   .sort-controls {
@@ -518,12 +521,14 @@
 
   .sort-controls label {
     font-size: 0.85rem;
-    color: #4a5568;
+    color: var(--text-secondary);
   }
 
   .sort-controls select {
     padding: 0.5rem;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    color: var(--text-primary);
+    border: 2px solid var(--border-default);
     border-radius: 6px;
     font-size: 0.85rem;
   }
@@ -536,7 +541,7 @@
 
   .tags-label {
     font-size: 0.85rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     font-weight: 500;
   }
 
@@ -548,24 +553,24 @@
 
   .tag-chip {
     padding: 0.4rem 0.8rem;
-    background: white;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    border: 2px solid var(--border-default);
     border-radius: 16px;
     font-size: 0.8rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .tag-chip:hover {
-    border-color: #4299e1;
-    color: #4299e1;
+    border-color: var(--color-primary-500);
+    color: var(--text-link);
   }
 
   .tag-chip.selected {
-    background: #4299e1;
-    border-color: #4299e1;
-    color: white;
+    background: var(--color-primary-700);
+    border-color: var(--color-primary-500);
+    color: var(--text-on-brand);
   }
 
   .designs-grid {
@@ -578,8 +583,8 @@
   }
 
   .design-card {
-    background: white;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    border: 2px solid var(--border-default);
     border-radius: 8px;
     overflow: hidden;
     transition: all 0.2s;
@@ -588,19 +593,19 @@
   }
 
   .design-card:hover {
-    border-color: #4299e1;
+    border-color: var(--color-primary-500);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
 
   .design-card.selected {
-    border-color: #4299e1;
-    background: #ebf8ff;
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
     box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2);
   }
 
   .card-preview {
     aspect-ratio: 1;
-    background: #f7fafc;
+    background: var(--surface-muted);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -623,14 +628,14 @@
   .design-name {
     margin: 0 0 0.5rem;
     font-size: 0.95rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
   .design-description {
     margin: 0 0 0.75rem;
     font-size: 0.8rem;
-    color: #718096;
+    color: var(--text-secondary);
     line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -645,7 +650,7 @@
     justify-content: space-between;
     margin-bottom: 0.5rem;
     font-size: 0.75rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
   }
 
   .design-tags {
@@ -656,8 +661,8 @@
 
   .tag {
     padding: 0.2rem 0.5rem;
-    background: #ebf8ff;
-    color: #2c5282;
+    background: var(--surface-callout);
+    color: var(--text-primary);
     border-radius: 4px;
     font-size: 0.7rem;
   }
@@ -670,8 +675,8 @@
   .action-btn {
     flex: 1;
     padding: 0.5rem;
-    background: white;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    border: 2px solid var(--border-default);
     border-radius: 6px;
     font-size: 0.8rem;
     cursor: pointer;
@@ -679,18 +684,18 @@
   }
 
   .action-btn:hover {
-    border-color: #4299e1;
-    color: #4299e1;
+    border-color: var(--color-primary-500);
+    color: var(--text-link);
   }
 
   .action-btn.primary {
-    background: #4299e1;
-    border-color: #4299e1;
-    color: white;
+    background: var(--color-primary-700);
+    border-color: var(--color-primary-500);
+    color: var(--text-on-brand);
   }
 
   .action-btn.primary:hover {
-    background: #3182ce;
+    background: var(--color-primary-800);
   }
 
   .action-btn.danger {
@@ -699,15 +704,15 @@
   }
 
   .action-btn.danger:hover {
-    border-color: #e53e3e;
-    color: #e53e3e;
+    border-color: var(--color-error);
+    color: var(--text-error);
   }
 
   .empty-state {
     grid-column: 1 / -1;
     text-align: center;
     padding: 3rem 1rem;
-    color: #718096;
+    color: var(--text-secondary);
   }
 
   .empty-state p {
@@ -716,7 +721,7 @@
 
   .hint {
     font-size: 0.85rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
   }
 
   /* Modal */
@@ -734,7 +739,7 @@
   }
 
   .modal-content {
-    background: white;
+    background: var(--surface-input);
     border-radius: 8px;
     padding: 2rem;
     width: 90%;
@@ -754,7 +759,7 @@
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     font-weight: 500;
   }
 
@@ -762,7 +767,9 @@
   .form-group textarea {
     width: 100%;
     padding: 0.75rem;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    color: var(--text-primary);
+    border: 2px solid var(--border-default);
     border-radius: 6px;
     font-size: 0.9rem;
     font-family: inherit;
@@ -771,7 +778,7 @@
   .form-group input:focus,
   .form-group textarea:focus {
     outline: none;
-    border-color: #4299e1;
+    border-color: var(--color-primary-500);
   }
 
   .modal-actions {
@@ -792,25 +799,25 @@
   }
 
   .btn-cancel {
-    background: #edf2f7;
-    color: #4a5568;
+    background: var(--surface-muted);
+    color: var(--text-secondary);
   }
 
   .btn-cancel:hover {
-    background: #e2e8f0;
+    background: var(--surface-muted);
   }
 
   .btn-save {
-    background: #48bb78;
-    color: white;
+    background: var(--color-secondary-700);
+    color: var(--text-on-brand);
   }
 
   .btn-save:hover:not(:disabled) {
-    background: #38a169;
+    background: var(--color-secondary-800);
   }
 
   .btn-save:disabled {
-    background: #cbd5e0;
+    background: var(--surface-muted);
     cursor: not-allowed;
   }
 
@@ -820,8 +827,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: #ebf8ff;
-    border: 2px solid #4299e1;
+    background: var(--surface-callout);
+    border: 2px solid var(--color-primary-500);
     border-radius: 6px;
     margin-bottom: 1rem;
   }
@@ -829,13 +836,13 @@
   .selection-count {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #2c5282;
+    color: var(--text-primary);
   }
 
   .btn-delete-selected {
     padding: 0.5rem 1rem;
-    background: #e53e3e;
-    color: white;
+    background: var(--color-error-strong);
+    color: var(--text-on-brand);
     border: none;
     border-radius: 6px;
     font-size: 0.85rem;
@@ -845,7 +852,7 @@
   }
 
   .btn-delete-selected:hover {
-    background: #c53030;
+    background: var(--color-error-strong);
   }
 
   /* Selection Checkbox */
@@ -862,25 +869,25 @@
   .checkbox {
     width: 24px;
     height: 24px;
-    border: 2px solid #cbd5e0;
+    border: 2px solid var(--border-strong);
     border-radius: 4px;
-    background: white;
+    background: var(--surface-input);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 0.9rem;
     font-weight: bold;
-    color: white;
+    color: var(--text-on-brand);
     transition: all 0.2s;
     cursor: pointer;
   }
 
   .checkbox.checked {
-    background: #4299e1;
-    border-color: #4299e1;
+    background: var(--color-primary-700);
+    border-color: var(--color-primary-500);
   }
 
   .design-card:hover .checkbox {
-    border-color: #4299e1;
+    border-color: var(--color-primary-500);
   }
 </style>

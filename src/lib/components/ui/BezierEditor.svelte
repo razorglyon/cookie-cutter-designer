@@ -207,22 +207,22 @@
 
 <div class="bezier-editor">
   <div class="editor-header">
-    <h3>✏️ Bézier Curve Editor</h3>
+    <h3>✏️ Éditeur de courbes de Bézier</h3>
   </div>
 
   <div class="editor-content">
     <div class="preset-buttons">
       <button class="preset-btn" on:click={() => loadPreset('heart')}>
-        ❤️ Heart
+        ❤️ Cœur
       </button>
       <button class="preset-btn" on:click={() => loadPreset('star')}>
-        ⭐ Star
+        ⭐ Étoile
       </button>
       <button class="preset-btn" on:click={() => loadPreset('flower')}>
-        🌸 Flower
+        🌸 Fleur
       </button>
       <button class="preset-btn" on:click={() => loadPreset('custom')}>
-        ⬜ Square
+        ⬜ Carré
       </button>
     </div>
 
@@ -241,22 +241,22 @@
     <div class="editor-controls">
       <label class="checkbox-control">
         <input type="checkbox" bind:checked={showControls} on:change={redraw} />
-        <span>Show Control Points</span>
+        <span>Afficher les points de contrôle</span>
       </label>
 
       <div class="action-buttons">
         <button class="action-btn secondary" on:click={reset}>
-          Reset
+          Réinitialiser
         </button>
         <button class="action-btn primary" on:click={applyBezierShape}>
-          Apply Shape
+          Appliquer la forme
         </button>
       </div>
     </div>
 
     <div class="help-text">
-      <p>💡 Drag the blue anchor points to reshape the path</p>
-      <p>💡 Drag the orange control points to adjust curves</p>
+      <p>💡 Glissez les points d’ancrage bleus pour modifier le tracé</p>
+      <p>💡 Glissez les points de contrôle orange pour ajuster les courbes</p>
     </div>
   </div>
 </div>

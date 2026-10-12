@@ -38,42 +38,42 @@
 </fieldset>
 
 <div class="param-control">
-  <label for="wallThickness">Wall Thickness: {$params.wallThickness} mm</label>
+  <label for="wallThickness">Épaisseur de la paroi : {$params.wallThickness} mm</label>
   <input id="wallThickness" data-field="wallThickness" type="range" min="0.6" max="2" step="0.1"
-    value={$params.wallThickness} aria-valuetext={`${$params.wallThickness} millimeters`}
+    value={$params.wallThickness} aria-valuetext={`${$params.wallThickness} millimètres`}
     aria-invalid={$parameterErrorField === 'wallThickness'} aria-describedby={describedBy('wallThickness')}
     oninput={(event) => updateParam('wallThickness', Number(event.currentTarget.value))} />
-  <p id="wallThickness-hint" class="param-hint">0.6–2 mm · Recommended: 0.8–1.2 mm.</p>
+  <p id="wallThickness-hint" class="param-hint">0.6–2 mm · Recommandé : 0.8–1.2 mm.</p>
   {#if $parameterErrorField === 'wallThickness' && $parameterError}<p id="wallThickness-error" class="param-error" role="alert">{$parameterError}</p>{/if}
 </div>
 
 <div class="param-control">
-  <label for="cuttingHeight">Cutting Height: {$params.cuttingHeight} mm</label>
+  <label for="cuttingHeight">Hauteur de découpe : {$params.cuttingHeight} mm</label>
   <input id="cuttingHeight" data-field="cuttingHeight" type="range" min="8" max="25" step="1"
-    value={$params.cuttingHeight} aria-valuetext={`${$params.cuttingHeight} millimeters`}
+    value={$params.cuttingHeight} aria-valuetext={`${$params.cuttingHeight} millimètres`}
     aria-invalid={$parameterErrorField === 'cuttingHeight'} aria-describedby={describedBy('cuttingHeight')}
     oninput={(event) => updateParam('cuttingHeight', Number(event.currentTarget.value))} />
-  <p id="cuttingHeight-hint" class="param-hint">8–25 mm · Recommended: 10–15 mm.</p>
+  <p id="cuttingHeight-hint" class="param-hint">8–25 mm · Recommandé : 10–15 mm.</p>
   {#if $parameterErrorField === 'cuttingHeight' && $parameterError}<p id="cuttingHeight-error" class="param-error" role="alert">{$parameterError}</p>{/if}
 </div>
 
 <div class="param-control">
-  <label for="totalHeight">Total Height: {$params.totalHeight} mm</label>
+  <label for="totalHeight">Hauteur totale : {$params.totalHeight} mm</label>
   <input id="totalHeight" data-field="totalHeight" type="range" min="15" max="40" step="1"
-    value={$params.totalHeight} aria-valuetext={`${$params.totalHeight} millimeters`}
+    value={$params.totalHeight} aria-valuetext={`${$params.totalHeight} millimètres`}
     aria-invalid={$parameterErrorField === 'totalHeight'} aria-describedby={describedBy('totalHeight')}
     oninput={(event) => updateParam('totalHeight', Number(event.currentTarget.value))} />
-  <p id="totalHeight-hint" class="param-hint">15–40 mm · Must include the cutting wall and active handle.</p>
+  <p id="totalHeight-hint" class="param-hint">15–40 mm · Doit inclure la paroi de découpe et la poignée active.</p>
   {#if $parameterErrorField === 'totalHeight' && $parameterError}<p id="totalHeight-error" class="param-error" role="alert">{$parameterError}</p>{/if}
 </div>
 
 <div class="param-control">
-  <label for="taperAngle">Taper Angle: {$params.taperAngle}°</label>
+  <label for="taperAngle">Angle de dépouille : {$params.taperAngle}°</label>
   <input id="taperAngle" data-field="taperAngle" type="range" min="0" max="15" step="1"
-    value={$params.taperAngle} aria-valuetext={`${$params.taperAngle} degrees`}
+    value={$params.taperAngle} aria-valuetext={`${$params.taperAngle} degrés`}
     aria-invalid={$parameterErrorField === 'taperAngle'} aria-describedby={describedBy('taperAngle')}
     oninput={(event) => updateParam('taperAngle', Number(event.currentTarget.value))} />
-  <p id="taperAngle-hint" class="param-hint">0–15° · Recommended: 5–10° for easier release.</p>
+  <p id="taperAngle-hint" class="param-hint">0–15° · Recommandé : 5–10° pour faciliter le démoulage.</p>
   {#if $parameterErrorField === 'taperAngle' && $parameterError}<p id="taperAngle-error" class="param-error" role="alert">{$parameterError}</p>{/if}
 </div>
 

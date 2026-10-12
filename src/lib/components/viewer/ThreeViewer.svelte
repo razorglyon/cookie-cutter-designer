@@ -13,7 +13,7 @@
   export let buildPlateSize = 200;
   // Legacy viewers remain editable; document-owned previews explicitly opt out.
   export let allowObjectDeletion: boolean = true;
-  const deletionUnavailableReason = 'Generated geometry is a read-only preview. Persistent part editing is not available in V1.';
+  const deletionUnavailableReason = 'La géométrie générée est un aperçu en lecture seule. La modification permanente des pièces n’est pas disponible dans la V1.';
   export let viewport: import('../../domain/designDocument').ViewportPreferences = { showGrid: true, showAxes: false, showWallThickness: false };
   export let onViewportChange: (value: import('../../domain/designDocument').ViewportPreferences) => void = () => {};
 
@@ -430,34 +430,34 @@
 
   <!-- Selection controls overlay -->
   <div class="controls-overlay">
-    <label class="heatmap-toggle"><input type="checkbox" aria-label="Show grid" checked={viewport.showGrid}
-      on:change={event => userViewportChange({ showGrid: event.currentTarget.checked })} />Grid</label>
-    <label class="heatmap-toggle"><input type="checkbox" aria-label="Show axes" checked={viewport.showAxes}
+    <label class="heatmap-toggle"><input type="checkbox" aria-label="Afficher la grille" checked={viewport.showGrid}
+      on:change={event => userViewportChange({ showGrid: event.currentTarget.checked })} />Grille</label>
+    <label class="heatmap-toggle"><input type="checkbox" aria-label="Afficher les axes" checked={viewport.showAxes}
       on:change={event => userViewportChange({ showAxes: event.currentTarget.checked })} />Axes</label>
     <button
       class="control-btn"
       class:active={selectionMode}
       on:click={toggleSelectionMode}
-      title={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
-      aria-label={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
+      title={selectionMode ? 'Quitter le mode sélection' : 'Activer le mode sélection'}
+      aria-label={selectionMode ? 'Quitter le mode sélection' : 'Activer le mode sélection'}
       aria-pressed={selectionMode}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
       </svg>
-      <span class="control-label">{selectionMode ? 'Finish selecting' : 'Select part'}</span>
+      <span class="control-label">{selectionMode ? 'Terminer la sélection' : 'Sélectionner une pièce'}</span>
     </button>
 
     <button
       class="control-btn"
       on:click={fitCurrentView}
-      title="Fit model in view"
-      aria-label="Fit model in view"
+      title="Ajuster le modèle à la vue"
+      aria-label="Ajuster le modèle à la vue"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
       </svg>
-      <span class="control-label">Fit view</span>
+      <span class="control-label">Ajuster la vue</span>
     </button>
 
     <label
@@ -465,8 +465,8 @@
       class:active={wallHeatmapEnabled}
       class:disabled={!wallHeatmapAvailable}
       title={wallHeatmapAvailable
-        ? 'Color the cutter from thin to thick using measured wall thickness'
-        : 'Wall-thickness heatmap is available for cutters only'}
+        ? 'Colorer l’emporte-pièce selon l’épaisseur mesurée de ses parois'
+        : 'La carte d’épaisseur des parois n’est disponible que pour les emporte-pièces'}
     >
       <input
         type="checkbox"
@@ -476,16 +476,16 @@
         aria-describedby={wallHeatmapEnabled ? 'wall-heatmap-legend' : undefined}
       />
       <span class="heatmap-swatch" aria-hidden="true"></span>
-      <span class="control-label">Wall heatmap</span>
+      <span class="control-label">Carte d’épaisseur</span>
     </label>
 
     {#if wallHeatmapEnabled && wallHeatmapRange && wallHeatmapTarget !== null}
       <div
         id="wall-heatmap-legend"
         class="heatmap-legend"
-        aria-label={`Measured wall thickness ranges from ${wallHeatmapRange.min.toFixed(2)} to ${wallHeatmapRange.max.toFixed(2)} millimeters. Target ${wallHeatmapTarget.toFixed(2)} millimeters.`}
+        aria-label={`Épaisseur mesurée des parois : de ${wallHeatmapRange.min.toFixed(2)} à ${wallHeatmapRange.max.toFixed(2)} millimètres. Cible : ${wallHeatmapTarget.toFixed(2)} millimètres.`}
       >
-        <div class="heatmap-target">Target: {wallHeatmapTarget.toFixed(2)} mm</div>
+        <div class="heatmap-target">Cible : {wallHeatmapTarget.toFixed(2)} mm</div>
         <div
           class="heatmap-scale"
           style={`--heatmap-target-position: ${wallHeatmapTargetPosition}%`}
@@ -504,14 +504,14 @@
         on:click={deleteSelected}
         disabled={!allowObjectDeletion}
         aria-describedby={!allowObjectDeletion ? 'viewer-deletion-reason' : undefined}
-        title={!allowObjectDeletion ? deletionUnavailableReason : 'Delete selected element'}
-        aria-label="Delete selected element"
+        title={!allowObjectDeletion ? deletionUnavailableReason : 'Supprimer l’élément sélectionné'}
+        aria-label="Supprimer l’élément sélectionné"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
-        <span class="control-label">Delete</span>
+        <span class="control-label">Supprimer</span>
       </button>
       {#if !allowObjectDeletion}
         <p id="viewer-deletion-reason" class="selection-hint">{deletionUnavailableReason}</p>
@@ -520,7 +520,7 @@
 
     {#if selectionMode}
       <div class="selection-hint">
-        Click on an element to select it
+        Cliquez sur un élément pour le sélectionner
       </div>
     {/if}
   </div>

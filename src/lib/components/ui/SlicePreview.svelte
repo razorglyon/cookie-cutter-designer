@@ -58,7 +58,7 @@
       sliceLayers = nextLayers;
       currentLayerIndex = 0;
     } catch (error) {
-      slicingError = error instanceof Error ? error.message : 'Layer preview failed.';
+      slicingError = error instanceof Error ? error.message : 'Échec de l’aperçu des couches.';
     } finally {
       isSlicing = false;
     }
@@ -98,7 +98,7 @@
 
 <div class="slice-preview">
   <div class="preview-header">
-    <h3>Layer Intersection Preview</h3>
+    <h3>Aperçu des intersections de couches</h3>
     <button class="toggle-btn" on:click={() => showSliceView = !showSliceView}>
       {showSliceView ? '▼' : '▶'}
     </button>
@@ -108,21 +108,21 @@
     <div class="preview-content">
       {#if !mesh}
         <div class="no-model">
-          <p>Upload a model to preview slicing</p>
+          <p>Importez un modèle pour prévisualiser les couches</p>
         </div>
       {:else if isSlicing}
         <div class="slicing-progress">
           <div class="spinner"></div>
-          <p>Slicing model...</p>
+          <p>Calcul des couches…</p>
         </div>
       {:else if slicingError}
         <div class="no-layers"><p>{slicingError}</p></div>
       {:else if sliceLayers.length > 0}
         <p class="preview-note">
-          Geometric cross-section only — no infill, supports, extrusion paths or G-code.
+          Coupe géométrique uniquement : sans remplissage, supports, trajectoires d’extrusion ni G-code.
         </p>
         {#if drawing}
-          <svg class="layer-drawing" viewBox={drawing.viewBox} aria-label="Current layer intersections">
+          <svg class="layer-drawing" viewBox={drawing.viewBox} aria-label="Intersections de la couche actuelle">
             {#each drawing.paths as path}
               <path d={path} />
             {/each}
@@ -131,11 +131,11 @@
         <div class="layer-controls">
           <div class="layer-info">
             <div class="info-row">
-              <span class="label">Layer:</span>
+              <span class="label">Couche :</span>
               <span class="value">{currentLayerIndex + 1} / {sliceLayers.length}</span>
             </div>
             <div class="info-row">
-              <span class="label">Height:</span>
+              <span class="label">Hauteur :</span>
               <span class="value">{currentLayer.height.toFixed(2)} mm</span>
             </div>
           </div>
@@ -159,7 +159,7 @@
               class="control-btn"
               on:click={previousLayer}
               disabled={currentLayerIndex === 0}
-              title="Previous Layer"
+              title="Couche précédente"
             >
               ⏮
             </button>
@@ -167,7 +167,7 @@
             <button
               class="control-btn play-btn"
               on:click={toggleAutoPlay}
-              title={autoPlay ? 'Pause' : 'Auto Play'}
+              title={autoPlay ? 'Pause' : 'Lecture automatique'}
             >
               {autoPlay ? '⏸' : '▶'}
             </button>
@@ -176,7 +176,7 @@
               class="control-btn"
               on:click={nextLayer}
               disabled={currentLayerIndex === sliceLayers.length - 1}
-              title="Next Layer"
+              title="Couche suivante"
             >
               ⏭
             </button>
@@ -196,7 +196,7 @@
 
         <div class="layer-settings">
           <label for="layerHeight">
-            Layer Height: {layerHeight.toFixed(2)}mm
+            Hauteur de couche : {layerHeight.toFixed(2)}mm
           </label>
           <input
             id="layerHeight"
@@ -209,19 +209,19 @@
           />
           <div class="preset-buttons">
             <button class="preset-btn" on:click={() => { layerHeight = 0.1; performSlicing(); }}>
-              Fine (0.1mm)
+              Fin (0,1 mm)
             </button>
             <button class="preset-btn" on:click={() => { layerHeight = 0.2; performSlicing(); }}>
-              Normal (0.2mm)
+              Normal (0,2 mm)
             </button>
             <button class="preset-btn" on:click={() => { layerHeight = 0.3; performSlicing(); }}>
-              Fast (0.3mm)
+              Rapide (0,3 mm)
             </button>
           </div>
         </div>
       {:else}
         <div class="no-layers">
-          <p>No layers found. Try adjusting parameters.</p>
+          <p>Aucune couche trouvée. Essayez d’ajuster les paramètres.</p>
         </div>
       {/if}
     </div>
@@ -230,7 +230,8 @@
 
 <style>
   .slice-preview {
-    background: white;
+    background: var(--surface-card);
+    color: var(--text-primary);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -246,7 +247,7 @@
   h3 {
     margin: 0;
     font-size: 1rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
@@ -258,7 +259,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    color: #a0aec0;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.8rem;
   }
@@ -272,9 +273,9 @@
   .preview-note {
     margin: 0;
     padding: 0.75rem;
-    border-left: 3px solid #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
+    border-left: 3px solid var(--color-primary-500);
+    background: var(--surface-callout);
+    color: var(--text-primary);
     font-size: 0.8rem;
   }
 
@@ -299,8 +300,8 @@
   .slicing-progress {
     padding: 2rem;
     text-align: center;
-    color: #718096;
-    background: #f7fafc;
+    color: var(--text-secondary);
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -308,8 +309,8 @@
     width: 40px;
     height: 40px;
     margin: 0 auto 1rem;
-    border: 3px solid #e2e8f0;
-    border-top-color: #4299e1;
+    border: 3px solid var(--border-default);
+    border-top-color: var(--color-primary-500);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
@@ -329,7 +330,7 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
     padding: 0.75rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -341,14 +342,14 @@
 
   .label {
     font-size: 0.75rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
     text-transform: uppercase;
     font-weight: 600;
   }
 
   .value {
     font-size: 0.95rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
     margin-top: 0.25rem;
   }
@@ -363,7 +364,7 @@
     width: 100%;
     height: 6px;
     border-radius: 3px;
-    background: #e2e8f0;
+    background: var(--surface-muted);
     outline: none;
     appearance: none;
     -webkit-appearance: none;
@@ -375,7 +376,7 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: #4299e1;
+    background: var(--color-primary-700);
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
@@ -384,7 +385,7 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: #4299e1;
+    background: var(--color-primary-700);
     cursor: pointer;
     border: none;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -393,7 +394,7 @@
   .progress-bar {
     width: 100%;
     height: 4px;
-    background: #e2e8f0;
+    background: var(--surface-muted);
     border-radius: 2px;
     overflow: hidden;
   }
@@ -416,8 +417,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: white;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    border: 2px solid var(--border-default);
     border-radius: 6px;
     font-size: 1.2rem;
     cursor: pointer;
@@ -425,8 +426,8 @@
   }
 
   .control-btn:hover:not(:disabled) {
-    border-color: #4299e1;
-    background: #ebf8ff;
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
   }
 
   .control-btn:disabled {
@@ -436,20 +437,20 @@
 
   .play-btn {
     width: 60px;
-    background: #4299e1;
-    color: white;
-    border-color: #4299e1;
+    background: var(--color-primary-700);
+    color: var(--text-on-brand);
+    border-color: var(--color-primary-500);
   }
 
   .play-btn:hover:not(:disabled) {
-    background: #3182ce;
+    background: var(--color-primary-800);
   }
 
   .layer-stats {
     display: flex;
     justify-content: space-around;
     padding: 0.75rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -461,20 +462,20 @@
 
   .stat-label {
     font-size: 0.75rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
     text-transform: uppercase;
   }
 
   .stat-value {
     font-size: 0.95rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
     margin-top: 0.25rem;
   }
 
   .layer-settings {
     padding: 1rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -482,7 +483,7 @@
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     font-weight: 500;
   }
 
@@ -499,19 +500,19 @@
 
   .preset-btn {
     padding: 0.5rem;
-    background: white;
-    border: 2px solid #e2e8f0;
+    background: var(--surface-input);
+    border: 2px solid var(--border-default);
     border-radius: 6px;
     font-size: 0.85rem;
     font-weight: 500;
-    color: #4a5568;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .preset-btn:hover {
-    border-color: #4299e1;
-    background: #ebf8ff;
-    color: #2c5282;
+    border-color: var(--color-primary-500);
+    background: var(--surface-callout);
+    color: var(--text-primary);
   }
 </style>

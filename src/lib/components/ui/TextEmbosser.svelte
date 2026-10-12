@@ -31,7 +31,7 @@
 
   function handleAddText() {
     if (!text.trim()) {
-      alert('Please enter some text');
+      alert('Saisissez du texte.');
       return;
     }
 
@@ -46,8 +46,8 @@
 </script>
 
 <div class="text-embosser">
-  <h3>Text Embossing</h3>
-  <p class="description">Add custom text to your cookie cutter</p>
+  <h3>Texte en relief</h3>
+  <p class="description">Ajoutez du texte à votre emporte-pièce</p>
 
   <div class="form-group">
     <label for="text-input">Text</label>
@@ -55,14 +55,14 @@
       id="text-input"
       type="text"
       bind:value={text}
-      placeholder="Enter text here..."
+      placeholder="Saisissez votre texte…"
       maxlength="50"
     />
     <span class="char-count">{text.length}/50</span>
   </div>
 
   <div class="form-group">
-    <label for="font-select">Font</label>
+    <label for="font-select">Police</label>
     <select id="font-select" bind:value={selectedFont}>
       {#each fonts as font}
         <option value={font} style="font-family: {font}">{font}</option>
@@ -72,7 +72,7 @@
 
   <div class="form-group">
     <label for="font-size">
-      Font Size: {fontSize}mm
+      Taille de police : {fontSize}mm
     </label>
     <input
       id="font-size"
@@ -86,7 +86,7 @@
 
   <div class="form-group">
     <label for="emboss-depth">
-      Emboss Depth: {embossDepth.toFixed(1)}mm
+      Profondeur du relief : {embossDepth.toFixed(1)}mm
     </label>
     <input
       id="emboss-depth"
@@ -105,17 +105,17 @@
       bind:checked={mirrorText}
     />
     <label for="mirror-text">
-      Mirror text (for stamping)
-      <span class="hint">Recommended for cookie stamps</span>
+      Inverser le texte (pour le tampon)
+      <span class="hint">Recommandé pour les tampons à biscuits</span>
     </label>
   </div>
 
   <div class="preview" style="font-family: {selectedFont}; font-size: {fontSize}px; transform: scaleX({mirrorText ? -1 : 1})">
-    {text || 'Preview'}
+    {text || 'Aperçu'}
   </div>
 
   <button class="add-text-btn" on:click={handleAddText} disabled={!text.trim()}>
-    Add Text to Design
+    Ajouter le texte au dessin
   </button>
 </div>
 

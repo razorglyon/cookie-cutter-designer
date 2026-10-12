@@ -19,13 +19,14 @@
   $: if (selected) { x = selected.x; y = selected.y; }
   $: box = model?.viewBox.split(' ').map(Number) ?? [0, 0, 100, 100];
   $: radius = Math.max(box[2], box[3]) / 45;
+  $: hitRadius = Math.max(box[2], box[3]) / 13;
   $: topology = path && !path.reason && path.linear && path.segments.filter(s => s.command === 'M').length === 1;
   function cancel(): void { gesture = null; draft = null; }
   function apply(command: SketchCommand): void {
     cancel(); message = '';
     const baseline = session.getDocument(); if (!baseline) return;
     try { commitSketch(session, baseline, session.getSessionEpoch(), editSketch(baseline.sketch.svg, command)); }
-    catch (cause) { message = cause instanceof Error ? cause.message : 'Could not edit this path.'; }
+    catch (cause) { message = cause instanceof Error ? cause.message : 'Impossible de modifier ce tracé.'; }
   }
   function begin(event: PointerEvent, index: number): void {
     if (event.button !== 0 || !document || path?.reason) return;
@@ -56,46 +57,48 @@
 </script>
 
 <svelte:window on:keydown={event => { if (event.key === 'Escape') cancel(); }} on:blur={cancel} />
-<section class="sketch-workspace" aria-label="2D sketch workshop">
-  <h2>2D Sketch Workshop</h2>
-  <p>Edit the current project. The original source stays unchanged. Drag a point, use arrow keys, or enter coordinates. Escape cancels a drag.</p>
+<section class="sketch-workspace" aria-label="Atelier de dessin 2D">
+  <h2>Atelier de dessin 2D</h2>
+  <p>Modifiez le projet actuel sans changer la source d’origine. Glissez un point, utilisez les flèches ou saisissez des coordonnées. Échap annule le déplacement.</p>
   {#if model && document}
     <label>Contour
       <select bind:value={pathIndex} on:change={() => { cancel(); pointIndex = 0; }}>
-        {#each model.paths as candidate, index}<option value={index}>Path {index + 1}{candidate.reason ? ' — preserved (read-only)' : ''}</option>{/each}
+        {#each model.paths as candidate, index}<option value={index}>Tracé {index + 1}{candidate.reason ? ' — conservé (lecture seule)' : ''}</option>{/each}
       </select>
     </label>
-    <svg bind:this={canvas} class="canvas" viewBox={model.viewBox} role="group" aria-label="Current sketch and editable points"
+    <svg bind:this={canvas} class="canvas" viewBox={model.viewBox} role="group" aria-label="Dessin actuel et points modifiables"
       on:pointermove={move} on:pointerup={finish} on:pointercancel={cancel} on:lostpointercapture={cancel}>
       <image href={'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)} x={box[0]} y={box[1]} width={box[2]} height={box[3]} />
       {#if path && !path.reason}
         {#each path.points as point, index}
-          <circle cx={point.x} cy={point.y} r={radius} class:control={point.control} class:selected={pointIndex === index}
-            role="button" tabindex="0" aria-label={`${point.control ? 'Control' : 'Anchor'} point ${index + 1}`}
+          <circle cx={point.x} cy={point.y} r={hitRadius} class="point-hit"
+            role="button" tabindex="0" aria-label={`${point.control ? 'Contrôle' : 'Ancrage'} ${index + 1}`}
             on:focus={() => pointIndex = index} on:keydown={event => key(event, index)} on:pointerdown={event => begin(event, index)} />
+          <circle cx={point.x} cy={point.y} r={radius} class:control={point.control} class:selected={pointIndex === index}
+            aria-hidden="true" pointer-events="none" />
         {/each}
       {/if}
     </svg>
     {#if path?.reason}<p role="status">{path.reason}</p>{/if}
-    {#if !model.paths.length}<p role="status">No editable paths. SVG primitives are preserved; this workshop does not convert them.</p>{/if}
+    {#if !model.paths.length}<p role="status">Aucun tracé modifiable. Les primitives SVG sont conservées ; cet atelier ne les convertit pas.</p>{/if}
     {#each model.notices as notice}<p class="notice">{notice}</p>{/each}
     {#if selected && path && !path.reason}
-      <label>Point <select bind:value={pointIndex} on:change={cancel}>{#each path.points as point, index}<option value={index}>{point.control ? 'Control' : 'Anchor'} {index + 1}</option>{/each}</select></label>
+      <label>Point <select bind:value={pointIndex} on:change={cancel}>{#each path.points as point, index}<option value={index}>{point.control ? 'Contrôle' : 'Ancrage'} {index + 1}</option>{/each}</select></label>
       <div class="coordinates">
         <label>X <input type="number" step="any" bind:value={x} /></label>
         <label>Y <input type="number" step="any" bind:value={y} /></label>
-        <button on:click={() => apply({ type: 'move', path: pathIndex, point: pointIndex, x, y })}>Move point</button>
+        <button on:click={() => apply({ type: 'move', path: pathIndex, point: pointIndex, x, y })}>Déplacer le point</button>
       </div>
     {/if}
     <div class="tools">
-      <button disabled={!topology || !selected} on:click={() => apply({ type: 'add', path: pathIndex, point: pointIndex })}>Add midpoint</button>
-      <button disabled={!topology || !selected || (path?.points.length ?? 0) <= 3} on:click={() => { apply({ type: 'delete', path: pathIndex, point: pointIndex }); pointIndex = 0; }}>Delete point</button>
-      <button disabled={!topology || !!path?.closed} on:click={() => apply({ type: 'close', path: pathIndex })}>Close contour</button>
-      <button disabled={!path || !!path.reason} on:click={() => apply({ type: 'mirror', path: pathIndex })}>Mirror path</button>
-      <button disabled={!path || !!path.reason} on:click={() => apply({ type: 'rotate', path: pathIndex })}>Rotate path 90°</button>
+      <button disabled={!topology || !selected} on:click={() => apply({ type: 'add', path: pathIndex, point: pointIndex })}>Ajouter un point médian</button>
+      <button disabled={!topology || !selected || (path?.points.length ?? 0) <= 3} on:click={() => { apply({ type: 'delete', path: pathIndex, point: pointIndex }); pointIndex = 0; }}>Supprimer le point</button>
+      <button disabled={!topology || !!path?.closed} on:click={() => apply({ type: 'close', path: pathIndex })}>Fermer le contour</button>
+      <button disabled={!path || !!path.reason} on:click={() => apply({ type: 'mirror', path: pathIndex })}>Refléter le tracé</button>
+      <button disabled={!path || !!path.reason} on:click={() => apply({ type: 'rotate', path: pathIndex })}>Tourner le tracé de 90°</button>
     </div>
-    <p class="notice">Add/delete/close: single linear contours only. Mirror/rotation: around the viewBox center. Curves keep their control points; unsupported SVG remains untouched.</p>
-  {:else}<p>Import or open a project to edit its sketch.</p>{/if}
+    <p class="notice">Ajout, suppression et fermeture : contours linéaires uniques seulement. Symétrie et rotation : autour du centre du viewBox. Les courbes conservent leurs points de contrôle ; les éléments SVG non pris en charge restent inchangés.</p>
+  {:else}<p>Importez ou ouvrez un projet pour modifier son dessin.</p>{/if}
   {#if message}<p role="alert">{message}</p>{/if}
 </section>
 
@@ -107,6 +110,7 @@
   button { cursor: pointer; } button:disabled { opacity: .5; cursor: not-allowed; }
   .canvas { width: 100%; aspect-ratio: 1; background: #fff; border: 1px solid #64748b; touch-action: none; }
   circle { fill: #fff; stroke: #2563eb; stroke-width: 1; cursor: grab; }
+  circle.point-hit { fill: transparent; stroke: transparent; }
   circle.control { fill: #fef3c7; } circle.selected { fill: #60a5fa; }
   circle:focus { outline: none; stroke: #111827; stroke-width: 2; }
   .coordinates, .tools { display: flex; flex-wrap: wrap; gap: .5rem; }

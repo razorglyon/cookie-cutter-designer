@@ -37,7 +37,7 @@
   function addRegion() {
     const newRegion: ColorRegion = {
       id: `region-${regions.length}`,
-      name: `Part ${regions.length + 1}`,
+      name: `Pièce ${regions.length + 1}`,
       material: selectedMaterial,
       meshName: `part-${regions.length}`
     };
@@ -57,7 +57,7 @@
 
 <div class="material-manager">
   <div class="panel-header">
-    <h3>🎨 Material & Colors</h3>
+    <h3>🎨 Matériaux et couleurs</h3>
     <button class="toggle-btn" on:click={() => showPanel = !showPanel}>
       {showPanel ? '▼' : '▶'}
     </button>
@@ -67,7 +67,7 @@
     <div class="panel-content">
       <!-- Material Selection -->
       <div class="material-section">
-        <h4>Primary Material</h4>
+        <h4>Matériau principal</h4>
         <div class="material-grid">
           {#each Object.entries(materialsByType) as [type, materials]}
             <div class="material-group">
@@ -99,20 +99,20 @@
         </div>
         <div class="properties-grid">
           <div class="property">
-            <span class="property-label">Print Temp:</span>
+            <span class="property-label">Température d’impression :</span>
             <span class="property-value">{selectedMaterial.properties.printTemp}°C</span>
           </div>
           <div class="property">
-            <span class="property-label">Bed Temp:</span>
+            <span class="property-label">Température du plateau :</span>
             <span class="property-value">{selectedMaterial.properties.bedTemp}°C</span>
           </div>
           <div class="property">
-            <span class="property-label">Density:</span>
+            <span class="property-label">Densité :</span>
             <span class="property-value">{selectedMaterial.properties.density} g/cm³</span>
           </div>
           <div class="property">
-            <span class="property-label">Type:</span>
-            <span class="property-value">{selectedMaterial.properties.flexible ? 'Flexible' : 'Rigid'}</span>
+            <span class="property-label">Type :</span>
+            <span class="property-value">{selectedMaterial.properties.flexible ? 'Flexible' : 'Rigide'}</span>
           </div>
         </div>
       </div>
@@ -120,9 +120,9 @@
       <!-- Multi-Material Regions -->
       <div class="regions-section">
         <div class="section-header">
-          <h4>Multi-Material Parts</h4>
+          <h4>Pièces multimatériaux</h4>
           <button class="add-region-btn" on:click={addRegion}>
-            + Add Part
+            + Ajouter une pièce
           </button>
         </div>
 
@@ -150,35 +150,35 @@
           <!-- Compatibility Check -->
           {#if !compatibility.compatible}
             <div class="compatibility-warnings">
-              <div class="warning-header">⚠️ Compatibility Warnings</div>
+              <div class="warning-header">⚠️ Avertissements de compatibilité</div>
               {#each compatibility.warnings as warning}
                 <div class="warning-item">{warning}</div>
               {/each}
             </div>
           {/if}
 
-          <!-- Recommended Settings -->
+          <!-- Réglages recommandés -->
           <div class="recommended-settings">
-            <h5>Recommended Settings</h5>
+            <h5>Réglages recommandés</h5>
             <div class="settings-grid">
               <div class="setting">
-                <span class="setting-label">Print Temp:</span>
+                <span class="setting-label">Température d’impression :</span>
                 <span class="setting-value">{recommendedSettings.printTemp}°C</span>
               </div>
               <div class="setting">
-                <span class="setting-label">Bed Temp:</span>
+                <span class="setting-label">Température du plateau :</span>
                 <span class="setting-value">{recommendedSettings.bedTemp}°C</span>
               </div>
               <div class="setting">
-                <span class="setting-label">Purge Volume:</span>
+                <span class="setting-label">Volume de purge :</span>
                 <span class="setting-value">{recommendedSettings.purgeVolume}mm³</span>
               </div>
             </div>
           </div>
         {:else}
           <div class="no-regions">
-            <p>No multi-material parts added yet.</p>
-            <p class="hint">Add parts to use different colors or materials.</p>
+            <p>Aucune pièce multimatériau ajoutée.</p>
+            <p class="hint">Ajoutez des pièces pour utiliser différentes couleurs ou différents matériaux.</p>
           </div>
         {/if}
       </div>
@@ -188,7 +188,8 @@
 
 <style>
   .material-manager {
-    background: white;
+    background: var(--surface-card);
+    color: var(--text-primary);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -204,21 +205,21 @@
   h3 {
     margin: 0;
     font-size: 1rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
   h4 {
     margin: 0 0 0.75rem;
     font-size: 0.9rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     font-weight: 600;
   }
 
   h5 {
     margin: 0 0 0.5rem;
     font-size: 0.85rem;
-    color: #4a5568;
+    color: var(--text-secondary);
     font-weight: 600;
   }
 
@@ -230,7 +231,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    color: #a0aec0;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 0.8rem;
   }
@@ -243,7 +244,7 @@
 
   .material-section {
     padding: 1rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -259,10 +260,16 @@
     gap: 0.5rem;
   }
 
+  @media (max-width: 600px) {
+    .material-group {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
   .group-label {
     grid-column: 1 / -1;
     font-size: 0.75rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
     font-weight: 600;
     text-transform: uppercase;
     padding: 0.25rem 0;
@@ -276,7 +283,7 @@
     transition: all 0.2s;
     display: flex;
     align-items: flex-end;
-    padding: 0.5rem;
+    padding: 0.25rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
@@ -286,20 +293,26 @@
   }
 
   .material-swatch.selected {
-    border-color: #4299e1;
+    border-color: var(--color-primary-500);
     box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
   }
 
   .swatch-name {
     font-size: 0.7rem;
     font-weight: 600;
-    color: rgba(0, 0, 0, 0.7);
-    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.82);
+    color: var(--text-on-brand);
+    padding: 0.25rem 0.35rem;
+    border-radius: 4px;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: left;
   }
 
   .material-info {
     padding: 1rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -314,19 +327,19 @@
     width: 50px;
     height: 50px;
     border-radius: 8px;
-    border: 2px solid #e2e8f0;
+    border: 2px solid var(--border-default);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .material-name {
     font-size: 1rem;
     font-weight: 600;
-    color: #2d3748;
+    color: var(--text-primary);
   }
 
   .material-type {
     font-size: 0.85rem;
-    color: #718096;
+    color: var(--text-secondary);
   }
 
   .properties-grid {
@@ -342,19 +355,19 @@
 
   .property-label {
     font-size: 0.75rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
     text-transform: uppercase;
   }
 
   .property-value {
     font-size: 0.9rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
   .regions-section {
     padding: 1rem;
-    background: #f7fafc;
+    background: var(--surface-muted);
     border-radius: 6px;
   }
 
@@ -367,8 +380,8 @@
 
   .add-region-btn {
     padding: 0.5rem 1rem;
-    background: #4299e1;
-    color: white;
+    background: var(--color-primary-700);
+    color: var(--text-on-brand);
     border: none;
     border-radius: 6px;
     font-size: 0.85rem;
@@ -378,7 +391,7 @@
   }
 
   .add-region-btn:hover {
-    background: #3182ce;
+    background: var(--color-primary-800);
   }
 
   .regions-list {
@@ -393,9 +406,9 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem;
-    background: white;
+    background: var(--surface-input);
     border-radius: 6px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-default);
   }
 
   .region-info {
@@ -408,18 +421,18 @@
     width: 30px;
     height: 30px;
     border-radius: 6px;
-    border: 2px solid #e2e8f0;
+    border: 2px solid var(--border-default);
   }
 
   .region-name {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #2d3748;
+    color: var(--text-primary);
   }
 
   .region-material {
     font-size: 0.8rem;
-    color: #718096;
+    color: var(--text-secondary);
   }
 
   .remove-btn {
@@ -429,22 +442,22 @@
     align-items: center;
     justify-content: center;
     background: transparent;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-default);
     border-radius: 6px;
-    color: #e53e3e;
+    color: var(--text-error);
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .remove-btn:hover {
-    background: #fff5f5;
-    border-color: #fc8181;
+    background: var(--color-error-light);
+    border-color: var(--color-error);
   }
 
   .no-regions {
     text-align: center;
     padding: 2rem 1rem;
-    color: #718096;
+    color: var(--text-secondary);
   }
 
   .no-regions p {
@@ -454,34 +467,34 @@
 
   .hint {
     font-size: 0.85rem;
-    color: #a0aec0;
+    color: var(--text-secondary);
   }
 
   .compatibility-warnings {
     padding: 1rem;
-    background: #fffaf0;
-    border-left: 4px solid #ed8936;
+    background: var(--surface-warning);
+    border-left: 4px solid var(--color-warning);
     border-radius: 6px;
     margin-bottom: 1rem;
   }
 
   .warning-header {
     font-weight: 600;
-    color: #c05621;
+    color: var(--text-warning);
     margin-bottom: 0.5rem;
   }
 
   .warning-item {
     font-size: 0.85rem;
-    color: #7c2d12;
+    color: var(--text-warning);
     margin: 0.25rem 0;
   }
 
   .recommended-settings {
     padding: 1rem;
-    background: #ebf8ff;
+    background: var(--surface-callout);
     border-radius: 6px;
-    border-left: 4px solid #4299e1;
+    border-left: 4px solid var(--color-primary-500);
   }
 
   .settings-grid {
@@ -497,13 +510,13 @@
 
   .setting-label {
     font-size: 0.75rem;
-    color: #2c5282;
+    color: var(--text-primary);
     text-transform: uppercase;
   }
 
   .setting-value {
     font-size: 0.9rem;
-    color: #1a365d;
+    color: var(--text-primary);
     font-weight: 600;
   }
 </style>

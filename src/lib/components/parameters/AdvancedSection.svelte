@@ -1,6 +1,6 @@
 <div class="param-control">
-  <span class="control-label">Standalone Embossing</span>
+  <span class="control-label">Relief indépendant</span>
   <p class="param-hint">
-    Not available in Cutter mode. Select Stamp mode and adjust Stamp Depth for raised relief.
+    Indisponible en mode Découpe. Sélectionnez le mode Tampon et ajustez la profondeur du tampon pour créer un relief.
   </p>
 </div>

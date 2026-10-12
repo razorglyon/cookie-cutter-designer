@@ -47,7 +47,7 @@
       collisionResult = {
         hasCollisions: false,
         collisions: [],
-        warnings: ['Only one object detected. Add more items to check for collisions.']
+        warnings: ['Un seul objet détecté. Ajoutez des éléments pour vérifier les collisions.']
       };
       return;
     }
@@ -97,7 +97,7 @@
 
 <div class="collision-detector">
   <div class="panel-header">
-    <h3>⚠️ Collision Detection</h3>
+    <h3>⚠️ Détection des collisions</h3>
     <button class="toggle-btn" on:click={() => showPanel = !showPanel}>
       {showPanel ? '▼' : '▶'}
     </button>
@@ -108,11 +108,11 @@
       <div class="controls">
         <label class="checkbox-label">
           <input type="checkbox" bind:checked={autoCheckEnabled} />
-          <span>Auto-check on changes</span>
+          <span>Vérification automatique après modification</span>
         </label>
 
         <label>
-          <span>Min Separation: {minSeparation}mm</span>
+          <span>Écart minimal : {minSeparation}mm</span>
           <input
             type="range"
             bind:value={minSeparation}
@@ -125,28 +125,28 @@
       </div>
 
       <button class="check-btn" on:click={checkCollisions} disabled={!mesh}>
-        🔍 Check Now
+        🔍 Vérifier maintenant
       </button>
 
       {#if collisionResult}
         <div class="results">
           {#if collisionResult.hasCollisions}
             <div class="status error">
-              <strong>❌ Collisions Detected!</strong>
-              <p>{collisionResult.collisions.length} collision(s) found</p>
+              <strong>❌ Collisions détectées !</strong>
+              <p>{collisionResult.collisions.length} collision(s) détectée(s)</p>
             </div>
 
             <div class="collisions-list">
-              <h4>Collision Details:</h4>
+              <h4>Détails des collisions :</h4>
               {#each collisionResult.collisions as collision}
                 <div class="collision-item">
                   <div class="collision-pair">
                     <strong>{collision.object1}</strong> ↔ <strong>{collision.object2}</strong>
                   </div>
                   {#if collision.overlap > 0}
-                    <div class="overlap">Overlap: {collision.overlap.toFixed(2)}mm</div>
+                    <div class="overlap">Chevauchement : {collision.overlap.toFixed(2)}mm</div>
                   {:else}
-                    <div class="close">Gap: {collision.distance.toFixed(2)}mm (too close)</div>
+                    <div class="close">Écart : {collision.distance.toFixed(2)}mm (trop proche)</div>
                   {/if}
                 </div>
               {/each}
@@ -154,7 +154,7 @@
 
             {#if collisionResult.warnings.length > 0}
               <div class="warnings">
-                <h4>Warnings:</h4>
+                <h4>Avertissements :</h4>
                 {#each collisionResult.warnings as warning}
                   <div class="warning-item">⚠️ {warning}</div>
                 {/each}
@@ -165,27 +165,27 @@
               <button class="fix-btn" on:click={handleAutoFix}
                 disabled={!allowPositionFix}
                 aria-describedby={!allowPositionFix ? 'collision-position-fix-reason' : undefined}>
-                🔧 Auto-Fix Positions
+                🔧 Corriger les positions automatiquement
               </button>
               <button class="viz-btn" on:click={toggleVisualization}>
-                {showVisualization ? '👁️ Hide' : '👁️ Show'} Visualization
+                {showVisualization ? '👁️ Masquer' : '👁️ Afficher'} la visualisation
               </button>
             </div>
             {#if !allowPositionFix}
               <p id="collision-position-fix-reason" role="status">
-                Preview positions are read-only. Change the source or batch layout instead.
+                Les positions de l’aperçu sont en lecture seule. Modifiez plutôt la source ou la disposition du lot.
               </p>
             {/if}
           {:else}
             <div class="status success">
-              <strong>✅ No Collisions</strong>
-              <p>All objects are properly spaced</p>
+              <strong>✅ Aucune collision</strong>
+              <p>Tous les objets sont suffisamment espacés</p>
             </div>
           {/if}
         </div>
       {:else}
         <div class="no-results">
-          <p>Click "Check Now" to analyze for collisions</p>
+          <p>Cliquez sur « Vérifier maintenant » pour rechercher les collisions</p>
         </div>
       {/if}
     </div>
@@ -194,7 +194,8 @@
 
 <style>
   .collision-detector {
-    background: white;
+    background: var(--surface-card);
+    color: var(--text-primary);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -210,7 +211,7 @@
   h3, h4 {
     margin: 0;
     font-size: 1rem;
-    color: #2d3748;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
@@ -254,7 +255,7 @@
     flex-direction: column;
     gap: 0.5rem;
     font-size: 0.9rem;
-    color: #4a5568;
+    color: var(--text-secondary);
   }
 
   input[type="range"] {
@@ -264,10 +265,10 @@
 
   .check-btn, .fix-btn, .viz-btn {
     padding: 0.75rem 1rem;
-    border: 2px solid #4299e1;
+    border: 2px solid var(--color-primary-500);
     border-radius: 6px;
-    background: white;
-    color: #4299e1;
+    background: var(--surface-input);
+    color: var(--text-link);
     cursor: pointer;
     font-weight: 600;
     transition: all 0.2s;
@@ -276,8 +277,8 @@
   .check-btn:hover:not(:disabled),
   .fix-btn:hover,
   .viz-btn:hover {
-    background: #4299e1;
-    color: white;
+    background: var(--color-primary-700);
+    color: var(--text-on-brand);
   }
 
   .check-btn:disabled {
@@ -298,15 +299,15 @@
   }
 
   .status.success {
-    background: #f0fff4;
-    border: 2px solid #48bb78;
-    color: #22543d;
+    background: var(--surface-success);
+    border: 2px solid var(--color-success);
+    color: var(--text-success);
   }
 
   .status.error {
-    background: #fff5f5;
-    border: 2px solid #fc8181;
-    color: #742a2a;
+    background: var(--color-error-light);
+    border: 2px solid var(--color-error);
+    color: var(--text-error);
   }
 
   .status p {
@@ -315,17 +316,17 @@
   }
 
   .collisions-list {
-    background: #f7fafc;
+    background: var(--surface-muted);
     padding: 1rem;
     border-radius: 6px;
   }
 
   .collision-item {
-    background: white;
+    background: var(--surface-input);
     padding: 0.75rem;
     border-radius: 4px;
     margin-bottom: 0.5rem;
-    border-left: 4px solid #fc8181;
+    border-left: 4px solid var(--color-error);
   }
 
   .collision-pair {
@@ -335,26 +336,26 @@
 
   .overlap {
     font-size: 0.85rem;
-    color: #c53030;
+    color: var(--text-error);
     font-weight: 600;
   }
 
   .close {
     font-size: 0.85rem;
-    color: #d69e2e;
+    color: var(--text-warning);
     font-weight: 600;
   }
 
   .warnings {
-    background: #fffaf0;
+    background: var(--surface-warning);
     padding: 1rem;
     border-radius: 6px;
-    border-left: 4px solid #ed8936;
+    border-left: 4px solid var(--color-warning);
   }
 
   .warning-item {
     font-size: 0.85rem;
-    color: #7c2d12;
+    color: var(--text-warning);
     margin-bottom: 0.25rem;
   }
 
@@ -366,14 +367,14 @@
 
   .fix-btn {
     flex: 1;
-    background: #48bb78;
-    border-color: #48bb78;
-    color: white;
+    background: var(--color-secondary-700);
+    border-color: var(--color-success);
+    color: var(--text-on-brand);
   }
 
   .fix-btn:hover {
-    background: #38a169;
-    border-color: #38a169;
+    background: var(--color-secondary-800);
+    border-color: var(--color-secondary-700);
   }
 
   .viz-btn {
@@ -383,7 +384,7 @@
   .no-results {
     text-align: center;
     padding: 2rem 1rem;
-    color: #718096;
+    color: var(--text-secondary);
     font-size: 0.9rem;
   }
 </style>

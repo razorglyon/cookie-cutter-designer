@@ -25,7 +25,7 @@
 </script>
 <section class="cutter-series" aria-labelledby="series-title">
   <h3 id="series-title">Série enregistrable</h3>
-  <p id="series-help">Copies séparées du même Cutter, sans connexion entre elles. Dessin, paroi, poignée et ponts conservés. Réglez puis appliquez ; ouvrir ce panneau ne modifie rien.</p>
+  <p id="series-help">Copies séparées du même emporte-pièce, sans connexion entre elles. Dessin, paroi, poignée et ponts conservés. Réglez puis appliquez ; ouvrir ce panneau ne modifie rien.</p>
   {#if currentDocument?.kind === 'cutter' || currentDocument?.kind === 'multi-cutter'}
     <div class="series-fields">
       <label for="series-copies">Copies (1–24)<input id="series-copies" type="number" min="1" max="24" step="1" bind:value={copies} aria-invalid={seriesError !== null} aria-describedby="series-help series-error" /></label>
@@ -37,10 +37,10 @@
     <button type="button" data-apply-series on:click={applySeries}>{currentDocument.kind === 'multi-cutter' ? 'Appliquer la série' : 'Créer la série'}</button>
     {#if currentDocument.kind === 'multi-cutter'}
       <p role="status" data-series-active>{currentDocument.layout.copies} copies actives · {currentDocument.layout.columns} colonnes · {currentDocument.layout.spacingMm} mm. Sauvegardez dans Projets locaux ; exportez la géométrie lorsque la génération est valide.</p>
-      <button type="button" data-single-cutter on:click={() => onSingleCutter?.()}>Revenir au Cutter unique</button>
+      <button type="button" data-single-cutter on:click={() => onSingleCutter?.()}>Revenir à l’emporte-pièce unique</button>
     {/if}
-    <p>Limite : 500 000 triangles. Plateau trop petit ou Cutter incomplet : export bloqué, sans réparation automatique.</p>
-  {:else}<p role="status">Ouvrez ou créez un Cutter pour préparer une série. Stamp n’est pas pris en charge dans cette tranche.</p>{/if}
+    <p>Limite : 500 000 triangles. Plateau trop petit ou emporte-pièce incomplet : export bloqué, sans réparation automatique.</p>
+  {:else}<p role="status">Ouvrez ou créez un emporte-pièce pour préparer une série. Le tampon n’est pas pris en charge dans cette tranche.</p>{/if}
 </section>
 <style>
   .cutter-series { min-width: 0; padding: var(--spacing-4); border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--surface-card); color: var(--text-primary); }

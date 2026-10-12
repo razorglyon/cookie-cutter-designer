@@ -22,7 +22,7 @@
   let revision = 0;
   let controller: AbortController | null = null;
   let preparedSettings = '';
-  let prepareButton: HTMLButtonElement;
+  let reviewHeading: HTMLHeadingElement;
 
   $: settings = {
     ...DEFAULT_PHOTO_SETTINGS,
@@ -78,7 +78,12 @@
   }
   onMount(() => {
     originalUrl = URL.createObjectURL(file);
-    prepareButton?.focus();
+    // The last action sits below the previews; focusing it would jump past the images.
+    reviewHeading.focus({ preventScroll: true });
+    if (window.matchMedia?.('(max-width: 768px)').matches) {
+      const panel = reviewHeading.closest<HTMLElement>('.panel-content');
+      if (panel) panel.scrollTop += reviewHeading.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+    }
     void prepare();
   });
   onDestroy(() => {
@@ -89,8 +94,8 @@
 </script>
 
 <svelte:window on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); cancel(); } }} />
-<section class="photo-review" aria-label="Photo preparation">
-  <h3>Préparer la photo</h3>
+<section class="photo-review" aria-label="Préparation de la photo">
+  <h3 bind:this={reviewHeading} tabindex="-1">Préparer la photo</h3>
   <p>Un objet contrasté sur un fond simple donne le meilleur contour. Recadrez autour de la forme voulue, ajustez le seuil puis vérifiez l’aperçu. Rien ne remplace votre dessin avant confirmation.</p>
   <div class="previews">
     <figure>
@@ -106,36 +111,36 @@
   <fieldset>
     <legend>Recadrage (% de l’image originale)</legend>
     <div class="crop-fields">
-      <label>Gauche (%)<input aria-label="Photo crop left" type="number" min="0" max="99" step="0.1" bind:value={cropX} /></label>
-      <label>Haut (%)<input aria-label="Photo crop top" type="number" min="0" max="99" step="0.1" bind:value={cropY} /></label>
-      <label>Largeur (%)<input aria-label="Photo crop width" type="number" min="0.1" max="100" step="0.1" bind:value={cropWidth} /></label>
-      <label>Hauteur (%)<input aria-label="Photo crop height" type="number" min="0.1" max="100" step="0.1" bind:value={cropHeight} /></label>
+      <label>Gauche (%)<input aria-label="Recadrage photo : gauche" type="number" min="0" max="99" step="0.1" bind:value={cropX} /></label>
+      <label>Haut (%)<input aria-label="Recadrage photo : haut" type="number" min="0" max="99" step="0.1" bind:value={cropY} /></label>
+      <label>Largeur (%)<input aria-label="Recadrage photo : largeur" type="number" min="0.1" max="100" step="0.1" bind:value={cropWidth} /></label>
+      <label>Hauteur (%)<input aria-label="Recadrage photo : hauteur" type="number" min="0.1" max="100" step="0.1" bind:value={cropHeight} /></label>
     </div>
     <p>Gauche + largeur et haut + hauteur ne doivent pas dépasser 100 %. Laissez un peu de fond autour de l’objet.</p>
   </fieldset>
   <label>Objet à conserver
-    <select aria-label="Photo foreground" value={foreground} on:change={event => foreground = event.currentTarget.value as PhotoSettings['foreground']}>
+    <select aria-label="Objet à conserver sur la photo" value={foreground} on:change={event => foreground = event.currentTarget.value as PhotoSettings['foreground']}>
       <option value="dark">Sombre sur fond clair</option><option value="light">Clair sur fond sombre</option>
     </select>
   </label>
-  <label class="check"><input type="checkbox" aria-label="Automatic photo threshold" bind:checked={automatic} /> Seuil automatique</label>
+  <label class="check"><input type="checkbox" aria-label="Seuil automatique de la photo" bind:checked={automatic} /> Seuil automatique</label>
   <label>Seuil : {automatic ? (fresh ? result?.diagnostics.threshold : 'automatique') : threshold} / 255
-    <input aria-label="Photo threshold" type="range" min="0" max="255" step="1" disabled={automatic} bind:value={threshold} />
+    <input aria-label="Seuil de la photo" type="range" min="0" max="255" step="1" disabled={automatic} bind:value={threshold} />
   </label>
   <label>Retirer les îlots de bruit jusqu’à {minComponentArea} pixels (0 = tout conserver)
-    <input aria-label="Photo noise area" type="range" min="0" max="64" step="1" bind:value={minComponentArea} />
+    <input aria-label="Surface du bruit sur la photo" type="range" min="0" max="64" step="1" bind:value={minComponentArea} />
   </label>
-  <label class="check"><input type="checkbox" aria-label="Fill photo holes" bind:checked={fillHoles} /> Silhouette extérieure : combler les trous</label>
+  <label class="check"><input type="checkbox" aria-label="Combler les trous de la photo" bind:checked={fillHoles} /> Silhouette extérieure : combler les trous</label>
   {#if fillHoles}<p>Cette option supprime volontairement tous les trous intérieurs. Décochez-la pour les conserver.</p>{/if}
   {#if error}<p role="alert">{error}</p>{/if}
   {#if fresh && result}
     <p role="status" aria-live="polite">{result.diagnostics.width} × {result.diagnostics.height} px traités ; {result.diagnostics.components} forme(s), {result.diagnostics.holes} trou(s), {result.diagnostics.removedComponents} îlot(s) retiré(s), {result.diagnostics.filledHoles} trou(s) comblé(s).</p>
     {#each result.diagnostics.warnings as warning}<p class="warning">{warning}</p>{/each}
     {#if !result.diagnostics.canApply}<p>Résultat non applicable. Recadrez davantage ou ajustez le seuil et le contraste de la photo.</p>{/if}
-  {:else if pending}<p role="status" aria-live="polite">Calcul dans un Worker local…</p>
+  {:else if pending}<p role="status" aria-live="polite">Calcul dans un traitement local…</p>
   {:else}<p role="status">Réglages modifiés : recalculez l’aperçu avant de l’appliquer.</p>{/if}
   <div class="actions">
-    <button bind:this={prepareButton} type="button" class="btn" on:click={prepare}>Recalculer l’aperçu photo</button>
+    <button type="button" class="btn" on:click={prepare}>Recalculer l’aperçu photo</button>
     <button type="button" class="btn btn-primary" disabled={pending || !fresh || !result?.diagnostics.canApply} on:click={apply}>Appliquer le contour photo</button>
     <button type="button" class="btn" on:click={cancel}>Annuler la préparation photo</button>
   </div>
@@ -157,4 +162,10 @@
   figcaption { overflow-wrap: break-word; margin-top: 6px; } .actions { display: grid; gap: 8px; } button { min-height: 44px; white-space: normal; text-align: center; }
   .warning, [role='alert'] { color: var(--text-primary); border-left: 3px solid var(--primary-color, #f59e0b); padding-left: 8px; }
   :focus-visible { outline: 2px solid var(--primary-color, #f59e0b); outline-offset: 2px; }
+  @media (max-width: 768px) {
+    .previews { grid-template-columns: minmax(0, 1fr); gap: var(--spacing-3); }
+    img, .preview-empty { height: 220px; }
+    .original-crop img { height: auto; }
+    input[type='number'], select { font-size: max(16px, 1rem); }
+  }
 </style>

@@ -41,42 +41,42 @@
   }
 </script>
 
-<section class="project-manager" aria-label="Project">
-  <h3>Project</h3>
-  <label for="project-name">Project name</label>
+<section class="project-manager" aria-label="Projet">
+  <h3>Projet</h3>
+  <label for="project-name">Nom du projet</label>
   <input id="project-name" type="text" value={nameDraft} on:input={rename}
     disabled={!$session || $workflow.disposed}
     aria-invalid={nameError !== null} aria-describedby={nameError ? 'project-name-error' : undefined} />
   {#if nameError}<p id="project-name-error" role="alert">{nameError}</p>{/if}
-  <p role="status">{#if $workflow.saving}Saving project…{:else if !$session}No active project{:else if $workflow.dirty}Unsaved changes{:else}Saved locally{/if}</p>
+  <p role="status">{#if $workflow.saving}Enregistrement du projet…{:else if !$session}Aucun projet actif{:else if $workflow.dirty}Modifications non enregistrées{:else}Enregistré localement{/if}</p>
   {#if unavailableReason !== null}<p role="status">{unavailableReason}</p>{/if}
   <div class="actions">
-    <button type="button" disabled={saveBlocked} on:click={save}>Save project</button>
+    <button type="button" disabled={saveBlocked} on:click={save}>Enregistrer le projet</button>
     <button type="button" disabled={documentUnavailable || ($workflow.pending !== null && $workflow.pending !== 'save')}
-      on:click={() => workflow.export()}>Export project</button>
-    <button type="button" disabled={transitionBusy} on:click={() => fileInput.click()}>Import project file</button>
-    <input bind:this={fileInput} type="file" accept=".ccd.json,.json" aria-label="Project file"
+      on:click={() => workflow.export()}>Exporter le projet</button>
+    <button type="button" disabled={transitionBusy} on:click={() => fileInput.click()}>Importer un fichier projet</button>
+    <input bind:this={fileInput} type="file" accept=".ccd.json,.json" aria-label="Fichier projet"
       disabled={transitionBusy} on:change={importFile} hidden />
   </div>
-  {#if $workflow.saveError}<p role="alert">Could not save project: {$workflow.saveError.message} Retry saving or export a file backup.</p>{/if}
+  {#if $workflow.saveError}<p role="alert">Impossible d’enregistrer le projet : {$workflow.saveError.message} Réessayez ou exportez une sauvegarde du fichier.</p>{/if}
   {#if $workflow.error && $workflow.error !== $workflow.saveError}<p role="alert">{$workflow.error.message}</p>{/if}
   {#if $workflow.warnings.length}
-    <div role="status"><p>Import warnings</p><ul>{#each $workflow.warnings as warning}<li>{warning}</li>{/each}</ul></div>
+    <div role="status"><p>Avertissements lors de l’import</p><ul>{#each $workflow.warnings as warning}<li>{warning}</li>{/each}</ul></div>
   {/if}
-  <p class="hint">Local projects stay in the same browser and origin (site address). Export a .ccd.json file for a portable backup or to move to another browser.</p>
+  <p class="hint">Les projets locaux restent dans ce navigateur et sur ce site. Exportez un fichier .ccd.json pour disposer d’une sauvegarde transférable ou changer de navigateur.</p>
 </section>
 
 <style>
-  .project-manager { background: white; color: #2d3748; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgb(0 0 0 / 10%); }
+  .project-manager { background: var(--surface-card); color: var(--text-primary); padding: 1rem; border-radius: 8px; box-shadow: var(--shadow-sm); }
   h3 { margin: 0 0 1rem; font-size: 1rem; }
   label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
-  input[type='text'] { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0.5rem; border: 1px solid #718096; border-radius: 6px; }
+  input[type='text'] { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0.5rem; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-input); color: var(--text-primary); }
   .actions { display: flex; flex-direction: column; gap: 0.5rem; }
-  button { min-height: 44px; padding: 0.65rem; border: 1px solid #718096; border-radius: 6px; background: #f7fafc; color: #2d3748; font: inherit; cursor: pointer; }
-  button:first-child { background: #6b46c1; color: white; }
+  button { min-height: 44px; padding: 0.65rem; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-muted); color: var(--text-primary); font: inherit; cursor: pointer; }
+  button:first-child { background: var(--color-primary-700); border-color: var(--color-primary-700); color: var(--text-on-brand); }
   button:disabled { opacity: 0.6; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible { outline: 3px solid #3182ce; outline-offset: 2px; }
-  [role='alert'] { color: #9b2c2c; overflow-wrap: anywhere; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--color-primary-500); outline-offset: 2px; }
+  [role='alert'] { color: var(--text-error); overflow-wrap: anywhere; }
   .hint { font-size: 0.85rem; line-height: 1.6; }
   li { overflow-wrap: anywhere; }
 </style>

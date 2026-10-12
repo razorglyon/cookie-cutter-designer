@@ -136,10 +136,10 @@ describe('wall profiles use current document values, not a saved profile name', 
     session.updateParameters('cutter', { wallThickness: 0.85, cuttingHeight: 12.5, totalHeight: 24.75, taperAngle: 7.25 });
     await tick();
     for (const [field, value, unit, accessibleUnit] of [
-      ['wallThickness', '0.85', 'mm', 'millimeters'],
-      ['cuttingHeight', '12.5', 'mm', 'millimeters'],
-      ['totalHeight', '24.75', 'mm', 'millimeters'],
-      ['taperAngle', '7.25', '°', 'degrees']
+      ['wallThickness', '0.85', 'mm', 'millimètres'],
+      ['cuttingHeight', '12.5', 'mm', 'millimètres'],
+      ['totalHeight', '24.75', 'mm', 'millimètres'],
+      ['taperAngle', '7.25', '°', 'degrés']
     ]) {
       expect(document.querySelector(`label[for="${field}"]`)?.textContent).toContain(`${value}${unit === 'mm' ? ' ' : ''}${unit}`);
       expect(document.getElementById(field)?.getAttribute('aria-valuetext')).toBe(`${value} ${accessibleUnit}`);

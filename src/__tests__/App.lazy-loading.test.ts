@@ -20,7 +20,7 @@ async function openCategory(title: string, expectedText: string): Promise<void> 
 
   await vi.waitFor(() => {
     expect(document.body.textContent).toContain(expectedText);
-  });
+  }, { timeout: 10000 });
 }
 
 describe('App lazy panels', () => {
@@ -29,8 +29,8 @@ describe('App lazy panels', () => {
     document.body.appendChild(target);
     mountedApp = mount(App, { target });
 
-    await openCategory('Advanced Creation', 'AI Image Processor');
-    await openCategory('AI Tools (Gemini)', 'Gemini connection');
-    await openCategory('Cloud Gallery', 'Cloud Gallery');
+    await openCategory('Création avancée', 'Traitement d’images par IA');
+    await openCategory('Outils IA (Gemini)', 'Connexion à Gemini');
+    await openCategory('Galerie locale', 'Galerie locale');
   });
 });

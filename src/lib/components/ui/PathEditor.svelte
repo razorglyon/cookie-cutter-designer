@@ -156,7 +156,7 @@
   }
 
   function clearPath() {
-    if (confirm('Clear all points?')) {
+    if (confirm('Effacer tous les points ?')) {
       points = [];
       selectedPointIndex = null;
       draw();
@@ -179,44 +179,44 @@
       class="tool-btn"
       class:active={mode === 'select'}
       on:click={() => setMode('select')}
-      title="Select and move points"
+      title="Sélectionner et déplacer les points"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
       </svg>
-      Select
+      Sélectionner
     </button>
 
     <button
       class="tool-btn"
       class:active={mode === 'add'}
       on:click={() => setMode('add')}
-      title="Add points"
+      title="Ajouter des points"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="12" y1="5" x2="12" y2="19" />
         <line x1="5" y1="12" x2="19" y2="12" />
       </svg>
-      Add
+      Ajouter
     </button>
 
     <button
       class="tool-btn"
       class:active={mode === 'delete'}
       on:click={() => setMode('delete')}
-      title="Delete points"
+      title="Supprimer des points"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="18" y1="6" x2="6" y2="18" />
         <line x1="6" y1="6" x2="18" y2="18" />
       </svg>
-      Delete
+      Supprimer
     </button>
 
     <div class="spacer"></div>
 
-    <button class="tool-btn clear" on:click={clearPath} title="Clear all">
-      Clear
+    <button class="tool-btn clear" on:click={clearPath} title="Tout effacer">
+      Effacer
     </button>
 
     <div class="point-count">{points.length} points</div>

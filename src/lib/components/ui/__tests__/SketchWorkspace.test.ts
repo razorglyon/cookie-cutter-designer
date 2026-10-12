@@ -26,6 +26,18 @@ it('opening does not mutate; drag preview commits once on release', async () => 
  expect(session.getDocument()?.sketch.revision).toBe(baseline!.sketch.revision + 1);
  expect(session.getDocument()?.sketch.svg).toContain('M25 25'); expect(session.getDocument()?.source).toEqual(baseline!.source);
 });
+it('keeps each visual point small while providing a larger accessible drag target', async () => {
+ const { session, canvas } = setup(); await tick();
+ const hit = canvas.querySelector<SVGCircleElement>('circle[role="button"]')!;
+ const visible = canvas.querySelector<SVGCircleElement>('circle[aria-hidden="true"]')!;
+ expect(Number(hit.getAttribute('r'))).toBeGreaterThanOrEqual(100 / 13);
+ expect(Number(hit.getAttribute('r'))).toBeGreaterThan(Number(visible.getAttribute('r')));
+ expect(visible.getAttribute('pointer-events')).toBe('none');
+ expect(hit.getAttribute('aria-label')).toContain('1');
+ const baseline = session.getDocument()!;
+ pointer(hit, 'pointerdown'); pointer(canvas, 'pointermove', 25, 25); pointer(canvas, 'pointerup', 25, 25); await tick();
+ expect(session.getDocument()?.sketch.revision).toBe(baseline.sketch.revision + 1);
+});
 it.each(['escape', 'cancel', 'switch', 'history'])('discards draft after %s instead of publishing stale gesture', async action => {
  const { session, canvas } = setup(); const baseline = session.getDocument()!;
  pointer(document.querySelector('circle')!, 'pointerdown'); pointer(canvas, 'pointermove', 25, 25);
@@ -39,5 +51,5 @@ it('keyboard editing and empty state use the actual session', async () => {
  const { session } = setup(); const point = document.querySelector('circle')!;
  point.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await tick();
  expect(session.getDocument()?.sketch.svg).toContain('M11 10');
- session.clear(); await tick(); expect(document.body.textContent).toContain('Import or open a project');
+ session.clear(); await tick(); expect(document.body.textContent).toContain('Importez ou ouvrez un projet');
 });

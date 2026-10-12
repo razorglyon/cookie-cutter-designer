@@ -8,9 +8,9 @@
   import type { SizeMode } from '../../types/CookieCutter';
 
   const sizeModes: { value: SizeMode; label: string }[] = [
-    { value: 'longest', label: 'Longest side' },
-    { value: 'width', label: 'Width' },
-    { value: 'height', label: 'Height' }
+    { value: 'longest', label: 'Côté le plus long' },
+    { value: 'width', label: 'Largeur' },
+    { value: 'height', label: 'Hauteur' }
   ];
 
   const describedBy = (field: string) =>
@@ -18,7 +18,7 @@
 </script>
 
 <div class="param-control">
-  <label for="targetSize">Final Size: {$params.targetSize.toFixed(0)} mm</label>
+  <label for="targetSize">Dimension finale : {$params.targetSize.toFixed(0)} mm</label>
   <input
     id="targetSize"
     data-field="targetSize"
@@ -31,14 +31,14 @@
     aria-describedby={describedBy('targetSize')}
     on:change={(event) => updateParam('targetSize', event.currentTarget.valueAsNumber)}
   />
-  <p id="targetSize-hint" class="param-hint">10–{$params.buildPlateSize} mm · Outer measured dimension.</p>
+  <p id="targetSize-hint" class="param-hint">10–{$params.buildPlateSize} mm · Dimension extérieure mesurée.</p>
   {#if $parameterErrorField === 'targetSize' && $parameterError}
     <p id="targetSize-error" class="param-error" role="alert">{$parameterError}</p>
   {/if}
 </div>
 
 <div class="param-control">
-  <label for="sizeMode">Measured Dimension</label>
+  <label for="sizeMode">Dimension mesurée</label>
   <select
     id="sizeMode"
     data-field="sizeMode"
@@ -51,14 +51,14 @@
       <option value={mode.value}>{mode.label}</option>
     {/each}
   </select>
-  <p id="sizeMode-hint" class="param-hint">Chooses which outer dimension Final Size controls.</p>
+  <p id="sizeMode-hint" class="param-hint">Détermine la dimension extérieure réglée par la dimension finale.</p>
   {#if $parameterErrorField === 'sizeMode' && $parameterError}
     <p id="sizeMode-error" class="param-error" role="alert">{$parameterError}</p>
   {/if}
 </div>
 
 <div class="param-control">
-  <label for="buildPlateSize">Build Plate: {$params.buildPlateSize.toFixed(0)} mm</label>
+  <label for="buildPlateSize">Plateau d’impression : {$params.buildPlateSize.toFixed(0)} mm</label>
   <input
     id="buildPlateSize"
     data-field="buildPlateSize"
@@ -67,12 +67,12 @@
     max="300"
     step="10"
     value={$params.buildPlateSize}
-    aria-valuetext={`${$params.buildPlateSize.toFixed(0)} millimeters`}
+    aria-valuetext={`${$params.buildPlateSize.toFixed(0)} millimètres`}
     aria-invalid={$parameterErrorField === 'buildPlateSize'}
     aria-describedby={describedBy('buildPlateSize')}
     on:input={(event) => updateParam('buildPlateSize', Number(event.currentTarget.value))}
   />
-  <p id="buildPlateSize-hint" class="param-hint">100–300 mm · Match the usable area of your printer.</p>
+  <p id="buildPlateSize-hint" class="param-hint">100–300 mm · Adaptez à la surface utile de votre imprimante.</p>
   {#if $parameterErrorField === 'buildPlateSize' && $parameterError}
     <p id="buildPlateSize-error" class="param-error" role="alert">{$parameterError}</p>
   {/if}
