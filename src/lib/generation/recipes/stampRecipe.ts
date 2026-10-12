@@ -122,7 +122,9 @@ export const stampRecipe = Object.freeze({
     let ownedObject: Awaited<ReturnType<typeof generateStamp>> | undefined;
 
     try {
-      ownedObject = await generateStamp(document.sketch.svg, validation.parameters);
+      ownedObject = document.schemaVersion === 4 && document.imprintMode === 'recessed'
+        ? await generateStamp(document.sketch.svg, validation.parameters, 'recessed')
+        : await generateStamp(document.sketch.svg, validation.parameters);
       context.signal.throwIfAborted();
 
       const report = validatePrintableObject(ownedObject, {

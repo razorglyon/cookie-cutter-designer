@@ -127,7 +127,7 @@
 
   function geometryKey(document: DesignDocument): string {
     // Match the integration's semantic generation key, not name/timestamps/view.
-    return JSON.stringify([document.kind, document.sketch, document.parameters, document.schemaVersion !== 1 ? document.bridges : [], document.schemaVersion === 3 ? document.layout : null]);
+    return JSON.stringify([document.kind, document.sketch, document.parameters, document.schemaVersion !== 1 ? document.bridges : [], document.schemaVersion === 3 ? document.layout : null, document.schemaVersion === 4 ? document.imprintMode : null]);
   }
 
   function captureGeometryExport(): { mesh: ModelObject; params: Readonly<CookieCutterParams> | undefined; filename: string } | null {
@@ -1274,9 +1274,9 @@
             </div>
           {/if}
 
-        {:else if activeCategory === 'params' && $model}
+        {:else if activeCategory === 'params' && ($model || (unavailableReason === null && $session?.kind === 'stamp'))}
           <HistoryPanel on:undo={handleUndo} on:redo={handleRedo} />
-          <ParameterPanel />
+          <ParameterPanel session={unavailableReason === null ? session : null} />
 
         {:else if activeCategory === 'params'}
           <div class="feature-header"><h2>Réglages</h2><p>Importez une image ou choisissez une forme pour générer un Cutter et accéder à ses réglages.</p></div>

@@ -32,6 +32,7 @@ import {
 } from '../../../utils/__tests__/legacyGeometryFixtureSupport';
 import { installSvgLoaderDomParserAdapter } from '../../../utils/__tests__/svgDomTestSupport';
 import { stampRecipe } from '../stampRecipe';
+import { serializeSTL } from '../../../utils/stlExporter';
 
 vi.mock('../../../utils/stampGenerator', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/stampGenerator')>();
@@ -158,6 +159,36 @@ async function captureFailure(
 }
 
 describe('stampRecipe', () => {
+  it.each(['raised', 'recessed'] as const)('reads V4 %s from the document, never from legacy params', async imprintMode => {
+    const v1 = createStampDocument({ ...legacyStampFixture.success.parameters, stampDepth: 2 });
+    const document = { ...v1, schemaVersion: 4 as const, bridges: [] as const, imprintMode };
+    const artifacts = await stampRecipe.generate(document, generationContext(new AbortController().signal));
+    try {
+      if (imprintMode === 'raised') expect(generateStampMock).toHaveBeenLastCalledWith(v1.sketch.svg, v1.parameters);
+      else expect(generateStampMock).toHaveBeenLastCalledWith(v1.sketch.svg, v1.parameters, 'recessed');
+      expect(artifacts[0].validation.valid).toBe(true); expect(artifacts[0].validation.shells).toBe(1);
+      if (imprintMode === 'recessed') {
+        const handleHeight = v1.parameters.enableHandle && v1.parameters.handleStyle !== 'none' ? v1.parameters.handleHeight : 0;
+        expect(artifacts[0].dimensionsMm.height).toBeCloseTo(handleHeight + 4, 5);
+      }
+    } finally { for (const artifact of artifacts) disposeObject3D(artifact.object); }
+  });
+
+  it('keeps V2 raised geometry and binary STL identical to the V1 fixture', async () => {
+    const v1 = createStampDocument();
+    const v2 = { ...v1, schemaVersion: 2 as const, bridges: [] };
+    const first = await stampRecipe.generate(v1, generationContext(new AbortController().signal));
+    let second: readonly GeneratedArtifact<'stamp'>[] = [];
+    try {
+      second = await stampRecipe.generate(v2, generationContext(new AbortController().signal));
+      expect(generateStampMock).toHaveBeenLastCalledWith(v1.sketch.svg, v1.parameters);
+      expect(logicalTriangleHash(second[0].object)).toBe(legacyStampFixture.expected.logicalTriangleHash);
+      const a = serializeSTL(first[0].object, true) as DataView;
+      const b = serializeSTL(second[0].object, true) as DataView;
+      expect(new Uint8Array(b.buffer)).toEqual(new Uint8Array(a.buffer));
+    } finally { for (const item of [...first, ...second]) disposeObject3D(item.object); }
+  });
+
   it('expose des paramètres Stamp par défaut frais issus du domaine', () => {
     const first = stampRecipe.createDefaultParameters();
     const second = stampRecipe.createDefaultParameters();

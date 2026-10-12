@@ -31,7 +31,7 @@ describe('DesignDocument V2 / migration explicite', () => {
     ]) expect(() => parseDesignDocumentV2({ ...input, bridges: [invalid] })).toThrow();
     expect(() => parseDesignDocumentV2({ ...input, bridges: [bridge, bridge] })).toThrow();
     expect(() => parseDesignDocumentV2({ ...input, futureField: true })).toThrow();
-    expect(() => parseDesignDocument({ ...input, schemaVersion: 4, futureField: true })).toThrow(/schemaVersion/);
+    expect(() => parseDesignDocument({ ...input, schemaVersion: 5, futureField: true })).toThrow(/schemaVersion/);
     expect(() => parseDesignDocumentV2({ ...input, kind: 'stamp', parameters: { ...input.parameters, mode: 'stamp', stampBase: true } })).toThrow(/bridges/);
   });
 });

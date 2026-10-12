@@ -3,6 +3,7 @@ import type {
   DesignDocument,
   Bridge,
   CutterSeriesLayout,
+  StampImprintMode,
   ViewportPreferences
 } from '../domain/designDocument';
 import type { ImplementedDesignKind } from '../domain/designKind';
@@ -14,6 +15,7 @@ import {
 import { parseDesignDocument } from '../domain/documentValidation';
 import { DEFAULT_CUTTER_SERIES_LAYOUT } from '../domain/cutterSeries';
 import { migrateV1ToV2 } from '../domain/migrations/v1ToV2';
+import { stampImprintMode } from '../domain/stampImprint';
 
 export interface DesignDocumentStoreOptions {
   readonly now?: () => string;
@@ -28,6 +30,8 @@ export interface DesignDocumentStore extends Readable<DesignDocument> {
   updateBridges(bridges: readonly Bridge[]): void;
   /** Atomic promotion/update; same identity and epoch, no generated objects. */
   updateSeries(layout: CutterSeriesLayout): void;
+  /** Explicit, atomic stamp-only promotion; never writes the legacy parameter port. */
+  updateStampImprintMode(mode: StampImprintMode): void;
   updateViewport(patch: Partial<ViewportPreferences>): void;
   updateParameters<K extends ImplementedDesignKind>(
     kind: K,
@@ -133,6 +137,12 @@ export function createDesignDocumentStore(
       publishMutation(current, { ...current, schemaVersion: 3, kind: 'multi-cutter',
         bridges: current.schemaVersion === 1 ? [] : current.bridges, layout });
     },
+    updateStampImprintMode(imprintMode: StampImprintMode): void {
+      const current = get(internal);
+      if (current.kind !== 'stamp') throw new Error('Le mode d’empreinte est réservé aux tampons.');
+      if (stampImprintMode(current) === imprintMode) return;
+      publishMutation(current, { ...current, schemaVersion: 4, bridges: [], imprintMode });
+    },
     updateViewport(patch: Partial<ViewportPreferences>): void {
       const current = get(internal);
       publishMutation(current, {
@@ -177,7 +187,10 @@ export function createDesignDocumentStore(
         throw new Error('Supprimez explicitement les ponts avant de changer de type de design.');
       }
 
-      if (current.schemaVersion === 3) {
+      if (current.schemaVersion === 4) {
+        const { imprintMode: _imprintMode, bridges: _bridges, ...single } = current;
+        publishMutation(current, { ...single, schemaVersion: 1, kind, parameters: createDefaultParameters(kind) });
+      } else if (current.schemaVersion === 3) {
         const { layout: _layout, ...single } = current;
         publishMutation(current, { ...single, schemaVersion: 2, kind, parameters: createDefaultParameters(kind) });
       } else {

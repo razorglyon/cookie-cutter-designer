@@ -13,6 +13,8 @@ import {
   validateCookieCutterParams
 } from './generationValidation';
 import { validatePrintableObject } from './geometryValidation';
+import type { StampImprintMode } from '../domain/designDocument';
+import { STAMP_IMPRINT_LIMITS } from '../domain/stampImprint';
 
 const modeling = (
   modelingModule as unknown as { readonly default?: typeof modelingModule }
@@ -46,11 +48,14 @@ type Bounds2D = Readonly<{
   height: number;
 }>;
 
-const BASE_THICKNESS = 4;
+const BASE_THICKNESS = STAMP_IMPRINT_LIMITS.baseThicknessMm;
 const BOOLEAN_OVERLAP = 0.05;
 const TRIANGLE_EPSILON = 1e-16;
 const MAX_REPAIRABLE_TRIANGLE_AREA = 0.01;
 const MAX_REPAIRABLE_TRIANGLE_COUNT = 8;
+// Much finer than the 1e-5 mm mesh weld: canonicalize floating-point duplicates,
+// not the artwork resolution or the user's millimetre parameters.
+const BOOLEAN_VERTEX_PRECISION = 100_000_000;
 
 const MATERIAL_OPTIONS = Object.freeze({
   color: 0xffa726,
@@ -183,7 +188,6 @@ function createReliefRegion(
   geom2.validate(relief);
   return relief;
 }
-
 function createHandle(
   style: HandleStyle,
   handleHeight: number,
@@ -344,6 +348,31 @@ function repairBooleanCapTriangles(solid: Geom3): Geom3 {
   return repaired;
 }
 
+/** Connect boolean T-junctions before snapping can move them off a shared edge.
+ * Use public JSCAD operations only; never fill holes or apply the legacy cap repair.
+ */
+function generalizeRecessedSolid(solid: Geom3): Geom3 {
+  const canonical = geom3.create(geom3.toPolygons(solid).map(polygon => poly3.create(
+    polygon.vertices.map(vertex => vertex.map(value =>
+      Math.round(value * BOOLEAN_VERTEX_PRECISION) / BOOLEAN_VERTEX_PRECISION) as Vec3)
+  )));
+  const connected = generalizeSolid(
+    { snap: false, simplify: false, triangulate: true }, canonical);
+  return generalizeSolid(
+    { snap: true, simplify: false, triangulate: true }, connected);
+}
+
+/** Restore only known construction planes within JSCAD's own snap epsilon.
+ * No faces are filled, removed or repaired; shared vertices retain identical Z.
+ */
+function restoreRecessDepthPlanes(solid: Geom3, planes: readonly number[], epsilon: number): Geom3 {
+  if (!Number.isFinite(epsilon) || epsilon <= 0) throw new Error('Invalid depth-plane precision.');
+  return geom3.create(geom3.toPolygons(solid).map(polygon => poly3.create(polygon.vertices.map(vertex => {
+    const plane = planes.find(value => Math.abs(vertex[2] - value) <= epsilon);
+    return [vertex[0], vertex[1], plane ?? vertex[2]] as Vec3;
+  }))));
+}
+
 function triangulateSolid(solid: Geom3): THREE.BufferGeometry {
   const positions: number[] = [];
   const first = new THREE.Vector3();
@@ -396,12 +425,19 @@ function triangulateSolid(solid: Geom3): THREE.BufferGeometry {
   return welded;
 }
 
-/** Generate one connected stamp solid: handle, base and relief are boolean-unioned. */
+/** Legacy two-argument calls keep the raised route; V4 cavities subtract from the front only. */
 export async function generateStamp(
   svgString: string,
-  paramsValue: Readonly<CookieCutterParams>
+  paramsValue: Readonly<CookieCutterParams>,
+  imprintMode: StampImprintMode = 'raised'
 ): Promise<THREE.Group> {
   const params = validateCookieCutterParams(paramsValue);
+  if (imprintMode !== 'raised' && imprintMode !== 'recessed') {
+    generationError('INVALID_PARAMS', 'Unknown stamp imprint mode.', { field: 'imprintMode' });
+  }
+  if (imprintMode === 'recessed' && params.stampDepth > STAMP_IMPRINT_LIMITS.maximumRecessDepthMm) {
+    generationError('INVALID_PARAMS', 'The recessed stamp depth must not exceed 3 mm; at least 1 mm of the 4 mm base must remain.', { field: 'stampDepth', value: params.stampDepth });
+  }
   if (!params.stampBase) {
     generationError(
       'INVALID_PARAMS',
@@ -451,7 +487,7 @@ export async function generateStamp(
       center: [0, 0, BASE_THICKNESS / 2]
     });
     const relief = translate(
-      [0, 0, BASE_THICKNESS - BOOLEAN_OVERLAP],
+      [0, 0, imprintMode === 'recessed' ? BASE_THICKNESS - params.stampDepth : BASE_THICKNESS - BOOLEAN_OVERLAP],
       extrudeLinear(
         { height: params.stampDepth + BOOLEAN_OVERLAP },
         reliefRegion
@@ -460,18 +496,23 @@ export async function generateStamp(
     const activeHandle = params.enableHandle
       ? createHandle(params.handleStyle, params.handleHeight, baseWidth, baseDepth)
       : null;
-    const stampBody = union(base, relief) as Geom3;
+    const stampBody = (imprintMode === 'recessed' ? subtract(base, relief) : union(base, relief)) as Geom3;
     const joined = activeHandle
       ? (union(stampBody, activeHandle) as Geom3)
       : stampBody;
     const lifted = activeHandle
       ? (translate([0, 0, params.handleHeight], joined) as Geom3)
       : joined;
-    const generalized = generalizeSolid(
-      { snap: true, simplify: true, triangulate: true },
-      lifted
-    ) as Geom3;
-    const printableSolid = repairBooleanCapTriangles(generalized);
+    const generalized = imprintMode === 'recessed'
+      ? generalizeRecessedSolid(lifted)
+      : generalizeSolid({ snap: true, simplify: true, triangulate: true }, lifted);
+    // The legacy union repair must never silently fill a failed cavity subtraction.
+    const handleLift = activeHandle ? params.handleHeight : 0;
+    const printableSolid = imprintMode === 'recessed'
+      ? restoreRecessDepthPlanes(generalized,
+          [0, handleLift, handleLift + BASE_THICKNESS - params.stampDepth, handleLift + BASE_THICKNESS],
+          Number(modeling.measurements.measureEpsilon(lifted)))
+      : repairBooleanCapTriangles(generalized);
 
     geom3.validate(printableSolid);
     const geometry = triangulateSolid(printableSolid);
