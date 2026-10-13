@@ -15,6 +15,7 @@ import {
 import { validatePrintableObject } from './geometryValidation';
 import type { StampImprintMode } from '../domain/designDocument';
 import { STAMP_IMPRINT_LIMITS } from '../domain/stampImprint';
+import { createPlanarStampBody } from './stampBodyGeometry';
 
 const modeling = (
   modelingModule as unknown as { readonly default?: typeof modelingModule }
@@ -351,7 +352,7 @@ function repairBooleanCapTriangles(solid: Geom3): Geom3 {
 /** Connect boolean T-junctions before snapping can move them off a shared edge.
  * Use public JSCAD operations only; never fill holes or apply the legacy cap repair.
  */
-function generalizeRecessedSolid(solid: Geom3): Geom3 {
+function generalizeConnectedSolid(solid: Geom3): Geom3 {
   const canonical = geom3.create(geom3.toPolygons(solid).map(polygon => poly3.create(
     polygon.vertices.map(vertex => vertex.map(value =>
       Math.round(value * BOOLEAN_VERTEX_PRECISION) / BOOLEAN_VERTEX_PRECISION) as Vec3)
@@ -371,6 +372,23 @@ function restoreRecessDepthPlanes(solid: Geom3, planes: readonly number[], epsil
     const plane = planes.find(value => Math.abs(vertex[2] - value) <= epsilon);
     return [vertex[0], vertex[1], plane ?? vertex[2]] as Vec3;
   }))));
+}
+
+/** Successful legacy unions remain byte-stable. A rejected topology is rebuilt
+ * from the same boolean solid, without extending the cap-hole repair contract.
+ */
+function finalizeRaisedSolid(solid: Geom3, planes: readonly number[]): Geom3 {
+  try {
+    const legacy = repairBooleanCapTriangles(
+      generalizeSolid({ snap: true, simplify: true, triangulate: true }, solid));
+    geom3.validate(legacy);
+    return legacy;
+  } catch {
+    const connected = restoreRecessDepthPlanes(generalizeConnectedSolid(solid), planes,
+      Number(modeling.measurements.measureEpsilon(solid)));
+    geom3.validate(connected);
+    return connected;
+  }
 }
 
 function triangulateSolid(solid: Geom3): THREE.BufferGeometry {
@@ -503,35 +521,43 @@ export async function generateStamp(
     const lifted = activeHandle
       ? (translate([0, 0, params.handleHeight], joined) as Geom3)
       : joined;
-    const generalized = imprintMode === 'recessed'
-      ? generalizeRecessedSolid(lifted)
-      : generalizeSolid({ snap: true, simplify: true, triangulate: true }, lifted);
-    // The legacy union repair must never silently fill a failed cavity subtraction.
     const handleLift = activeHandle ? params.handleHeight : 0;
-    const printableSolid = imprintMode === 'recessed'
-      ? restoreRecessDepthPlanes(generalized,
-          [0, handleLift, handleLift + BASE_THICKNESS - params.stampDepth, handleLift + BASE_THICKNESS],
-          Number(modeling.measurements.measureEpsilon(lifted)))
-      : repairBooleanCapTriangles(generalized);
-
-    geom3.validate(printableSolid);
-    const geometry = triangulateSolid(printableSolid);
-    const material = new THREE.MeshStandardMaterial(MATERIAL_OPTIONS);
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = 'stamp-solid';
-    const group = new THREE.Group();
-    group.name = 'stamp';
-    group.add(mesh);
-    group.updateMatrixWorld(true);
-
-    const report = validatePrintableObject(group, { requireSingleShell: true });
-    if (!report.valid) {
-      geometry.dispose();
-      material.dispose();
-      generationError('INVALID_GEOMETRY', 'The generated stamp is not one printable solid.', {
-        field: 'geometry',
-        errors: report.errors
-      });
+    function checkedGroup(geometry: THREE.BufferGeometry): THREE.Group {
+      const material = new THREE.MeshStandardMaterial(MATERIAL_OPTIONS);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = 'stamp-solid';
+      const group = new THREE.Group(); group.name = 'stamp'; group.add(mesh); group.updateMatrixWorld(true);
+      const report = validatePrintableObject(group, { requireSingleShell: true });
+      if (!report.valid) {
+        geometry.dispose(); material.dispose();
+        generationError('INVALID_GEOMETRY', 'The generated stamp is not one printable solid.', { field: 'geometry', errors: report.errors });
+      }
+      return group;
+    }
+    let group: THREE.Group;
+    try {
+      // Keep successful boolean results unchanged; never repair failed cavities.
+      const printableSolid = imprintMode === 'recessed'
+        ? restoreRecessDepthPlanes(generalizeConnectedSolid(lifted),
+            [0, handleLift, handleLift + BASE_THICKNESS - params.stampDepth, handleLift + BASE_THICKNESS],
+            Number(modeling.measurements.measureEpsilon(lifted)))
+        : finalizeRaisedSolid(lifted,
+            [0, handleLift, handleLift + BASE_THICKNESS, handleLift + BASE_THICKNESS + params.stampDepth]);
+      geom3.validate(printableSolid);
+      group = checkedGroup(triangulateSolid(printableSolid));
+      const size = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
+      if (!activeHandle && (Math.abs(size.x - baseWidth) > 0.001 || Math.abs(size.z - baseDepth) > 0.001)) {
+        group.traverse(child => { if (child instanceof THREE.Mesh) { child.geometry.dispose(); (child.material as THREE.Material).dispose(); } });
+        throw new Error('Boolean snapping exceeds the dimensional precision.');
+      }
+      group.userData.geometryRoute = 'boolean';
+    } catch (error) {
+      // No handle joins are guessed. This direct layer construction only concerns
+      // a tool without a back handle; the same strict final mesh validator remains mandatory.
+      if (activeHandle) throw error;
+      const outlines = geom2.toOutlines(reliefRegion).map(outline => outline.map(point => ({ x: point[0], y: point[1] })));
+      group = checkedGroup(createPlanarStampBody(outlines, baseWidth, baseDepth, BASE_THICKNESS, params.stampDepth, imprintMode));
+      group.userData.geometryRoute = 'planar';
     }
 
     const size = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());

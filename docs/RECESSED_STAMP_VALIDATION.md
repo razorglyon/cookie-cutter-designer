@@ -2,6 +2,8 @@
 
 ## Verdict
 
+Ce bilan décrit le lot A du commit local `319d8cd`. L’extension géométrique et le cœur 10 mm sont désormais validés localement : voir `STAMP_QUALIFICATION.md` pour les preuves fraîches du 2026-10-13 et les réserves navigateur/matérielles restantes. Ce bilan historique ne remplace pas cette qualification du nouveau contenu.
+
 **Lot A validé localement après correction du cœur le 2026-10-12.** Le défaut `non-manifold edges 12` est reproduit en RED puis corrigé, sans assouplir les validateurs ni retirer le test. Le verdict initial bloqué est remplacé par les résultats ci-dessous. Cette qualification porte sur le corpus testé, pas sur tous les dessins possibles.
 
 Travail local sur `feature/recessed-stamp`, créée depuis `origin/main` vérifié (`acc50405b4a7d43b9b543893a6f77d6eeea3201a`). Remote vérifié : `razorglyon/cookie-cutter-designer`. Aucun push, PR, fusion ou déploiement. Lots B–E exclus.
