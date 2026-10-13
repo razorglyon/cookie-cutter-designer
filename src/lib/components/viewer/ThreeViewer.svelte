@@ -2,6 +2,7 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import * as THREE from 'three';
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+  import { createViewerProjection, type ViewerProjection } from '../../utils/viewerProjection';
   import {
     createWallThicknessColorAttribute,
     getTriangleWallThicknesses,
@@ -31,6 +32,8 @@
   let raycaster: THREE.Raycaster;
   let mouse: THREE.Vector2;
   let displayedMesh: THREE.Mesh | THREE.Group | null = null;
+  let displayedSource: THREE.Mesh | THREE.Group | null = null;
+  let viewerProjection: ViewerProjection | null = null;
   let selectedObject: THREE.Mesh | null = null;
   let selectionHelper: THREE.BoxHelper | null = null;
   let selectionMode = false;
@@ -69,7 +72,9 @@
 
     clearSelection();
     clearWallThicknessHeatmap();
-    if (displayedMesh && scene) scene.remove(displayedMesh);
+    viewerProjection?.dispose();
+    viewerProjection = null;
+    displayedSource = null;
     displayedMesh = null;
 
     window.removeEventListener('resize', handleResize);
@@ -148,12 +153,17 @@
     wallHeatmapTargetPosition = 50;
   }
 
+  function displayWallMeasurements(child: THREE.Mesh): readonly number[] | null {
+    const original = viewerProjection?.sourceMesh(child);
+    return original ? getTriangleWallThicknesses(original.geometry) : null;
+  }
+
   function refreshWallHeatmapAvailability(): void {
     const target = targetWallThickness(displayedMesh);
     wallHeatmapTarget = target;
     let hasMeasurements = false;
     displayedMesh?.traverse((child) => {
-      if (child instanceof THREE.Mesh && getTriangleWallThicknesses(child.geometry)) {
+      if (child instanceof THREE.Mesh && displayWallMeasurements(child)) {
         hasMeasurements = true;
       }
     });
@@ -173,7 +183,7 @@
     const allMeasurements: number[] = [];
     displayedMesh.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
-      const measurements = getTriangleWallThicknesses(child.geometry);
+      const measurements = displayWallMeasurements(child);
       if (!measurements) return;
       entries.push({ mesh: child, measurements });
       allMeasurements.push(...measurements);
@@ -187,7 +197,9 @@
       ? 50
       : THREE.MathUtils.clamp(((target - range.min) / span) * 100, 0, 100);
     for (const { mesh: child, measurements } of entries) {
-      const heatmapGeometry = child.geometry.toNonIndexed();
+      const heatmapGeometry = child.geometry.index
+        ? child.geometry.toNonIndexed()
+        : child.geometry.clone();
       const positions = heatmapGeometry.getAttribute('position');
       if (positions.count !== measurements.length * 3) {
         heatmapGeometry.dispose();
@@ -271,13 +283,16 @@
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.domElement.setAttribute('role', 'img');
+    renderer.domElement.setAttribute('aria-label', 'Aperçu 3D du modèle. Glissez pour tourner ; utilisez les boutons pour zoomer.');
     container.appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.screenSpacePanning = false;
-    controls.minDistance = 10;
+    controls.screenSpacePanning = true;
+    controls.zoomToCursor = true;
+    controls.minDistance = 0.1;
     controls.maxDistance = 500;
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -345,12 +360,15 @@
     if (!allowObjectDeletion || !selectedObject) return;
 
     const objectToDelete = selectedObject;
+    const sourceToDelete = viewerProjection?.sourceMesh(objectToDelete);
+    if (!sourceToDelete) return;
     clearSelection();
     if (heatmapOverrides.length > 0) {
       clearWallThicknessHeatmap();
       wallHeatmapEnabled = false;
     }
-    dispatch('deleteObject', objectToDelete);
+    objectToDelete.removeFromParent();
+    dispatch('deleteObject', sourceToDelete);
   }
 
   function toggleSelectionMode(): void {
@@ -386,6 +404,11 @@
 
     const fieldOfView = camera.fov * (Math.PI / 180);
     const cameraDistance = Math.abs(maxDimension / 2 / Math.tan(fieldOfView / 2)) * 2.5;
+    controls.minDistance = THREE.MathUtils.clamp(maxDimension / 500, 0.1, 2);
+    controls.maxDistance = Math.max(500, cameraDistance * 3);
+    camera.near = controls.minDistance / 20;
+    camera.far = Math.max(1000, controls.maxDistance * 4);
+    camera.updateProjectionMatrix();
     camera.position.set(
       center.x + cameraDistance * 0.7,
       center.y + cameraDistance * 0.8,
@@ -400,15 +423,27 @@
     if (displayedMesh) fitCamera(displayedMesh);
   }
 
+  function zoomView(factor: number): void {
+    if (!displayedMesh || !camera || !controls) return;
+    const offset = camera.position.clone().sub(controls.target);
+    const distance = offset.length();
+    if (distance <= 0) return;
+    const nextDistance = THREE.MathUtils.clamp(distance * factor, controls.minDistance, controls.maxDistance);
+    camera.position.copy(controls.target).add(offset.multiplyScalar(nextDistance / distance));
+    controls.update();
+  }
+
   function updateDisplayedMesh(next: THREE.Mesh | THREE.Group | null): void {
-    if (!scene || displayedMesh === next) return;
+    if (!scene || displayedSource === next) return;
 
     clearSelection();
     if (displayedMesh) {
       clearWallThicknessHeatmap();
-      scene.remove(displayedMesh);
+      viewerProjection?.dispose();
     }
-    displayedMesh = next;
+    displayedSource = next;
+    viewerProjection = next ? createViewerProjection(next) : null;
+    displayedMesh = viewerProjection?.object ?? null;
 
     if (displayedMesh) {
       scene.add(displayedMesh);
@@ -459,6 +494,23 @@
       </svg>
       <span class="control-label">Ajuster la vue</span>
     </button>
+
+    <div class="zoom-controls" role="group" aria-label="Zoom de l’aperçu 3D">
+      <button type="button" class="control-btn" on:click={() => zoomView(0.8)}
+        disabled={!displayedMesh} title="Rapprocher le modèle" aria-label="Rapprocher le modèle">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        <span class="control-label">Zoom +</span>
+      </button>
+      <button type="button" class="control-btn" on:click={() => zoomView(1.25)}
+        disabled={!displayedMesh} title="Éloigner le modèle" aria-label="Éloigner le modèle">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M5 12h14" />
+        </svg>
+        <span class="control-label">Zoom −</span>
+      </button>
+    </div>
 
     <label
       class="heatmap-toggle"
@@ -580,6 +632,21 @@
 
   .heatmap-toggle {
     user-select: none;
+  }
+
+  .zoom-controls {
+    display: flex;
+    gap: var(--spacing-1);
+  }
+
+  .control-btn:focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 2px;
+  }
+
+  .control-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   .heatmap-toggle input {
