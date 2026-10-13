@@ -3,7 +3,7 @@ import {
   decodeProject,
   encodeProject,
   type DecodedProject,
-  type ProjectEnvelopeV1
+  type ProjectEnvelope
 } from './projectCodec';
 
 export const MAX_PROJECT_FILE_BYTES = 10 * 1024 * 1024;
@@ -48,7 +48,7 @@ export function projectFileName(name: string): string {
 export function createProjectFile(document: unknown): ProjectFile {
   const json = encodeProject(document);
   // Le JSON vient exclusivement du codec : prendre le nom de ce snapshot validé.
-  const envelope = JSON.parse(json) as ProjectEnvelopeV1;
+  const envelope = JSON.parse(json) as ProjectEnvelope;
   return {
     blob: new Blob([json], { type: 'application/json' }),
     fileName: projectFileName(envelope.document.name)

@@ -107,7 +107,7 @@ export function createProjectSessionIntegration(
     if (!reconcile && lastDocument === document && epoch === currentEpoch) return;
     const reservation = {
       epoch: currentEpoch,
-      geometry: JSON.stringify([document?.kind, document?.sketch, document?.parameters, document && document.schemaVersion !== 1 ? document.bridges : [], document?.schemaVersion === 3 ? document.layout : null]),
+      geometry: JSON.stringify([document?.kind, document?.sketch, document?.parameters, document && document.schemaVersion !== 1 ? document.bridges : [], document?.schemaVersion === 3 ? document.layout : null, document?.schemaVersion === 4 ? document.imprintMode : null]),
       viewport: JSON.stringify(document?.viewport ?? null)
     };
     const previous = projection;
@@ -160,7 +160,7 @@ export function createProjectSessionIntegration(
       try {
         if (!projectParameters(document, current)) return false;
         if (!current()) return true;
-        const nextParameterErrorKey = JSON.stringify([document.kind, document.parameters]);
+        const nextParameterErrorKey = JSON.stringify([document.kind, document.parameters, document.schemaVersion === 4 ? document.imprintMode : null]);
         if (!reconcile && parameterErrorKey !== nextParameterErrorKey) {
           parameterError(null);
           if (sameEpoch()) parameterErrorKey = nextParameterErrorKey;

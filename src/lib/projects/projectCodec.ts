@@ -1,4 +1,4 @@
-import type { DesignDocument, DesignDocumentV1, DesignDocumentV2, MultiCutterDocument } from '../domain/designDocument';
+import type { DesignDocument, DesignDocumentV1, DesignDocumentV2, MultiCutterDocument, StampDocumentV4 } from '../domain/designDocument';
 import { parseDesignDocument } from '../domain/documentValidation';
 import {
   migrateV0ToV1,
@@ -8,6 +8,7 @@ import {
 export const PROJECT_FORMAT = 'cookie-cutter-designer-project' as const;
 export const PROJECT_VERSION = 1 as const; // Historical V1 envelope; never change its meaning.
 export const PROJECT_VERSION_V2 = 2 as const;
+export const PROJECT_VERSION_V4 = 4 as const;
 
 export interface ProjectEnvelopeV1 {
   readonly format: typeof PROJECT_FORMAT;
@@ -25,6 +26,13 @@ export interface ProjectEnvelopeV3 {
   readonly version: 3;
   readonly document: MultiCutterDocument;
 }
+
+export interface ProjectEnvelopeV4 {
+  readonly format: typeof PROJECT_FORMAT;
+  readonly version: typeof PROJECT_VERSION_V4;
+  readonly document: StampDocumentV4;
+}
+export type ProjectEnvelope = ProjectEnvelopeV1 | ProjectEnvelopeV2 | ProjectEnvelopeV3 | ProjectEnvelopeV4;
 
 export interface DecodedProject {
   readonly document: DesignDocument;
@@ -112,18 +120,18 @@ function validateEnvelopeHeader(record: UnknownRecord): void {
     );
   }
 
-  if (record.version !== PROJECT_VERSION && record.version !== PROJECT_VERSION_V2 && record.version !== 3) {
+  if (record.version !== PROJECT_VERSION && record.version !== PROJECT_VERSION_V2 && record.version !== 3 && record.version !== PROJECT_VERSION_V4) {
     if (
       typeof record.version === 'number' &&
       Number.isFinite(record.version) &&
-      record.version > 3
+      record.version > PROJECT_VERSION_V4
     ) {
       invalid(
         'version',
         `version future ${record.version} non prise en charge.`
       );
     }
-    invalid('version', 'version inconnue ; seules les versions 1, 2 et 3 sont prises en charge.');
+    invalid('version', 'version inconnue ; seules les versions 1, 2, 3 et 4 sont prises en charge.');
   }
 }
 
@@ -134,11 +142,13 @@ function validateEnvelopeHeader(record: UnknownRecord): void {
  */
 export function encodeProject(document: unknown): string {
   const parsedDocument = parseDesignDocument(document);
-  const envelope: ProjectEnvelopeV1 | ProjectEnvelopeV2 | ProjectEnvelopeV3 = parsedDocument.schemaVersion === 1
+  const envelope: ProjectEnvelope = parsedDocument.schemaVersion === 1
     ? { format: PROJECT_FORMAT, version: PROJECT_VERSION, document: parsedDocument }
     : parsedDocument.schemaVersion === 2
       ? { format: PROJECT_FORMAT, version: PROJECT_VERSION_V2, document: parsedDocument }
-      : { format: PROJECT_FORMAT, version: 3, document: parsedDocument };
+      : parsedDocument.schemaVersion === 3
+        ? { format: PROJECT_FORMAT, version: 3, document: parsedDocument }
+        : { format: PROJECT_FORMAT, version: PROJECT_VERSION_V4, document: parsedDocument };
   return JSON.stringify(envelope, null, 2);
 }
 

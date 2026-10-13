@@ -9,6 +9,7 @@ import type {
   ViewportPreferences
 } from './designDocument';
 import { CUTTER_SERIES_LIMITS } from './cutterSeries';
+import { STAMP_IMPRINT_LIMITS } from './stampImprint';
 import { isDesignKind } from './designKind';
 import type {
   CutterDesignParameters,
@@ -584,11 +585,30 @@ export function parseMultiCutterDocument(value: unknown): import('./designDocume
   return { ...base, schemaVersion: 3, kind: 'multi-cutter', layout: { copies, columns, spacingMm } };
 }
 
+/** Strict V4 stamp; all historical fields retain the exact V2 validation rules. */
+export function parseStampDocumentV4(value: unknown): import('./designDocument').StampDocumentV4 {
+  const record = requireRecord(value, '$');
+  if (record.schemaVersion !== 4) invalid('schemaVersion', 'doit être exactement 4.');
+  if (record.kind !== 'stamp') invalid('kind', 'doit être stamp en V4.');
+  requireExactKeys(record, '', [...V2_DOCUMENT_KEYS, 'imprintMode']);
+  const { imprintMode, ...fields } = record;
+  if (imprintMode !== 'raised' && imprintMode !== 'recessed') {
+    invalid('imprintMode', 'doit être raised ou recessed.');
+  }
+  const base = parseDesignDocumentV2({ ...fields, schemaVersion: 2 });
+  if (base.kind !== 'stamp') invalid('kind', 'Tampon requis.');
+  if (imprintMode === 'recessed' && base.parameters.stampDepth > STAMP_IMPRINT_LIMITS.maximumRecessDepthMm) {
+    invalid('parameters.stampDepth', 'Le creux est limité à 3 mm pour conserver au moins 1 mm de la base de 4 mm. Réduisez explicitement la profondeur avant de choisir Creux.');
+  }
+  return { ...base, schemaVersion: 4, bridges: [], imprintMode };
+}
+
 /** Route by header before checking version-specific fields. V1 remains unchanged. */
 export function parseDesignDocument(value: unknown): DesignDocument {
   const record = requireRecord(value, '$');
   if (record.schemaVersion === 1) return parseDesignDocumentV1(value);
   if (record.schemaVersion === 2) return parseDesignDocumentV2(value);
   if (record.schemaVersion === 3) return parseMultiCutterDocument(value);
+  if (record.schemaVersion === 4) return parseStampDocumentV4(value);
   invalid('schemaVersion', 'version de document non prise en charge.');
 }

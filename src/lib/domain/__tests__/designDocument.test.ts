@@ -75,7 +75,7 @@ describe('DesignDocumentV1', () => {
   it('exclut les recettes dont les paramètres ne sont pas implémentés', () => {
     expectTypeOf<DesignDocumentV1<'imprint-cutter'>>().toEqualTypeOf<never>();
     expectTypeOf<DesignDocument>().toEqualTypeOf<
-      DesignDocumentV1<'cutter'> | DesignDocumentV1<'stamp'> | DesignDocumentV2<'cutter'> | DesignDocumentV2<'stamp'> | import('../designDocument').MultiCutterDocument
+      DesignDocumentV1<'cutter'> | DesignDocumentV1<'stamp'> | DesignDocumentV2<'cutter'> | DesignDocumentV2<'stamp'> | import('../designDocument').MultiCutterDocument | import('../designDocument').StampDocumentV4
     >();
   });
 

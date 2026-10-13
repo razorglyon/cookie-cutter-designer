@@ -80,7 +80,7 @@ describe('fichiers projet : import strict', () => {
   });
 
   it('rejette une version future', async () => {
-    const json = JSON.stringify({ format: PROJECT_FORMAT, version: 4, document: documentFixture() });
+    const json = JSON.stringify({ format: PROJECT_FORMAT, version: 5, document: documentFixture() });
     await expect(readProjectFile(new Blob([json]))).rejects.toThrow('version future');
   });
 

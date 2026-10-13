@@ -11,6 +11,10 @@
   import HandleSection from '../parameters/HandleSection.svelte';
   import ParameterAccordion from '../parameters/ParameterAccordion.svelte';
   import StampSection from '../parameters/StampSection.svelte';
+  import type { DesignSessionStore } from '../../stores/designSessionStore';
+  import { stampImprintMode } from '../../domain/stampImprint';
+  export let session: DesignSessionStore | null = null;
+  $: imprintMode = stampImprintMode($session);
 </script>
 
 <section class="parameter-panel" aria-labelledby="parameter-panel-title">
@@ -58,7 +62,7 @@
     </button>
   </div>
   <p id="mode-hint" class="mode-hint">
-    {$params.mode === 'cutter' ? 'Paroi de découpe creuse avec poignée facultative.' : 'Relief surélevé relié à une base imprimable.'}
+    {$params.mode === 'cutter' ? 'Paroi de découpe creuse avec poignée facultative.' : imprintMode === 'recessed' ? 'Empreinte creusée sur la face d’impression de la base.' : 'Relief surélevé relié à une base imprimable.'}
   </p>
 
   <ParameterAccordion id="common" title="Dimensions" description="Dimensions finales et limites de l’imprimante">
@@ -70,8 +74,8 @@
       <CutterSection />
     </ParameterAccordion>
   {:else}
-    <ParameterAccordion id="stamp" title="Tampon" description="Profondeur du relief et base imprimable">
-      <StampSection />
+    <ParameterAccordion id="stamp" title="Tampon" description="Relief ou creux et épaisseur de la base">
+      <StampSection {session} />
     </ParameterAccordion>
   {/if}
 

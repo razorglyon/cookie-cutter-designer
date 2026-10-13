@@ -81,5 +81,15 @@ export type MultiCutterDocument = Omit<DesignDocumentV2<'cutter'>, 'schemaVersio
   readonly layout: CutterSeriesLayout;
 };
 
+export type StampImprintMode = 'raised' | 'recessed';
+
+/** V4 is stamp-only. Mode never enters the frozen legacy parameter contracts. */
+export type StampDocumentV4 = Omit<DesignDocumentV2<'stamp'>, 'schemaVersion' | 'bridges'> & {
+  readonly schemaVersion: 4;
+  readonly bridges: readonly [];
+  readonly imprintMode: StampImprintMode;
+};
+
 export type DesignDocument<K extends DesignKind = DesignKind> = DesignDocumentV1<K> | DesignDocumentV2<K>
-  | ('multi-cutter' extends K ? MultiCutterDocument : never);
+  | ('multi-cutter' extends K ? MultiCutterDocument : never)
+  | ('stamp' extends K ? StampDocumentV4 : never);
