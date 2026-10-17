@@ -43,14 +43,14 @@ importers:
         specifier: ^0.185.4
         version: 0.185.4
       happy-dom:
-        specifier: ^20.14.5
-        version: 20.14.5
+        specifier: ^20.14.6
+        version: 20.14.6
       svelte:
         specifier: ^5.57.2
         version: 5.57.2
       svelte-check:
         specifier: ^4.7.6
-        version: 4.7.6(picomatch@4.0.5)(svelte@5.57.2)(typescript@5.9.3)
+        version: 4.7.6(picomatch@4.0.7)(svelte@5.57.2)(typescript@5.9.3)
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
@@ -59,7 +59,7 @@ importers:
         version: 7.3.7(@types/node@24.19.1)
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@24.19.1)(happy-dom@20.14.5)(vite@7.3.7(@types/node@24.19.1))
+        version: 4.1.11(@types/node@24.19.1)(happy-dom@20.14.6)(vite@7.3.7(@types/node@24.19.1))
 
 packages:
 
@@ -568,8 +568,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  happy-dom@20.14.5:
-    resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
+  happy-dom@20.14.6:
+    resolution: {integrity: sha512-5DDsf4QmEIlRL6NkCv/fxSjYHHkZceL/IaYQdJc2h3G7DRTEai++VTjbfL0LB9geW2VrA3+vrjF3Efx+OTtX0Q==}
     engines: {node: '>=20.0.0'}
 
   imagetracer@0.2.2:
@@ -1174,7 +1174,7 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  happy-dom@20.14.5:
+  happy-dom@20.14.6:
     dependencies:
       '@types/node': 24.19.1
       '@types/whatwg-mimetype': 3.0.2
@@ -1271,12 +1271,12 @@ snapshots:
 
   std-env@4.2.0: {}
 
-  svelte-check@4.7.6(picomatch@4.0.5)(svelte@5.57.2)(typescript@5.9.3):
+  svelte-check@4.7.6(picomatch@4.0.7)(svelte@5.57.2)(typescript@5.9.3):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@sveltejs/load-config': 0.2.3
       chokidar: 4.0.3
-      fdir: 6.5.0(picomatch@4.0.5)
+      fdir: 6.5.0(picomatch@4.0.7)
       picocolors: 1.1.1
       sade: 1.8.1
       svelte: 5.57.2
@@ -1339,7 +1339,7 @@ snapshots:
     optionalDependencies:
       vite: 7.3.7(@types/node@24.19.1)
 
-  vitest@4.1.11(@types/node@24.19.1)(happy-dom@20.14.5)(vite@7.3.7(@types/node@24.19.1)):
+  vitest@4.1.11(@types/node@24.19.1)(happy-dom@20.14.6)(vite@7.3.7(@types/node@24.19.1)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@7.3.7(@types/node@24.19.1))
@@ -1363,7 +1363,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.19.1
-      happy-dom: 20.14.5
+      happy-dom: 20.14.6
     transitivePeerDependencies:
       - msw
 
